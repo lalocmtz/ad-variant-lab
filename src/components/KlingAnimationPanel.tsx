@@ -307,21 +307,27 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
   return (
     <div className="space-y-6 rounded-xl border border-border/50 bg-card p-6">
       <div className="space-y-1">
-        <h3 className="text-lg font-semibold text-foreground">Animar Variantes (Kling Motion)</h3>
+        <h3 className="text-lg font-semibold text-foreground">
+          {isNoAvatar ? "Generar Video (Sora)" : "Animar Variantes (Kling Motion)"}
+        </h3>
         <p className="text-sm text-muted-foreground">
-          Genera videos animados usando el movimiento del video original de TikTok.
+          {isNoAvatar
+            ? "Genera videos de producto animados a partir de las imágenes generadas."
+            : "Genera videos animados usando el movimiento del video original de TikTok."}
         </p>
       </div>
 
-      <VideoTrimmerDialog
-        open={showTrimmer}
-        onClose={() => setShowTrimmer(false)}
-        videoUrl={videoUrl}
-        videoDuration={videoDuration || 0}
-        onTrimmed={(url, dur) => { setTrimmedVideoUrl(url); setTrimmedDuration(dur); }}
-      />
+      {!isNoAvatar && (
+        <VideoTrimmerDialog
+          open={showTrimmer}
+          onClose={() => setShowTrimmer(false)}
+          videoUrl={videoUrl}
+          videoDuration={videoDuration || 0}
+          onTrimmed={(url, dur) => { setTrimmedVideoUrl(url); setTrimmedDuration(dur); }}
+        />
+      )}
 
-      {isTooLong && !trimmedVideoUrl && (
+      {!isNoAvatar && isTooLong && !trimmedVideoUrl && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
@@ -336,7 +342,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
         </div>
       )}
 
-      {trimmedVideoUrl && (
+      {!isNoAvatar && trimmedVideoUrl && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <div className="flex items-center gap-3">
             <Scissors className="h-5 w-5 text-primary shrink-0" />
@@ -351,7 +357,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
         </div>
       )}
 
-      {canAnimateDirectly && !trimmedVideoUrl && (
+      {!isNoAvatar && canAnimateDirectly && !trimmedVideoUrl && (
         <div className="flex items-center gap-3 rounded-lg border border-border/30 bg-muted/30 p-4">
           <Scissors className="h-4 w-4 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground flex-1">Video de {Math.round(videoDuration || 0)}s — listo para animar. También puedes recortarlo si lo deseas.</p>
@@ -375,7 +381,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
             </Select>
           </div>
           <Button onClick={startAnimation} disabled={isAnimating || maxCount === 0}>
-            <Play className="h-4 w-4" /> Animar Variantes
+            <Play className="h-4 w-4" /> {isNoAvatar ? "Generar Videos" : "Animar Variantes"}
           </Button>
         </div>
       )}
