@@ -15,7 +15,7 @@ serve(async (req) => {
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) throw new Error("KIE_API_KEY not configured");
 
-    const response = await fetch(`https://api.kie.ai/api/v1/jobs/getTaskDetails?taskId=${encodeURIComponent(task_id)}`, {
+    const response = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(task_id)}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${KIE_API_KEY}`,
