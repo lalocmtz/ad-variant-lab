@@ -112,7 +112,7 @@ export default function StaticVariants() {
       const referenceUrl = pubUrl.publicUrl;
 
       // Get product image URL (first product image from brand assets)
-      const productImageUrl = productImages.length > 0 ? productImages[0].image_url : "";
+      const productImageUrl = productImages.length > 0 ? productImages[0].image_url : null;
 
       setPipelineStep(1);
       await new Promise(r => setTimeout(r, 500));
