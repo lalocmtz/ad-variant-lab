@@ -34,22 +34,20 @@ CRITICAL OBSERVATION RULES:
 - The product description must match the uploaded product image, NOT the video title
 
 ═══════════════════════════════════════════════════
-MANDATORY ACTOR DIVERSITY TABLE
+DEMOGRAPHIC CONSISTENCY LOCK (MANDATORY)
 ═══════════════════════════════════════════════════
-Each variant MUST feature a COMPLETELY DIFFERENT person. You MUST assign each variant a unique actor from this diversity grid:
-
-| Variant | Ethnicity (MUST differ) | Age Range (MUST differ) | Gender | Distinguishing Features |
-|---------|------------------------|------------------------|--------|------------------------|
-| A       | e.g. Black / African   | 40-55                  | Woman  | braided hair, warm smile |
-| B       | e.g. East Asian        | 20-28                  | Man    | buzzcut, athletic build  |
-| C       | e.g. Caucasian/European| 30-40                  | Woman  | curly red hair, freckles |
+ALL variants MUST feature the SAME demographic profile as the original actor observed in the cover frame.
 
 Rules:
-- NO TWO variants may share the same ethnicity
-- NO TWO variants may share the same age decade
-- The actor MUST look NOTHING like the original person in the cover frame
-- You MUST fill the actor_description field with a DETAILED physical description (at least 25 words) including: ethnicity, age, gender, hair style/color, skin tone, facial features, body type
+- Match the EXACT ethnicity and skin tone of the original person
+- Match the EXACT age range (same decade) of the original person
+- Match the EXACT gender of the original person
+- ONLY change facial structure (eyes, nose, mouth, jawline) to create a DISTINCT individual
+- Each variant is a DIFFERENT person but with the SAME demographic profile
+- You MUST fill the actor_description field with a DETAILED physical description (at least 25 words) that PRESERVES the original ethnicity, skin tone, age range, and gender while describing unique facial features
 - The base_image_prompt_9x16 MUST start with the actor_description
+- Style must be raw UGC / amateur TikTok — NOT stock photography, NOT studio lighting
+- Hair style can vary slightly but must be culturally consistent with the original
 
 ═══════════════════════════════════════════════════
 
