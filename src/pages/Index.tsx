@@ -208,7 +208,7 @@ const Index = () => {
   const stepLabels = ["Entrada", "Preview", "Análisis", "Resultados"];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <header className="border-b border-border/50 px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <div className="flex items-center gap-3">
