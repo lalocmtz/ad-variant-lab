@@ -17,16 +17,20 @@ Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
 
   return `STRICT SCENE RECONSTRUCTION — CLONE THE REFERENCE FRAME
 
-You are receiving a reference frame from a TikTok video. Your job is to RECREATE the EXACT SAME scene with a DIFFERENT person only.
+You are receiving TWO reference images:
+1. COVER FRAME — a real frame from the original TikTok video showing the exact scene, pose, camera angle, and composition to clone
+2. PRODUCT IMAGE — the EXACT product packaging that MUST appear in the generated image
+
+Your job is to RECREATE the EXACT SAME scene from the cover frame with a DIFFERENT person, holding the EXACT product from the product image.
 
 MANDATORY RULES (violating any = failure):
 
-1. PRODUCT LOCK
-The product packaging MUST be IDENTICAL to what appears in the reference frame.
-Do NOT redesign the package. Do NOT change colors, logo, label, bottle shape, or typography.
-Copy the product EXACTLY as it appears.
+1. PRODUCT LOCK — USE THE PRODUCT IMAGE REFERENCE
+The product in the generated image MUST be a pixel-perfect copy of the product shown in the PRODUCT IMAGE reference.
+Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
+Copy the product EXACTLY as it appears in the product reference image.
 
-2. SCENE GEOMETRY LOCK — Match the reference frame EXACTLY:
+2. SCENE GEOMETRY LOCK — Match the COVER FRAME EXACTLY:
 - Same camera distance and framing
 - Same vertical 9:16 composition
 - Same subject position in frame
@@ -36,7 +40,7 @@ Copy the product EXACTLY as it appears.
 ${geometryBlock}
 
 3. POSE LOCK
-The subject must hold the product in the EXACT same way as the reference:
+The subject must hold the product in the EXACT same way as shown in the cover frame:
 - Same hand (left/right)
 - Same arm angle
 - Same product orientation relative to camera
@@ -59,6 +63,7 @@ Must look like a real smartphone TikTok frame:
 
 6. PRODUCT PRIORITY
 Product must be clearly visible, readable, and prominent in the person's hand.
+The product packaging must EXACTLY match the product reference image.
 
 7. NATURAL SOCIAL MEDIA LOOK
 This should look like a random real TikTok frame, not a staged advertisement.
@@ -68,14 +73,14 @@ CAMERA: Front smartphone camera, medium close shot, slight handheld realism, nat
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: Do NOT include any text overlays, logos, watermarks, extra hands, distorted fingers, or product redesign.`;
+NEGATIVE: Do NOT include any text overlays, logos, watermarks, extra hands, distorted fingers, or product redesign. Do NOT invent a different product packaging.`;
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry } = await req.json();
+    const { prompt, scene_geometry, cover_url, product_image_url } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -83,8 +88,27 @@ serve(async (req) => {
 
     const fullPrompt = buildStrictPrompt(prompt, scene_geometry);
 
-    // Note: video URLs (.mp4) cannot be passed as image_url — only PNG/JPEG/WebP/GIF supported.
-    // The prompt contains all scene geometry data extracted by Gemini from the video analysis step.
+    // Build multimodal content with visual references
+    const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+      { type: "text", text: fullPrompt },
+    ];
+
+    // Add cover frame as scene/pose reference
+    if (cover_url) {
+      content.push({ type: "image_url", image_url: { url: cover_url } });
+    }
+
+    // Add product image as product lock reference
+    if (product_image_url) {
+      content.push({ type: "image_url", image_url: { url: product_image_url } });
+    }
+
+    console.log("Generating image with references:", {
+      hasCover: !!cover_url,
+      hasProduct: !!product_image_url,
+      promptLength: fullPrompt.length,
+    });
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -94,7 +118,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         messages: [
-          { role: "user", content: fullPrompt },
+          { role: "user", content },
         ],
         modalities: ["image", "text"],
       }),
