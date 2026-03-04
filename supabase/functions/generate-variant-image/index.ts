@@ -26,7 +26,7 @@ function buildPrompt(
 ): string {
   const idx = variantIndex ?? 0;
   const total = totalVariants ?? 3;
-  const descriptor = getVariantDescriptor(idx);
+  const style = getVariantStyle(idx);
 
   const geometryBlock = sceneGeometry
     ? `
@@ -42,48 +42,33 @@ PRODUCT REFERENCE: See the attached product image below.
 
 This is VARIANT ${idx + 1} of ${total}.
 
-TASK: Generate a highly realistic variant of this exact scene, but replace the subject with a COMPLETELY DIFFERENT person of the EXACT SAME demographic profile.
+TASK: Generate a product-focused image inspired by the reference frame. Focus on the PRODUCT — do NOT include any people, faces, or body parts.
 
-CRITICAL DIFFERENTIATION RULE:
-- This variant MUST look COMPLETELY DIFFERENT from all other variants.
-- Do NOT reuse the same face, hair, or features from the original or any other variant.
-- Each variant number (${idx + 1}) maps to a UNIQUE set of physical traits listed below. You MUST follow them precisely.
+VARIANT STYLE FOR ${idx + 1}:
+- Setting: ${style.setting}
+- Props: ${style.props}
 
-MANDATORY PHYSICAL TRAITS FOR VARIANT ${idx + 1}:
-- Face structure: ${descriptor.face}
-- Hair: ${descriptor.hair}
-- Distinguishing features: ${descriptor.distinguishing}
-
-DEMOGRAPHIC CONSTRAINTS (CRITICAL):
-- Match the EXACT ethnicity and skin tone of the original person. (e.g., if the original is a young Latino male, the generated person MUST be a young Latino male).
-- Match the EXACT age group.
-- Match the EXACT gender.
-- Hair style and color should be natural and appropriate for the demographic, but MUST differ from the original.
-
-STYLE & REALISM (UGC STYLE — CRITICAL):
-- This MUST look like a raw, unretouched smartphone selfie video frame (TikTok style).
-- AVOID studio lighting, AVOID overly perfect flawless skin, AVOID professional bokeh.
-- Maintain the EXACT same background environment, lighting quality, and camera distance as the reference frame.
-- Include natural skin imperfections: pores, slight blemishes, uneven skin tone.
-- Slightly soft focus, natural color grading, no post-processing look.
-
-SCENE GEOMETRY LOCK:
-${geometryBlock}
-- Replicate the exact composition, framing, and pose from the reference frame.
-- Same hand holding the product, same arm angle, same product orientation.
-
-PRODUCT LOCK:
-- The product in the generated image MUST be a pixel-perfect copy of the PRODUCT REFERENCE image.
+PRODUCT RULES:
+- The product MUST be a pixel-perfect copy of the PRODUCT REFERENCE image.
 - Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
 - Product must be clearly visible, readable, and prominent.
+- Product should be the hero of the image, centered and well-lit.
 
-CAMERA: Front smartphone camera, medium close shot, slight handheld realism, natural daylight.
+SCENE GEOMETRY:
+${geometryBlock}
+- Replicate a similar composition and framing as the reference frame.
+
+STYLE:
+- Photorealistic product photography style.
+- Natural lighting, clean composition.
+- Looks like a high-quality social media product shot.
+
 OUTPUT: 9:16 vertical, maximum resolution, photorealistic.
 
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: No text overlays, no logos, no watermarks, no extra hands, no distorted fingers, no product redesign, no studio lighting, no stock photo aesthetic, no plastic skin.`;
+NEGATIVE: No people, no faces, no hands, no body parts, no text overlays, no logos other than on product, no watermarks, no distorted elements, no product redesign.`;
 }
 
 serve(async (req) => {
