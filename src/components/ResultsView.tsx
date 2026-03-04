@@ -1,13 +1,15 @@
 import { ArrowLeft } from "lucide-react";
 import VariantCard from "@/components/VariantCard";
+import KlingAnimationPanel from "@/components/KlingAnimationPanel";
 import type { AnalysisResult } from "@/pages/Index";
 
 interface ResultsViewProps {
   results: AnalysisResult;
+  videoUrl: string;
   onReset: () => void;
 }
 
-const ResultsView = ({ results, onReset }: ResultsViewProps) => {
+const ResultsView = ({ results, videoUrl, onReset }: ResultsViewProps) => {
   return (
     <div className="space-y-8">
       <div className="space-y-1">
@@ -28,6 +30,10 @@ const ResultsView = ({ results, onReset }: ResultsViewProps) => {
           <VariantCard key={variant.variant_id} variant={variant} />
         ))}
       </div>
+
+      {videoUrl && (
+        <KlingAnimationPanel variants={results.variants} videoUrl={videoUrl} />
+      )}
     </div>
   );
 };
