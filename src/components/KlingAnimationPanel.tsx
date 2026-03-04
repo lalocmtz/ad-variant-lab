@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Play, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import { Play, Loader2, RefreshCw, AlertCircle, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import VideoTrimmerDialog from "@/components/VideoTrimmerDialog";
 import type { VariantResult } from "@/pages/Index";
 
 interface AnimationTask {
@@ -28,6 +29,9 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
   const [count, setCount] = useState("1");
   const [tasks, setTasks] = useState<AnimationTask[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [showTrimmer, setShowTrimmer] = useState(false);
+  const [trimmedVideoUrl, setTrimmedVideoUrl] = useState<string | null>(null);
+  const [trimmedDuration, setTrimmedDuration] = useState<number | null>(null);
   const intervalRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
 
   // Cleanup intervals on unmount
@@ -102,11 +106,13 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
     for (let i = 0; i < eligibleVariants.length; i++) {
       const variant = eligibleVariants[i];
       try {
+        const activeVideoUrl = trimmedVideoUrl || videoUrl;
+        const activeDuration = trimmedDuration || videoDuration;
         const { data, error } = await supabase.functions.invoke("animate-kling", {
           body: {
             image_url: variant.generated_image_url,
-            video_url: videoUrl,
-            video_duration: videoDuration,
+            video_url: activeVideoUrl,
+            video_duration: activeDuration,
           },
         });
 
@@ -141,7 +147,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
         );
       }
     }
-  }, [count, variants, videoUrl, pollTask]);
+  }, [count, variants, videoUrl, trimmedVideoUrl, trimmedDuration, videoDuration, pollTask]);
 
   const retryTask = useCallback(async (variantIndex: number) => {
     const variant = variants.filter((v) => v.generated_image_url)[variantIndex];
@@ -154,8 +160,10 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
     );
 
     try {
+      const activeVideoUrl = trimmedVideoUrl || videoUrl;
+      const activeDuration = trimmedDuration || videoDuration;
       const { data, error } = await supabase.functions.invoke("animate-kling", {
-        body: { image_url: variant.generated_image_url, video_url: videoUrl, video_duration: videoDuration },
+        body: { image_url: variant.generated_image_url, video_url: activeVideoUrl, video_duration: activeDuration },
       });
 
       if (error || !data?.taskId) {
@@ -184,7 +192,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
         )
       );
     }
-  }, [variants, videoUrl, pollTask]);
+  }, [variants, videoUrl, trimmedVideoUrl, trimmedDuration, videoDuration, pollTask]);
 
   const maxCount = Math.min(5, variants.filter((v) => v.generated_image_url).length);
 
@@ -199,17 +207,50 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
         </p>
       </div>
 
-      {isTooLong && (
-        <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
-          <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium text-destructive">Video demasiado largo ({Math.round(videoDuration!)}s)</p>
-            <p className="text-xs text-muted-foreground">Kling solo acepta videos de 3 a 30 segundos. Usa un TikTok más corto.</p>
+      {/* Trimmer dialog */}
+      <VideoTrimmerDialog
+        open={showTrimmer}
+        onClose={() => setShowTrimmer(false)}
+        videoUrl={videoUrl}
+        videoDuration={videoDuration || 0}
+        onTrimmed={(url, dur) => {
+          setTrimmedVideoUrl(url);
+          setTrimmedDuration(dur);
+        }}
+      />
+
+      {isTooLong && !trimmedVideoUrl && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-destructive">Video demasiado largo ({Math.round(videoDuration!)}s)</p>
+              <p className="text-xs text-muted-foreground">Kling solo acepta videos de 3 a 30 segundos. Recorta el video para continuar.</p>
+            </div>
           </div>
+          <Button variant="outline" size="sm" onClick={() => setShowTrimmer(true)} className="shrink-0">
+            <Scissors className="h-4 w-4" />
+            Recortar
+          </Button>
         </div>
       )}
 
-      {!isTooLong && tasks.length === 0 && (
+      {trimmedVideoUrl && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center gap-3">
+            <Scissors className="h-5 w-5 text-primary shrink-0" />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Video recortado ({Math.round(trimmedDuration!)}s)</p>
+              <p className="text-xs text-muted-foreground">Listo para animar.</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setShowTrimmer(true)} className="shrink-0 text-xs">
+            Cambiar recorte
+          </Button>
+        </div>
+      )}
+
+      {(!isTooLong || trimmedVideoUrl) && tasks.length === 0 && (
         <div className="flex items-end gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
