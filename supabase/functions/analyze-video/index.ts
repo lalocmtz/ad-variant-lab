@@ -33,14 +33,35 @@ CRITICAL OBSERVATION RULES:
 - Extract EXACT scene geometry from the cover frame: camera distance, which hand holds product, product position in frame, camera angle, lighting direction
 - The product description must match the uploaded product image, NOT the video title
 
+═══════════════════════════════════════════════════
+MANDATORY ACTOR DIVERSITY TABLE
+═══════════════════════════════════════════════════
+Each variant MUST feature a COMPLETELY DIFFERENT person. You MUST assign each variant a unique actor from this diversity grid:
+
+| Variant | Ethnicity (MUST differ) | Age Range (MUST differ) | Gender | Distinguishing Features |
+|---------|------------------------|------------------------|--------|------------------------|
+| A       | e.g. Black / African   | 40-55                  | Woman  | braided hair, warm smile |
+| B       | e.g. East Asian        | 20-28                  | Man    | buzzcut, athletic build  |
+| C       | e.g. Caucasian/European| 30-40                  | Woman  | curly red hair, freckles |
+
+Rules:
+- NO TWO variants may share the same ethnicity
+- NO TWO variants may share the same age decade
+- The actor MUST look NOTHING like the original person in the cover frame
+- You MUST fill the actor_description field with a DETAILED physical description (at least 25 words) including: ethnicity, age, gender, hair style/color, skin tone, facial features, body type
+- The base_image_prompt_9x16 MUST start with the actor_description
+
+═══════════════════════════════════════════════════
+
 ALL prompts (base_image_prompt_9x16, hisfield_master_motion_prompt, negative_prompt) MUST be in ENGLISH.
 All other fields (variant_summary, shotlist descriptions, script) should be in Spanish.
 
-For base_image_prompt_9x16, describe the product EXACTLY as seen in the product image:
-- Exact packaging type (pouch, bottle, box, tube, etc.)
-- Exact colors and design elements visible
-- Exact text/brand name visible on the packaging
-- Include: "The person is holding the EXACT product shown in the product reference image"
+For base_image_prompt_9x16, the prompt MUST follow this structure:
+1. START with the full actor_description (the unique person for this variant)
+2. Then describe the EXACT product from the product image
+3. Then describe the scene geometry matching the cover frame
+4. Include: "The person is holding the EXACT product shown in the product reference image"
+5. End with: "Ultra-realistic, high-definition, sharp detail, 4K quality, natural smartphone camera"
 
 For hisfield_master_motion_prompt, use this EXACT structure:
 ---
@@ -258,14 +279,15 @@ For each variant:
                           },
                           required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
                         },
+                        actor_description: { type: "string", description: "Detailed physical description of the unique actor for this variant (at least 25 words): ethnicity, age, gender, hair, skin tone, facial features, body type. MUST be completely different from other variants." },
                         base_image_prompt_9x16: { type: "string" },
                         hisfield_master_motion_prompt: { type: "string" },
                         negative_prompt: { type: "string" },
                       },
                       required: [
                         "variant_id", "variant_summary", "shotlist", "script",
-                        "on_screen_text_plan", "scene_geometry", "base_image_prompt_9x16",
-                        "hisfield_master_motion_prompt", "negative_prompt",
+                        "on_screen_text_plan", "scene_geometry", "actor_description",
+                        "base_image_prompt_9x16", "hisfield_master_motion_prompt", "negative_prompt",
                       ],
                     },
                   },

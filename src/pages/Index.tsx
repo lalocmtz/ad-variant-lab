@@ -149,7 +149,9 @@ const Index = () => {
       // Generate images for each variant
       setPipelineStep(6);
       const variants: VariantResult[] = [];
-      for (const variant of analysisData.variants) {
+      const totalVariants = analysisData.variants.length;
+      for (let i = 0; i < analysisData.variants.length; i++) {
+        const variant = analysisData.variants[i];
         try {
           const { data: imageData, error: imageError } = await supabase.functions.invoke("generate-variant-image", {
             body: {
@@ -157,6 +159,9 @@ const Index = () => {
               scene_geometry: variant.scene_geometry,
               cover_url: downloadedData.cover_url,
               product_image_url: downloadedData.product_image_url,
+              variant_index: i,
+              total_variants: totalVariants,
+              actor_description: variant.actor_description,
             },
           });
           variants.push({
