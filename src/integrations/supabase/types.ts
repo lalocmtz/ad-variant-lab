@@ -22,6 +22,7 @@ export type Database = {
           image_url: string
           name: string
           storage_path: string | null
+          user_id: string | null
         }
         Insert: {
           brand_id: string
@@ -30,6 +31,7 @@ export type Database = {
           image_url: string
           name: string
           storage_path?: string | null
+          user_id?: string | null
         }
         Update: {
           brand_id?: string
@@ -38,6 +40,7 @@ export type Database = {
           image_url?: string
           name?: string
           storage_path?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -55,6 +58,7 @@ export type Database = {
           id: string
           results: Json
           tiktok_url: string
+          user_id: string | null
           variant_count: number | null
         }
         Insert: {
@@ -62,6 +66,7 @@ export type Database = {
           id?: string
           results: Json
           tiktok_url: string
+          user_id?: string | null
           variant_count?: number | null
         }
         Update: {
@@ -69,6 +74,7 @@ export type Database = {
           id?: string
           results?: Json
           tiktok_url?: string
+          user_id?: string | null
           variant_count?: number | null
         }
         Relationships: []
@@ -82,6 +88,7 @@ export type Database = {
           image_url: string
           name: string
           storage_path: string | null
+          user_id: string | null
         }
         Insert: {
           brand_id: string
@@ -91,6 +98,7 @@ export type Database = {
           image_url: string
           name: string
           storage_path?: string | null
+          user_id?: string | null
         }
         Update: {
           brand_id?: string
@@ -100,6 +108,7 @@ export type Database = {
           image_url?: string
           name?: string
           storage_path?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -120,6 +129,7 @@ export type Database = {
           fonts: Json | null
           id: string
           name: string
+          user_id: string | null
         }
         Insert: {
           brand_intelligence?: string | null
@@ -129,6 +139,7 @@ export type Database = {
           fonts?: Json | null
           id?: string
           name: string
+          user_id?: string | null
         }
         Update: {
           brand_intelligence?: string | null
@@ -138,6 +149,7 @@ export type Database = {
           fonts?: Json | null
           id?: string
           name?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -150,6 +162,7 @@ export type Database = {
           profile_id: string | null
           prompt: string | null
           status: string | null
+          user_id: string | null
         }
         Insert: {
           campaign_id: string
@@ -159,6 +172,7 @@ export type Database = {
           profile_id?: string | null
           prompt?: string | null
           status?: string | null
+          user_id?: string | null
         }
         Update: {
           campaign_id?: string
@@ -168,6 +182,7 @@ export type Database = {
           profile_id?: string | null
           prompt?: string | null
           status?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -197,6 +212,7 @@ export type Database = {
           name: string
           status: string | null
           template_id: string | null
+          user_id: string | null
         }
         Insert: {
           aspect_ratio?: string | null
@@ -208,6 +224,7 @@ export type Database = {
           name: string
           status?: string | null
           template_id?: string | null
+          user_id?: string | null
         }
         Update: {
           aspect_ratio?: string | null
@@ -219,6 +236,7 @@ export type Database = {
           name?: string
           status?: string | null
           template_id?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -254,6 +272,7 @@ export type Database = {
           messaging_angle: Json | null
           name: string
           pain_points: string | null
+          user_id: string | null
         }
         Insert: {
           age_range?: string | null
@@ -264,6 +283,7 @@ export type Database = {
           messaging_angle?: Json | null
           name: string
           pain_points?: string | null
+          user_id?: string | null
         }
         Update: {
           age_range?: string | null
@@ -274,6 +294,7 @@ export type Database = {
           messaging_angle?: Json | null
           name?: string
           pain_points?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
