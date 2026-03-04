@@ -121,13 +121,16 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants } = await req.json();
+    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants, video_mode } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const fullPrompt = buildPrompt(prompt, scene_geometry, variant_index, total_variants);
+    const mode = video_mode || "avatar";
+    const fullPrompt = mode === "no_avatar"
+      ? buildPromptNoAvatar(prompt, scene_geometry, variant_index, total_variants)
+      : buildPromptAvatar(prompt, scene_geometry, variant_index, total_variants);
 
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: "text", text: fullPrompt },
@@ -143,9 +146,9 @@ serve(async (req) => {
     console.log("Generating variant image:", {
       variantIndex: variant_index,
       totalVariants: total_variants,
+      videoMode: mode,
       hasCover: !!cover_url,
       hasProduct: !!product_image_url,
-      style: getVariantStyle(variant_index ?? 0),
     });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
