@@ -8,90 +8,90 @@ const corsHeaders = {
 function buildStrictPrompt(basePrompt: string, sceneGeometry?: Record<string, string>): string {
   const geometryBlock = sceneGeometry
     ? `
-Camera distance: ${sceneGeometry.camera_distance || "medium_close"}
+Observed camera distance: ${sceneGeometry.camera_distance || "medium_close"}
 Product held in: ${sceneGeometry.product_hand || "right"} hand
 Product position in frame: ${sceneGeometry.product_position || "center"}
 Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
 Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
     : "";
 
-  return `STRICT SCENE RECONSTRUCTION
+  return `STRICT SCENE RECONSTRUCTION — CLONE THE REFERENCE FRAME
 
-Recreate the exact same scene composition as the reference TikTok frame.
+You are receiving a reference frame from a TikTok video. Your job is to RECREATE the EXACT SAME scene with a DIFFERENT person only.
 
-IMPORTANT RULES:
+MANDATORY RULES (violating any = failure):
 
 1. PRODUCT LOCK
-The product packaging MUST be IDENTICAL to the reference product image provided.
-Do NOT redesign the package.
-Do NOT change colors, logo, label, bottle shape, or typography.
-Use the exact same packaging as the reference image.
+The product packaging MUST be IDENTICAL to what appears in the reference frame.
+Do NOT redesign the package. Do NOT change colors, logo, label, bottle shape, or typography.
+Copy the product EXACTLY as it appears.
 
-2. SCENE GEOMETRY LOCK
-Replicate the same camera framing and composition as the original video frame:
-- same camera distance
-- same vertical 9:16 framing
-- same subject position in frame
-- same hand holding position
-- same product placement
-- same perspective
-- same lighting direction
+2. SCENE GEOMETRY LOCK — Match the reference frame EXACTLY:
+- Same camera distance and framing
+- Same vertical 9:16 composition
+- Same subject position in frame
+- Same hand holding position and product placement
+- Same perspective and depth
+- Same lighting direction and quality
 ${geometryBlock}
 
 3. POSE LOCK
-The subject must hold the product in the exact same way:
-- same hand position
-- same arm angle
-- same product orientation
-- same proximity to camera
-- same gesture
+The subject must hold the product in the EXACT same way as the reference:
+- Same hand (left/right)
+- Same arm angle
+- Same product orientation relative to camera
+- Same proximity to camera
+- Same gesture
 
 4. IDENTITY CHANGE ONLY
-The ONLY things allowed to change:
-- the person identity (different face, hair, age, ethnicity)
-- subtle environment variation (same category of room but different details)
-Do NOT change scene type.
+The ONLY changes allowed:
+- Different person (face, hair, age, ethnicity)
+- Subtle environment variation (same category — if living room, still living room)
+Do NOT change scene type, camera angle, or product.
 
 5. ULTRA REALISTIC UGC STYLE
-This must look like a real smartphone TikTok video frame:
-- natural lighting
-- imperfect realism
-- casual environment
-- handheld feel
-- authentic human skin texture
-- no studio lighting
-- no advertising style
+Must look like a real smartphone TikTok frame:
+- Natural, imperfect lighting
+- Casual environment
+- Handheld camera feel
+- Authentic human skin texture
+- No studio lighting, no advertising aesthetic
 
 6. PRODUCT PRIORITY
-The product must be clearly visible and readable in the person's hand.
+Product must be clearly visible, readable, and prominent in the person's hand.
 
 7. NATURAL SOCIAL MEDIA LOOK
-This should look like a random real TikTok frame, not an advertisement.
+This should look like a random real TikTok frame, not a staged advertisement.
 
-CAMERA STYLE
-Front smartphone camera, medium close shot, slight handheld realism, natural daylight.
+CAMERA: Front smartphone camera, medium close shot, slight handheld realism, natural daylight.
 
-FINAL GOAL
-This should look like the SAME TikTok video but with a different person.
-Do not stylize. Do not redesign anything. Preserve realism.
-
-VARIANT-SPECIFIC CONTEXT:
+VARIANT CONTEXT:
 ${basePrompt}
 
-DO NOT include any text overlays in the image.`;
+NEGATIVE: Do NOT include any text overlays, logos, watermarks, extra hands, distorted fingers, or product redesign.`;
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry } = await req.json();
+    const { prompt, scene_geometry, video_url } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const fullPrompt = buildStrictPrompt(prompt, scene_geometry);
+
+    // Build message content — include video frame as visual reference if available
+    const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+      { type: "text", text: fullPrompt },
+    ];
+
+    // Pass the original video URL as visual reference so the model can SEE the composition to clone
+    if (video_url) {
+      content.push({ type: "image_url", image_url: { url: video_url } });
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -102,10 +102,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         messages: [
-          {
-            role: "user",
-            content: fullPrompt,
-          },
+          { role: "user", content },
         ],
         modalities: ["image", "text"],
       }),

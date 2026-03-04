@@ -17,26 +17,25 @@ serve(async (req) => {
 
     const numVariants = variant_count || 3;
 
-    const systemPrompt = `You are an expert TikTok Shop ad analyst and variant generator for video ad production.
+    const systemPrompt = `You are an expert TikTok Shop ad analyst. You WATCH the video provided and extract REAL evidence from it.
 
 Your job:
-1. Analyze the structure of the original TikTok video (based on URL and metadata provided)
-2. Generate a source blueprint of the original video
-3. Create ${numVariants} controlled variants, each with a DIFFERENT actor/environment but the SAME structure
+1. WATCH the video carefully — observe every frame, gesture, camera angle, lighting, product interaction
+2. Determine if there is voice/speech in the video
+3. Classify the content type: HUMAN_TALKING, HANDS_DEMO, PRODUCT_ONLY, or TEXT_ONLY
+4. Build a source blueprint based on OBSERVED EVIDENCE ONLY — never invent or assume
+5. Generate ${numVariants} controlled variants that preserve the EXACT structure but change the actor
 
-CRITICAL RULES:
-- ALL image prompts (base_image_prompt_9x16) and motion prompts (hisfield_master_motion_prompt) and negative_prompt MUST be in ENGLISH
-- The rest of the analysis (variant_summary, script, shotlist descriptions) should be in Spanish
-- For each variant you MUST extract scene_geometry from the original video to ensure structural consistency
+CRITICAL OBSERVATION RULES:
+- You MUST describe what you ACTUALLY SEE in the video frames
+- If you cannot detect voice, set has_voice=false and do NOT invent a script
+- Identify the HOOK frame (the first impactful frame that grabs attention)
+- Extract EXACT scene geometry from what you observe: camera distance, which hand holds product, product position in frame, camera angle, lighting direction
 
-For scene_geometry, analyze the original video and provide:
-- camera_distance: e.g. "medium_close", "close_up", "medium", "wide"
-- product_hand: which hand holds the product, e.g. "right", "left", "both"
-- product_position: where in frame, e.g. "center_right", "center", "lower_third"
-- camera_angle: e.g. "eye_level", "slightly_above", "slightly_below"
-- lighting_direction: e.g. "window_left", "window_right", "overhead", "natural_ambient"
+ALL prompts (base_image_prompt_9x16, hisfield_master_motion_prompt, negative_prompt) MUST be in ENGLISH.
+All other fields (variant_summary, shotlist descriptions, script) should be in Spanish.
 
-For hisfield_master_motion_prompt, follow this EXACT structure:
+For hisfield_master_motion_prompt, use this EXACT structure:
 ---
 VISUAL REFERENCE: use the generated image.
 MOTION REFERENCE: use the original TikTok video.
@@ -45,40 +44,65 @@ Replicate the exact motion, timing, and gesture rhythm from the reference video.
 The actor is different but the behavior must match the original performance.
 
 Preserve:
-- camera distance
-- gesture rhythm
-- product interaction timing
-- pacing and beat structure
+- camera distance: [specify observed value]
+- gesture rhythm: [describe observed rhythm]
+- product interaction timing: [describe observed timing]
+- pacing and beat structure: [describe observed pacing]
+- hand used: [left/right/both]
+- product orientation: [describe]
 
 Replace:
-- actor identity
-- background details (same category of environment)
+- actor identity (different person)
+- background details (same category of environment, subtle variations only)
 
 Maintain a natural handheld TikTok style.
 Do not add logos or new text overlays.
 
-[Include specific shot-by-shot timing from the shotlist]
+Shot-by-shot timing:
+[Include specific timing from the shotlist]
 
 If the source video is longer than 25 seconds, compress the sequence to 10-12 seconds while preserving the hook, demonstration, proof, and CTA structure.
 ---
 
+For base_image_prompt_9x16, use STRICT SCENE RECONSTRUCTION format with all 7 locks:
+1. PRODUCT LOCK — packaging identical to reference
+2. SCENE GEOMETRY LOCK — same camera framing using observed geometry data
+3. POSE LOCK — same hand position, arm angle, product orientation
+4. IDENTITY CHANGE ONLY — only change the person
+5. ULTRA REALISTIC UGC STYLE — natural smartphone look
+6. PRODUCT PRIORITY — product clearly visible
+7. NATURAL SOCIAL MEDIA LOOK — not an advertisement
+
 Respond EXCLUSIVELY with the JSON using the tool "analysis_result".`;
 
-    const userPrompt = `Analyze this TikTok Shop ad and generate ${numVariants} variants.
+    const userPrompt = `Watch this TikTok Shop ad video carefully and generate ${numVariants} variants based on what you OBSERVE.
 
-Video URL: ${video_url}
-Metadata: ${JSON.stringify(metadata || {})}
+Additional metadata: ${JSON.stringify(metadata || {})}
 
-For each variant generate:
-- variant_id: letter A, B, C...
-- variant_summary: short summary of the variant (Spanish)
-- shotlist: array of shots with {shot, duration, description}
-- script: {hook, body, cta} (Spanish)
-- on_screen_text_plan: array of {timestamp, text}
-- scene_geometry: {camera_distance, product_hand, product_position, camera_angle, lighting_direction} extracted from the original video
-- base_image_prompt_9x16: ENGLISH prompt for hyper-realistic 9:16 image. Must use the STRICT SCENE RECONSTRUCTION format with all 7 locks (Product Lock, Scene Geometry Lock, Pose Lock, Identity Change Only, Ultra Realistic UGC Style, Product Priority, Natural Social Media Look). Include the scene_geometry data directly in the prompt.
-- hisfield_master_motion_prompt: ENGLISH prompt for Kling Motion Control following the structure above
-- negative_prompt: ENGLISH, what should NOT appear`;
+INSTRUCTIONS:
+1. Observe the video frames — describe what you see (scene, actor, product, camera, lighting)
+2. Detect if there is voice/narration
+3. Classify content type
+4. Build beat timeline from observed structure
+5. Extract scene geometry from observed frames
+6. Generate variants that clone the structure with different actors
+
+For each variant:
+- variant_id: A, B, C...
+- variant_summary: short summary (Spanish)
+- shotlist: [{shot, duration, description}] based on observed beats
+- script: {hook, body, cta} — if has_voice=true, paraphrase observed speech (Spanish). If has_voice=false, describe visual actions only
+- on_screen_text_plan: [{timestamp, text}] — 3 blocks (0-2s, 2-6s, 6-10/12s)
+- scene_geometry: OBSERVED from video {camera_distance, product_hand, product_position, camera_angle, lighting_direction}
+- base_image_prompt_9x16: ENGLISH strict reconstruction prompt with all 7 locks, embedding scene_geometry data
+- hisfield_master_motion_prompt: ENGLISH specific motion prompt with observed camera distance, hand, gesture rhythm, cut timing, beat order
+- negative_prompt: ENGLISH — "no logos, no watermarks, no random text, no extra hands, no distorted fingers, no product redesign"`;
+
+    // Send video as multimodal content so Gemini actually WATCHES it
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+      { type: "text", text: userPrompt },
+      { type: "image_url", image_url: { url: video_url } },
+    ];
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -90,7 +114,7 @@ For each variant generate:
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          { role: "user", content: userContent },
         ],
         tools: [
           {
@@ -101,16 +125,65 @@ For each variant generate:
               parameters: {
                 type: "object",
                 properties: {
-                  input_mode: { type: "string" },
-                  has_voice: { type: "boolean" },
-                  content_type: { type: "string" },
+                  input_mode: { type: "string", enum: ["URL", "VIDEO", "IMAGE_ONLY", "VIDEO_PLUS_IMAGE"] },
+                  has_voice: { type: "boolean", description: "True ONLY if voice/speech is detected in the video" },
+                  content_type: { type: "string", enum: ["HUMAN_TALKING", "HANDS_DEMO", "PRODUCT_ONLY", "TEXT_ONLY"] },
                   source_blueprint: {
                     type: "object",
                     properties: {
+                      source_understanding: {
+                        type: "object",
+                        properties: {
+                          observed_scene: { type: "string" },
+                          observed_actor: { type: "string" },
+                          observed_product: { type: "string" },
+                          camera: {
+                            type: "object",
+                            properties: {
+                              distance: { type: "string" },
+                              angle: { type: "string" },
+                              framing_notes: { type: "string" },
+                            },
+                          },
+                          lighting: {
+                            type: "object",
+                            properties: {
+                              type: { type: "string" },
+                              direction: { type: "string" },
+                            },
+                          },
+                        },
+                      },
+                      beat_timeline: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            beat: { type: "string", enum: ["HOOK", "DEMO", "PROOF", "CTA"] },
+                            time: { type: "string" },
+                            what_happens: { type: "string" },
+                          },
+                          required: ["beat", "time", "what_happens"],
+                        },
+                      },
+                      motion_signature: {
+                        type: "object",
+                        properties: {
+                          camera_style: { type: "string" },
+                          cuts: { type: "string" },
+                          gesture_rhythm: { type: "string" },
+                          product_movement: { type: "string" },
+                        },
+                      },
+                      product_interaction: {
+                        type: "object",
+                        properties: {
+                          hand_used: { type: "string" },
+                          orientation: { type: "string" },
+                          distance_to_camera: { type: "string" },
+                        },
+                      },
                       duration_seconds: { type: "number" },
-                      beat_timeline: { type: "array", items: { type: "string" } },
-                      motion_signature: { type: "string" },
-                      product_interaction: { type: "string" },
                       core_message: { type: "string" },
                     },
                   },
@@ -204,7 +277,7 @@ For each variant generate:
     const aiData = await response.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
-      console.error("No tool call in response:", JSON.stringify(aiData));
+      console.error("No tool call in response:", JSON.stringify(aiData).substring(0, 1000));
       throw new Error("AI did not return structured data");
     }
 
