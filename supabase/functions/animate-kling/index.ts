@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,13 +7,51 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+async function uploadBase64ToStorage(base64DataUrl: string): Promise<string> {
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured");
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // Extract mime type and base64 data
+  const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+  if (!match) throw new Error("Invalid base64 data URL format");
+
+  const mimeType = match[1];
+  const base64Data = match[2];
+  const ext = mimeType.split("/")[1] || "png";
+  const fileName = `kling-input-${crypto.randomUUID()}.${ext}`;
+
+  // Decode base64 to Uint8Array
+  const binaryString = atob(base64Data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  const { error } = await supabase.storage
+    .from("videos")
+    .upload(fileName, bytes, { contentType: mimeType, upsert: false });
+
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+
+  const { data: publicData } = supabase.storage
+    .from("videos")
+    .getPublicUrl(fileName);
+
+  return publicData.publicUrl;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { image_url, video_url } = await req.json();
+    let { image_url, video_url } = await req.json();
 
     if (!image_url || !video_url) {
       return new Response(
@@ -27,6 +66,13 @@ serve(async (req) => {
         JSON.stringify({ error: "KIE_API_KEY not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Convert base64 data URL to public HTTP URL
+    if (image_url.startsWith("data:")) {
+      console.log("Detected base64 data URL, uploading to storage...");
+      image_url = await uploadBase64ToStorage(image_url);
+      console.log("Uploaded image, public URL:", image_url);
     }
 
     const payload = {
