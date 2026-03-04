@@ -198,13 +198,36 @@ const Index = () => {
       }
 
       // Phase 4: Animate each variant with Infinitalk (if audio exists)
+      // First, upload base64 images to storage so Infinitalk gets real URLs
       setPipelineStep(8); // "Animando video"
       for (const v of variants) {
         if (!v.audio_url || !v.generated_image_url) continue;
+
+        // If image is base64, upload to storage first
+        let imageUrl = v.generated_image_url;
+        if (imageUrl.startsWith("data:")) {
+          try {
+            const res = await fetch(imageUrl);
+            const blob = await res.blob();
+            const fileName = `variant_${v.variant_id}_${Date.now()}.png`;
+            const { error: upErr } = await supabase.storage
+              .from("videos")
+              .upload(fileName, blob, { contentType: "image/png" });
+            if (!upErr) {
+              const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(fileName);
+              imageUrl = pubUrl.publicUrl;
+              v.generated_image_url = imageUrl; // update to real URL
+            }
+          } catch (e) {
+            console.error(`Image upload error for ${v.variant_id}:`, e);
+            continue;
+          }
+        }
+
         try {
           const { data: animData, error: animError } = await supabase.functions.invoke("animate-variant", {
             body: {
-              image_url: v.generated_image_url,
+              image_url: imageUrl,
               audio_url: v.audio_url,
               prompt: v.hisfield_master_motion_prompt?.substring(0, 500) || "A person talking naturally while holding a product, TikTok style.",
             },
