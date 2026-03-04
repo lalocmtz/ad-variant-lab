@@ -1,15 +1,14 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Clock } from "lucide-react";
 import InputStep from "@/components/InputStep";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultsView from "@/components/ResultsView";
-import HistoryPanel from "@/components/HistoryPanel";
 import CoverPreviewStep from "@/components/CoverPreviewStep";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
-export type AppStep = "input" | "downloading" | "preview" | "processing" | "results" | "history";
+export type AppStep = "input" | "downloading" | "preview" | "processing" | "results";
 
 export interface SceneGeometry {
   camera_distance: string;
@@ -40,7 +39,6 @@ export interface AnalysisResult {
   variants: VariantResult[];
 }
 
-// Intermediate state after download, before analysis
 interface DownloadedData {
   video_url: string;
   cover_url: string;
@@ -51,6 +49,7 @@ interface DownloadedData {
 }
 
 const Index = () => {
+  const { user } = useAuth();
   const [step, setStep] = useState<AppStep>("input");
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [pipelineStep, setPipelineStep] = useState(0);
@@ -63,13 +62,13 @@ const Index = () => {
         tiktok_url: url,
         variant_count: variantCount,
         results: JSON.parse(JSON.stringify(analysisResults)),
+        user_id: user?.id,
       }]);
     } catch (e) {
       console.error("Failed to save to history:", e);
     }
   };
 
-  // Phase 1: Download video + upload product image → show preview
   const handleSubmit = useCallback(async (formData: {
     url: string;
     productImage: File | null;
@@ -81,7 +80,6 @@ const Index = () => {
     setPipelineStep(0);
 
     try {
-      // Download TikTok video
       const { data: downloadData, error: downloadError } = await supabase.functions.invoke("download-tiktok", {
         body: { url: formData.url },
       });
@@ -89,7 +87,6 @@ const Index = () => {
         throw new Error(downloadData?.error || downloadError?.message || "Error descargando video");
       }
 
-      // Upload product image to storage
       let productImageUrl = "";
       if (formData.productImage) {
         const ext = formData.productImage.name.split(".").pop() || "png";
@@ -97,15 +94,11 @@ const Index = () => {
         const { error: uploadErr } = await supabase.storage
           .from("videos")
           .upload(productFileName, formData.productImage, { contentType: formData.productImage.type });
-        if (uploadErr) {
-          console.error("Product image upload error:", uploadErr);
-          throw new Error("Error subiendo imagen del producto");
-        }
+        if (uploadErr) throw new Error("Error subiendo imagen del producto");
         const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(productFileName);
         productImageUrl = pubUrl.publicUrl;
       }
 
-      // Store data and show preview
       setDownloadedData({
         video_url: downloadData.video_url,
         cover_url: downloadData.cover_url || "",
@@ -117,21 +110,18 @@ const Index = () => {
       setStep("preview");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
-      console.error("Download error:", e);
       setError(msg);
       toast.error(msg);
       setStep("input");
     }
   }, []);
 
-  // Phase 2: User confirmed → run analysis + image generation
   const handleConfirmPreview = useCallback(async () => {
     if (!downloadedData) return;
     setStep("processing");
     setPipelineStep(2);
 
     try {
-      // Analyze video with AI
       const { data: analysisData, error: analysisError } = await supabase.functions.invoke("analyze-video", {
         body: {
           video_url: downloadedData.video_url,
@@ -146,10 +136,8 @@ const Index = () => {
       }
       setPipelineStep(5);
 
-      // Generate images for each variant
       setPipelineStep(6);
       const variants: VariantResult[] = [];
-      const totalVariants = analysisData.variants.length;
       for (let i = 0; i < analysisData.variants.length; i++) {
         const variant = analysisData.variants[i];
         try {
@@ -160,7 +148,7 @@ const Index = () => {
               cover_url: downloadedData.cover_url,
               product_image_url: downloadedData.product_image_url,
               variant_index: i,
-              total_variants: totalVariants,
+              total_variants: analysisData.variants.length,
             },
           });
           variants.push({
@@ -186,12 +174,11 @@ const Index = () => {
       await saveToHistory(downloadedData.originalUrl, downloadedData.variantCount, analysisResults);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
-      console.error("Pipeline error:", e);
       setError(msg);
       toast.error(msg);
       setStep("input");
     }
-  }, [downloadedData]);
+  }, [downloadedData, user]);
 
   const handleReset = useCallback(() => {
     setStep("input");
@@ -200,67 +187,13 @@ const Index = () => {
     setDownloadedData(null);
   }, []);
 
-  const handleLoadFromHistory = useCallback((historyResults: AnalysisResult) => {
-    setResults(historyResults);
-    setStep("results");
-  }, []);
-
-  const stepLabels = ["Entrada", "Preview", "Análisis", "Resultados"];
-
   return (
     <div className="bg-background">
-      <header className="border-b border-border/50 px-6 py-4">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
-              <span className="text-sm font-bold text-primary-foreground">PV</span>
-            </div>
-            <h1 className="text-lg font-semibold text-foreground">
-              Perfect Variant Engine
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              {stepLabels.map((label, i) => (
-                <div key={label} className="flex items-center gap-2">
-                  {i > 0 && <div className="h-px w-6 bg-border" />}
-                  <span className={`text-xs font-medium ${
-                    (i === 0 && (step === "input" || step === "history")) ||
-                    (i === 1 && (step === "downloading" || step === "preview")) ||
-                    (i === 2 && step === "processing") ||
-                    (i === 3 && step === "results")
-                      ? "text-primary"
-                      : "text-muted-foreground"
-                  }`}>
-                    {label}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => setStep(step === "history" ? "input" : "history")}
-              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-            >
-              <Clock className="h-3.5 w-3.5" />
-              Historial
-            </button>
-          </div>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-5xl px-6 py-12">
         <AnimatePresence mode="wait">
           {step === "input" && (
             <motion.div key="input" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
               <InputStep onSubmit={handleSubmit} />
-            </motion.div>
-          )}
-          {step === "history" && (
-            <motion.div key="history" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
-              <div className="mx-auto max-w-xl space-y-6">
-                <h2 className="text-2xl font-bold text-foreground">Historial de Análisis</h2>
-                <HistoryPanel onLoadResult={handleLoadFromHistory} />
-              </div>
             </motion.div>
           )}
           {step === "downloading" && (
