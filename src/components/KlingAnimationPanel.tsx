@@ -150,8 +150,20 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
       if (status === "completed" || status === "succeed" || status === "success") {
         clearInterval(intervalRefs.current[variantIndex]);
         delete intervalRefs.current[variantIndex];
-        // Don't mark as completed yet — merge audio first
-        mergeAudio(data.video_url, variantIndex);
+        if (isNoAvatar) {
+          // Sora mode: no audio merge needed
+          setTasks(prev =>
+            prev.map(t =>
+              t.variantIndex === variantIndex
+                ? { ...t, status: "completed" as const, videoUrl: data.video_url }
+                : t
+            )
+          );
+          toast.success(`Variante ${variantIndex + 1}: Video listo`);
+        } else {
+          // Kling mode: merge audio from original video
+          mergeAudio(data.video_url, variantIndex);
+        }
       } else if (status === "failed" || status === "error") {
         clearInterval(intervalRefs.current[variantIndex]);
         delete intervalRefs.current[variantIndex];
