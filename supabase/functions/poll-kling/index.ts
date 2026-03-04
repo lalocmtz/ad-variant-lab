@@ -64,8 +64,11 @@ serve(async (req) => {
     if (state === "success") status = "completed";
     else if (state === "fail") status = "failed";
 
+    // Granular detail_state for frontend UI
+    const detail_state = state || "unknown";
+
     return new Response(
-      JSON.stringify({ status, video_url: videoUrl, raw: taskData }),
+      JSON.stringify({ status, detail_state, video_url: videoUrl, raw: taskData }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
