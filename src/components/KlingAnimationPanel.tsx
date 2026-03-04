@@ -21,6 +21,7 @@ interface KlingAnimationPanelProps {
   variants: VariantResult[];
   videoUrl: string;
   videoDuration?: number;
+  videoMode?: "avatar" | "no_avatar";
 }
 
 const POLL_INTERVAL = 12000;
@@ -41,9 +42,10 @@ function formatElapsed(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimationPanelProps) => {
-  const isTooLong = videoDuration !== undefined && videoDuration > 30;
-  const canAnimateDirectly = !isTooLong;
+const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "avatar" }: KlingAnimationPanelProps) => {
+  const isNoAvatar = videoMode === "no_avatar";
+  const isTooLong = !isNoAvatar && videoDuration !== undefined && videoDuration > 30;
+  const canAnimateDirectly = isNoAvatar || !isTooLong;
   const [count, setCount] = useState("1");
   const [tasks, setTasks] = useState<AnimationTask[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -200,12 +202,18 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
       try {
         const activeVideoUrl = trimmedVideoUrl || videoUrl;
         const activeDuration = trimmedDuration || videoDuration;
+        const body: Record<string, unknown> = {
+          image_url: variant.generated_image_url,
+          video_mode: videoMode,
+        };
+        if (isNoAvatar) {
+          body.motion_prompt = variant.hisfield_master_motion_prompt || "";
+        } else {
+          body.video_url = activeVideoUrl;
+          body.video_duration = activeDuration;
+        }
         const { data, error } = await supabase.functions.invoke("animate-kling", {
-          body: {
-            image_url: variant.generated_image_url,
-            video_url: activeVideoUrl,
-            video_duration: activeDuration,
-          },
+          body,
         });
 
         if (error || !data?.taskId) {
@@ -252,10 +260,18 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
     );
 
     try {
-      const activeVideoUrl = trimmedVideoUrl || videoUrl;
-      const activeDuration = trimmedDuration || videoDuration;
+      const retryBody: Record<string, unknown> = {
+        image_url: variant.generated_image_url,
+        video_mode: videoMode,
+      };
+      if (isNoAvatar) {
+        retryBody.motion_prompt = variant.hisfield_master_motion_prompt || "";
+      } else {
+        retryBody.video_url = trimmedVideoUrl || videoUrl;
+        retryBody.video_duration = trimmedDuration || videoDuration;
+      }
       const { data, error } = await supabase.functions.invoke("animate-kling", {
-        body: { image_url: variant.generated_image_url, video_url: activeVideoUrl, video_duration: activeDuration },
+        body: retryBody,
       });
 
       if (error || !data?.taskId) {
