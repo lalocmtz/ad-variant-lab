@@ -17,7 +17,7 @@ serve(async (req) => {
     if (!RAPIDAPI_KEY) throw new Error("RAPIDAPI_KEY not configured");
 
     // Call RapidAPI TikTok Download Video (tiktok-download-video1)
-    const apiUrl = `https://tiktok-download-video1.p.rapidapi.com/?url=${encodeURIComponent(url)}`;
+    const apiUrl = `https://tiktok-download-video1.p.rapidapi.com/getVideo?url=${encodeURIComponent(url)}&hd=1`;
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: {
