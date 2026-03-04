@@ -218,39 +218,69 @@ const VideoTrimmerDialog = ({
 
     let frameCount = 0;
 
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        video.pause();
-        resolve();
-      }, (clipDuration + 5) * 1000); // safety timeout
+    // Check if requestVideoFrameCallback is available
+    const hasRVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
 
-      const onFrame = () => {
-        if (video.currentTime >= endTime || video.paused) {
+    if (hasRVFC) {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
           video.pause();
-          clearTimeout(timeout);
           resolve();
-          return;
-        }
+        }, (clipDuration + 5) * 1000);
 
-        ctx.drawImage(video, 0, 0, w, h);
-        const frame = new VideoFrame(canvas, {
-          timestamp: Math.round((video.currentTime - startTime) * 1_000_000),
-        });
-        encoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
-        frame.close();
-        frameCount++;
+        const onFrame = () => {
+          if (video.currentTime >= endTime || video.paused) {
+            video.pause();
+            clearTimeout(timeout);
+            resolve();
+            return;
+          }
 
-        setTrimProgress(
-          Math.min(95, ((video.currentTime - startTime) / clipDuration) * 100)
-        );
+          ctx.drawImage(video, 0, 0, w, h);
+          const frame = new VideoFrame(canvas, {
+            timestamp: Math.round((video.currentTime - startTime) * 1_000_000),
+          });
+          encoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
+          frame.close();
+          frameCount++;
+
+          setTrimProgress(
+            Math.min(95, ((video.currentTime - startTime) / clipDuration) * 100)
+          );
+
+          (video as any).requestVideoFrameCallback(onFrame);
+        };
 
         (video as any).requestVideoFrameCallback(onFrame);
-      };
+        video.playbackRate = 2;
+        video.play().catch(reject);
+      });
+    } else {
+      // Fallback: extract frames by seeking frame-by-frame
+      const fps = 30;
+      const totalFrames = Math.ceil(clipDuration * fps);
+      for (let i = 0; i < totalFrames; i++) {
+        const t = startTime + i / fps;
+        if (t >= endTime) break;
+        video.currentTime = t;
+        await new Promise<void>((r) => { video.onseeked = () => r(); });
+        ctx.drawImage(video, 0, 0, w, h);
+        const frame = new VideoFrame(canvas, {
+          timestamp: Math.round((t - startTime) * 1_000_000),
+        });
+        encoder.encode(frame, { keyFrame: i % 60 === 0 });
+        frame.close();
+        frameCount++;
+        setTrimProgress(Math.min(95, (i / totalFrames) * 100));
+      }
+    }
 
-      (video as any).requestVideoFrameCallback(onFrame);
-      video.playbackRate = 2;
-      video.play().catch(reject);
-    });
+    if (frameCount === 0) {
+      encoder.close();
+      video.remove();
+      canvas.remove();
+      throw new Error("No se capturaron frames del video");
+    }
 
     await encoder.flush();
     encoder.close();
