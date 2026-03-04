@@ -1,8 +1,10 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import InputStep from "@/components/InputStep";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultsView from "@/components/ResultsView";
+import { supabase } from "@/integrations/supabase/client";
 
 export type AppStep = "input" | "processing" | "results";
 
@@ -29,6 +31,8 @@ export interface AnalysisResult {
 const Index = () => {
   const [step, setStep] = useState<AppStep>("input");
   const [results, setResults] = useState<AnalysisResult | null>(null);
+  const [pipelineStep, setPipelineStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = useCallback(async (formData: {
     url: string;
@@ -37,59 +41,77 @@ const Index = () => {
     variantCount: number;
   }) => {
     setStep("processing");
-    
-    // Simulate processing for now - will be replaced with real backend
-    setTimeout(() => {
-      const mockVariants: VariantResult[] = Array.from({ length: formData.variantCount }, (_, i) => ({
-        variant_id: String.fromCharCode(65 + i),
-        variant_summary: `Variant ${String.fromCharCode(65 + i)} — Same structure, different actor and environment. Hook optimized for higher stop-scroll rate.`,
-        shotlist: [
-          { shot: 1, duration: "0-3s", description: "Close-up hook — actor holds product, surprised expression" },
-          { shot: 2, duration: "3-8s", description: "Hands demo — product unboxing and texture reveal" },
-          { shot: 3, duration: "8-12s", description: "Social proof — text overlay with testimonial" },
-          { shot: 4, duration: "12-15s", description: "CTA — actor points at link, urgency text" },
-        ],
-        script: {
-          hook: "I didn't expect this to actually work...",
-          body: "Look at the quality. The texture. Everything about this is premium. I've tried dozens and nothing comes close.",
-          cta: "Get yours before they sell out — link in bio",
+    setError(null);
+    setPipelineStep(0);
+
+    try {
+      // Step 1: Download TikTok video
+      setPipelineStep(0);
+      const { data: downloadData, error: downloadError } = await supabase.functions.invoke("download-tiktok", {
+        body: { url: formData.url },
+      });
+      if (downloadError || downloadData?.error) {
+        throw new Error(downloadData?.error || downloadError?.message || "Error descargando video");
+      }
+      setPipelineStep(1);
+
+      // Step 2: Analyze video with AI
+      setPipelineStep(2);
+      const { data: analysisData, error: analysisError } = await supabase.functions.invoke("analyze-video", {
+        body: {
+          video_url: downloadData.video_url,
+          variant_count: formData.variantCount,
+          metadata: downloadData.metadata,
         },
-        on_screen_text_plan: [
-          { timestamp: "0-3s", text: "WAIT FOR IT..." },
-          { timestamp: "8-10s", text: "★★★★★ 12K+ Reviews" },
-          { timestamp: "12-15s", text: "🔥 LIMITED STOCK" },
-        ],
-        base_image_prompt_9x16: "Hyper-realistic 9:16 photo of a young woman in natural daylight, holding a skincare product close to face, soft bokeh background, iPhone quality, TikTok aesthetic, warm tones",
-        generated_image_url: "",
-        hisfield_master_motion_prompt: `Use the original TikTok video as MOTION REFERENCE. Use the generated image as VISUAL REFERENCE. Replicate exact timing: Hook (0-3s), Demo (3-8s), Proof (8-12s), CTA (12-15s). Match camera distance and angles from original. Replace actor with person from generated image. Remove all original logos and text overlays. Add new text: "WAIT FOR IT..." at 0-3s, "★★★★★ 12K+ Reviews" at 8-10s, "🔥 LIMITED STOCK" at 12-15s.`,
-        negative_prompt: "blurry, low quality, cartoon, illustration, anime, watermark, text artifacts, deformed hands, extra fingers",
-      }));
+      });
+      if (analysisError || analysisData?.error) {
+        throw new Error(analysisData?.error || analysisError?.message || "Error analizando video");
+      }
+      setPipelineStep(5);
+
+      // Step 3: Generate images for each variant
+      setPipelineStep(6);
+      const variants: VariantResult[] = [];
+      for (const variant of analysisData.variants) {
+        try {
+          const { data: imageData, error: imageError } = await supabase.functions.invoke("generate-variant-image", {
+            body: { prompt: variant.base_image_prompt_9x16 },
+          });
+          variants.push({
+            ...variant,
+            generated_image_url: imageError || imageData?.error ? "" : imageData.image_url,
+          });
+        } catch {
+          variants.push({ ...variant, generated_image_url: "" });
+        }
+      }
+      setPipelineStep(7);
 
       setResults({
-        input_mode: "tiktok_url",
-        has_voice: true,
-        content_type: "HUMAN_TALKING",
-        source_blueprint: {
-          duration_seconds: 15,
-          beat_timeline: ["hook", "demo", "proof", "cta"],
-          motion_signature: "handheld, close-up dominant",
-          product_interaction: "direct hold, texture showcase",
-          core_message: "Product quality testimonial with urgency CTA",
-        },
-        variants: mockVariants,
+        input_mode: analysisData.input_mode,
+        has_voice: analysisData.has_voice,
+        content_type: analysisData.content_type,
+        source_blueprint: analysisData.source_blueprint,
+        variants,
       });
       setStep("results");
-    }, 8000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error desconocido";
+      console.error("Pipeline error:", e);
+      setError(msg);
+      toast.error(msg);
+      setStep("input");
+    }
   }, []);
 
   const handleReset = useCallback(() => {
     setStep("input");
     setResults(null);
+    setError(null);
   }, []);
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border/50 px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <div className="flex items-center gap-3">
@@ -101,7 +123,7 @@ const Index = () => {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {["Input", "Analysis", "Results"].map((label, i) => (
+            {["Entrada", "Análisis", "Resultados"].map((label, i) => (
               <div key={label} className="flex items-center gap-2">
                 {i > 0 && <div className="h-px w-6 bg-border" />}
                 <span className={`text-xs font-medium ${
@@ -119,39 +141,20 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="mx-auto max-w-5xl px-6 py-12">
         <AnimatePresence mode="wait">
           {step === "input" && (
-            <motion.div
-              key="input"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-            >
+            <motion.div key="input" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
               <InputStep onSubmit={handleSubmit} />
             </motion.div>
           )}
           {step === "processing" && (
-            <motion.div
-              key="processing"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-            >
-              <ProcessingPipeline />
+            <motion.div key="processing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <ProcessingPipeline currentStep={pipelineStep} />
             </motion.div>
           )}
           {step === "results" && results && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-            >
+            <motion.div key="results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
               <ResultsView results={results} onReset={handleReset} />
             </motion.div>
           )}

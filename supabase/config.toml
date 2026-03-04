@@ -1,1 +1,10 @@
 project_id = "uvsmkvynhiqpjjotxthi"
+
+[functions.download-tiktok]
+verify_jwt = false
+
+[functions.analyze-video]
+verify_jwt = false
+
+[functions.generate-variant-image]
+verify_jwt = false

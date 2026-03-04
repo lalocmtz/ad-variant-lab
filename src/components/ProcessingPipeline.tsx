@@ -1,40 +1,28 @@
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Download, Layers, Mic, FileText, Brain, Shuffle, ImageIcon, CheckCircle2 } from "lucide-react";
 
 const steps = [
-  { label: "Downloading video", icon: Download },
-  { label: "Extracting frames", icon: Layers },
-  { label: "Detecting voice", icon: Mic },
-  { label: "Transcribing audio", icon: FileText },
-  { label: "Understanding video structure", icon: Brain },
-  { label: "Generating controlled variants", icon: Shuffle },
-  { label: "Generating variant images", icon: ImageIcon },
-  { label: "Ready", icon: CheckCircle2 },
+  { label: "Descargando video", icon: Download },
+  { label: "Extrayendo frames", icon: Layers },
+  { label: "Detectando voz", icon: Mic },
+  { label: "Transcribiendo audio", icon: FileText },
+  { label: "Analizando estructura", icon: Brain },
+  { label: "Generando variantes", icon: Shuffle },
+  { label: "Generando imágenes", icon: ImageIcon },
+  { label: "Listo", icon: CheckCircle2 },
 ];
 
-const ProcessingPipeline = () => {
-  const [currentStep, setCurrentStep] = useState(0);
+interface ProcessingPipelineProps {
+  currentStep: number;
+}
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev >= steps.length - 1) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
+const ProcessingPipeline = ({ currentStep }: ProcessingPipelineProps) => {
   return (
     <div className="mx-auto max-w-md space-y-10">
       <div className="space-y-3 text-center">
-        <h2 className="text-2xl font-bold text-foreground">Analyzing Ad</h2>
+        <h2 className="text-2xl font-bold text-foreground">Analizando Anuncio</h2>
         <p className="text-sm text-muted-foreground">
-          Extracting structure from the original video...
+          Extrayendo estructura del video original...
         </p>
       </div>
 
@@ -43,7 +31,6 @@ const ProcessingPipeline = () => {
           const Icon = step.icon;
           const isActive = i === currentStep;
           const isDone = i < currentStep;
-          const isPending = i > currentStep;
 
           return (
             <motion.div
