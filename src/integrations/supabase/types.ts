@@ -14,7 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      analysis_history: {
+        Row: {
+          created_at: string | null
+          id: string
+          results: Json
+          tiktok_url: string
+          variant_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          results: Json
+          tiktok_url: string
+          variant_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          results?: Json
+          tiktok_url?: string
+          variant_count?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

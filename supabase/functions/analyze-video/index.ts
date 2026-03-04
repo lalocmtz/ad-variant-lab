@@ -15,31 +15,70 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const systemPrompt = `Eres un experto en análisis de anuncios de TikTok Shop y generación de variantes para video ads.
+    const numVariants = variant_count || 3;
 
-Tu trabajo:
-1. Analizar la estructura del video original (basándote en la URL y metadata proporcionados)
-2. Generar un blueprint del video fuente
-3. Crear ${variant_count || 3} variantes controladas, cada una con diferente actor/ambiente pero MISMA estructura
+    const systemPrompt = `You are an expert TikTok Shop ad analyst and variant generator for video ad production.
 
-IMPORTANTE: Los prompts de imagen y motion SIEMPRE en inglés. El resto del análisis puede ser en español.
+Your job:
+1. Analyze the structure of the original TikTok video (based on URL and metadata provided)
+2. Generate a source blueprint of the original video
+3. Create ${numVariants} controlled variants, each with a DIFFERENT actor/environment but the SAME structure
 
-Responde EXCLUSIVAMENTE con el JSON usando la tool "analysis_result".`;
+CRITICAL RULES:
+- ALL image prompts (base_image_prompt_9x16) and motion prompts (hisfield_master_motion_prompt) and negative_prompt MUST be in ENGLISH
+- The rest of the analysis (variant_summary, script, shotlist descriptions) should be in Spanish
+- For each variant you MUST extract scene_geometry from the original video to ensure structural consistency
 
-    const userPrompt = `Analiza este anuncio de TikTok Shop y genera ${variant_count || 3} variantes.
+For scene_geometry, analyze the original video and provide:
+- camera_distance: e.g. "medium_close", "close_up", "medium", "wide"
+- product_hand: which hand holds the product, e.g. "right", "left", "both"
+- product_position: where in frame, e.g. "center_right", "center", "lower_third"
+- camera_angle: e.g. "eye_level", "slightly_above", "slightly_below"
+- lighting_direction: e.g. "window_left", "window_right", "overhead", "natural_ambient"
+
+For hisfield_master_motion_prompt, follow this EXACT structure:
+---
+VISUAL REFERENCE: use the generated image.
+MOTION REFERENCE: use the original TikTok video.
+
+Replicate the exact motion, timing, and gesture rhythm from the reference video.
+The actor is different but the behavior must match the original performance.
+
+Preserve:
+- camera distance
+- gesture rhythm
+- product interaction timing
+- pacing and beat structure
+
+Replace:
+- actor identity
+- background details (same category of environment)
+
+Maintain a natural handheld TikTok style.
+Do not add logos or new text overlays.
+
+[Include specific shot-by-shot timing from the shotlist]
+
+If the source video is longer than 25 seconds, compress the sequence to 10-12 seconds while preserving the hook, demonstration, proof, and CTA structure.
+---
+
+Respond EXCLUSIVELY with the JSON using the tool "analysis_result".`;
+
+    const userPrompt = `Analyze this TikTok Shop ad and generate ${numVariants} variants.
 
 Video URL: ${video_url}
 Metadata: ${JSON.stringify(metadata || {})}
 
-Para cada variante genera:
-- variant_id: letra A, B, C...
-- variant_summary: resumen corto de la variante
-- shotlist: array de shots con {shot, duration, description}
-- script: {hook, body, cta}
-- on_screen_text_plan: array de {timestamp, text}
-- base_image_prompt_9x16: prompt EN INGLÉS para generar imagen hiperrealista 9:16 estilo TikTok. Debe describir persona, iluminación, producto, ambiente. Calidad iPhone, estética TikTok.
-- hisfield_master_motion_prompt: prompt EN INGLÉS para Kling Motion Control. Debe referenciar la imagen generada como VISUAL REFERENCE y el video original como MOTION REFERENCE. Incluir timing exacto de cada shot, ángulos de cámara, y texto en pantalla.
-- negative_prompt: en inglés, lo que NO debe aparecer`;
+For each variant generate:
+- variant_id: letter A, B, C...
+- variant_summary: short summary of the variant (Spanish)
+- shotlist: array of shots with {shot, duration, description}
+- script: {hook, body, cta} (Spanish)
+- on_screen_text_plan: array of {timestamp, text}
+- scene_geometry: {camera_distance, product_hand, product_position, camera_angle, lighting_direction} extracted from the original video
+- base_image_prompt_9x16: ENGLISH prompt for hyper-realistic 9:16 image. Must use the STRICT SCENE RECONSTRUCTION format with all 7 locks (Product Lock, Scene Geometry Lock, Pose Lock, Identity Change Only, Ultra Realistic UGC Style, Product Priority, Natural Social Media Look). Include the scene_geometry data directly in the prompt.
+- hisfield_master_motion_prompt: ENGLISH prompt for Kling Motion Control following the structure above
+- negative_prompt: ENGLISH, what should NOT appear`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -114,13 +153,24 @@ Para cada variante genera:
                             required: ["timestamp", "text"],
                           },
                         },
+                        scene_geometry: {
+                          type: "object",
+                          properties: {
+                            camera_distance: { type: "string" },
+                            product_hand: { type: "string" },
+                            product_position: { type: "string" },
+                            camera_angle: { type: "string" },
+                            lighting_direction: { type: "string" },
+                          },
+                          required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
+                        },
                         base_image_prompt_9x16: { type: "string" },
                         hisfield_master_motion_prompt: { type: "string" },
                         negative_prompt: { type: "string" },
                       },
                       required: [
                         "variant_id", "variant_summary", "shotlist", "script",
-                        "on_screen_text_plan", "base_image_prompt_9x16",
+                        "on_screen_text_plan", "scene_geometry", "base_image_prompt_9x16",
                         "hisfield_master_motion_prompt", "negative_prompt",
                       ],
                     },

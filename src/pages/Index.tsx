@@ -1,12 +1,22 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { Clock } from "lucide-react";
 import InputStep from "@/components/InputStep";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultsView from "@/components/ResultsView";
+import HistoryPanel from "@/components/HistoryPanel";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppStep = "input" | "processing" | "results";
+export type AppStep = "input" | "processing" | "results" | "history";
+
+export interface SceneGeometry {
+  camera_distance: string;
+  product_hand: string;
+  product_position: string;
+  camera_angle: string;
+  lighting_direction: string;
+}
 
 export interface VariantResult {
   variant_id: string;
@@ -16,6 +26,7 @@ export interface VariantResult {
   on_screen_text_plan: Array<{ timestamp: string; text: string }>;
   base_image_prompt_9x16: string;
   generated_image_url: string;
+  scene_geometry?: SceneGeometry;
   hisfield_master_motion_prompt: string;
   negative_prompt: string;
 }
@@ -33,6 +44,19 @@ const Index = () => {
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [pipelineStep, setPipelineStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [currentUrl, setCurrentUrl] = useState("");
+
+  const saveToHistory = async (url: string, variantCount: number, analysisResults: AnalysisResult) => {
+    try {
+      await supabase.from("analysis_history").insert([{
+        tiktok_url: url,
+        variant_count: variantCount,
+        results: JSON.parse(JSON.stringify(analysisResults)),
+      }]);
+    } catch (e) {
+      console.error("Failed to save to history:", e);
+    }
+  };
 
   const handleSubmit = useCallback(async (formData: {
     url: string;
@@ -43,6 +67,7 @@ const Index = () => {
     setStep("processing");
     setError(null);
     setPipelineStep(0);
+    setCurrentUrl(formData.url);
 
     try {
       // Step 1: Download TikTok video
@@ -69,13 +94,16 @@ const Index = () => {
       }
       setPipelineStep(5);
 
-      // Step 3: Generate images for each variant
+      // Step 3: Generate images for each variant (passing scene_geometry)
       setPipelineStep(6);
       const variants: VariantResult[] = [];
       for (const variant of analysisData.variants) {
         try {
           const { data: imageData, error: imageError } = await supabase.functions.invoke("generate-variant-image", {
-            body: { prompt: variant.base_image_prompt_9x16 },
+            body: {
+              prompt: variant.base_image_prompt_9x16,
+              scene_geometry: variant.scene_geometry,
+            },
           });
           variants.push({
             ...variant,
@@ -87,14 +115,19 @@ const Index = () => {
       }
       setPipelineStep(7);
 
-      setResults({
+      const analysisResults: AnalysisResult = {
         input_mode: analysisData.input_mode,
         has_voice: analysisData.has_voice,
         content_type: analysisData.content_type,
         source_blueprint: analysisData.source_blueprint,
         variants,
-      });
+      };
+
+      setResults(analysisResults);
       setStep("results");
+
+      // Save to history
+      await saveToHistory(formData.url, formData.variantCount, analysisResults);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
       console.error("Pipeline error:", e);
@@ -110,6 +143,13 @@ const Index = () => {
     setError(null);
   }, []);
 
+  const handleLoadFromHistory = useCallback((historyResults: AnalysisResult) => {
+    setResults(historyResults);
+    setStep("results");
+  }, []);
+
+  const stepLabels = ["Entrada", "Análisis", "Resultados"];
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/50 px-6 py-4">
@@ -122,21 +162,30 @@ const Index = () => {
               Perfect Variant Engine
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            {["Entrada", "Análisis", "Resultados"].map((label, i) => (
-              <div key={label} className="flex items-center gap-2">
-                {i > 0 && <div className="h-px w-6 bg-border" />}
-                <span className={`text-xs font-medium ${
-                  (i === 0 && step === "input") ||
-                  (i === 1 && step === "processing") ||
-                  (i === 2 && step === "results")
-                    ? "text-primary"
-                    : "text-muted-foreground"
-                }`}>
-                  {label}
-                </span>
-              </div>
-            ))}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              {stepLabels.map((label, i) => (
+                <div key={label} className="flex items-center gap-2">
+                  {i > 0 && <div className="h-px w-6 bg-border" />}
+                  <span className={`text-xs font-medium ${
+                    (i === 0 && (step === "input" || step === "history")) ||
+                    (i === 1 && step === "processing") ||
+                    (i === 2 && step === "results")
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                  }`}>
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setStep(step === "history" ? "input" : "history")}
+              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              Historial
+            </button>
           </div>
         </div>
       </header>
@@ -146,6 +195,14 @@ const Index = () => {
           {step === "input" && (
             <motion.div key="input" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
               <InputStep onSubmit={handleSubmit} />
+            </motion.div>
+          )}
+          {step === "history" && (
+            <motion.div key="history" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <div className="mx-auto max-w-xl space-y-6">
+                <h2 className="text-2xl font-bold text-foreground">Historial de Análisis</h2>
+                <HistoryPanel onLoadResult={handleLoadFromHistory} />
+              </div>
             </motion.div>
           )}
           {step === "processing" && (
