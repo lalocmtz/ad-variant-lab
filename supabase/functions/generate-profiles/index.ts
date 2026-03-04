@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { brand_id, brand_name, brand_description, brand_intelligence } = await req.json();
+    const { brand_id, brand_name, brand_description, brand_intelligence, user_id } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
@@ -90,6 +90,7 @@ Generate 10 customer profiles. Use the suggest_profiles tool.`;
       pain_points: p.pain_points,
       desires: p.desires,
       messaging_angle: p.messaging_angle,
+      user_id,
     }));
 
     const { error: insertErr } = await supabase.from("customer_profiles").insert(rows);
