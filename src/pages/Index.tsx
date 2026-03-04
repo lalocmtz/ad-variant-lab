@@ -6,9 +6,10 @@ import InputStep from "@/components/InputStep";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultsView from "@/components/ResultsView";
 import HistoryPanel from "@/components/HistoryPanel";
+import CoverPreviewStep from "@/components/CoverPreviewStep";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppStep = "input" | "processing" | "results" | "history";
+export type AppStep = "input" | "downloading" | "preview" | "processing" | "results" | "history";
 
 export interface SceneGeometry {
   camera_distance: string;
@@ -39,12 +40,22 @@ export interface AnalysisResult {
   variants: VariantResult[];
 }
 
+// Intermediate state after download, before analysis
+interface DownloadedData {
+  video_url: string;
+  cover_url: string;
+  metadata: Record<string, unknown>;
+  product_image_url: string;
+  variantCount: number;
+  originalUrl: string;
+}
+
 const Index = () => {
   const [step, setStep] = useState<AppStep>("input");
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [pipelineStep, setPipelineStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [currentUrl, setCurrentUrl] = useState("");
+  const [downloadedData, setDownloadedData] = useState<DownloadedData | null>(null);
 
   const saveToHistory = async (url: string, variantCount: number, analysisResults: AnalysisResult) => {
     try {
@@ -58,29 +69,27 @@ const Index = () => {
     }
   };
 
+  // Phase 1: Download video + upload product image → show preview
   const handleSubmit = useCallback(async (formData: {
     url: string;
     productImage: File | null;
     referenceActor: File | null;
     variantCount: number;
   }) => {
-    setStep("processing");
+    setStep("downloading");
     setError(null);
     setPipelineStep(0);
-    setCurrentUrl(formData.url);
 
     try {
-      // Step 1: Download TikTok video
-      setPipelineStep(0);
+      // Download TikTok video
       const { data: downloadData, error: downloadError } = await supabase.functions.invoke("download-tiktok", {
         body: { url: formData.url },
       });
       if (downloadError || downloadData?.error) {
         throw new Error(downloadData?.error || downloadError?.message || "Error descargando video");
       }
-      setPipelineStep(1);
 
-      // Step 1.5: Upload product image to storage
+      // Upload product image to storage
       let productImageUrl = "";
       if (formData.productImage) {
         const ext = formData.productImage.name.split(".").pop() || "png";
@@ -96,15 +105,40 @@ const Index = () => {
         productImageUrl = pubUrl.publicUrl;
       }
 
-      // Step 2: Analyze video with AI (now with cover frame + product image)
-      setPipelineStep(2);
+      // Store data and show preview
+      setDownloadedData({
+        video_url: downloadData.video_url,
+        cover_url: downloadData.cover_url || "",
+        metadata: downloadData.metadata,
+        product_image_url: productImageUrl,
+        variantCount: formData.variantCount,
+        originalUrl: formData.url,
+      });
+      setStep("preview");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error desconocido";
+      console.error("Download error:", e);
+      setError(msg);
+      toast.error(msg);
+      setStep("input");
+    }
+  }, []);
+
+  // Phase 2: User confirmed → run analysis + image generation
+  const handleConfirmPreview = useCallback(async () => {
+    if (!downloadedData) return;
+    setStep("processing");
+    setPipelineStep(2);
+
+    try {
+      // Analyze video with AI
       const { data: analysisData, error: analysisError } = await supabase.functions.invoke("analyze-video", {
         body: {
-          video_url: downloadData.video_url,
-          variant_count: formData.variantCount,
-          metadata: downloadData.metadata,
-          cover_url: downloadData.cover_url || "",
-          product_image_url: productImageUrl,
+          video_url: downloadedData.video_url,
+          variant_count: downloadedData.variantCount,
+          metadata: downloadedData.metadata,
+          cover_url: downloadedData.cover_url,
+          product_image_url: downloadedData.product_image_url,
         },
       });
       if (analysisError || analysisData?.error) {
@@ -112,7 +146,7 @@ const Index = () => {
       }
       setPipelineStep(5);
 
-      // Step 3: Generate images for each variant with visual references
+      // Generate images for each variant
       setPipelineStep(6);
       const variants: VariantResult[] = [];
       for (const variant of analysisData.variants) {
@@ -121,8 +155,8 @@ const Index = () => {
             body: {
               prompt: variant.base_image_prompt_9x16,
               scene_geometry: variant.scene_geometry,
-              cover_url: downloadData.cover_url || "",
-              product_image_url: productImageUrl,
+              cover_url: downloadedData.cover_url,
+              product_image_url: downloadedData.product_image_url,
             },
           });
           variants.push({
@@ -145,9 +179,7 @@ const Index = () => {
 
       setResults(analysisResults);
       setStep("results");
-
-      // Save to history
-      await saveToHistory(formData.url, formData.variantCount, analysisResults);
+      await saveToHistory(downloadedData.originalUrl, downloadedData.variantCount, analysisResults);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
       console.error("Pipeline error:", e);
@@ -155,12 +187,13 @@ const Index = () => {
       toast.error(msg);
       setStep("input");
     }
-  }, []);
+  }, [downloadedData]);
 
   const handleReset = useCallback(() => {
     setStep("input");
     setResults(null);
     setError(null);
+    setDownloadedData(null);
   }, []);
 
   const handleLoadFromHistory = useCallback((historyResults: AnalysisResult) => {
@@ -168,7 +201,7 @@ const Index = () => {
     setStep("results");
   }, []);
 
-  const stepLabels = ["Entrada", "Análisis", "Resultados"];
+  const stepLabels = ["Entrada", "Preview", "Análisis", "Resultados"];
 
   return (
     <div className="min-h-screen bg-background">
@@ -189,8 +222,9 @@ const Index = () => {
                   {i > 0 && <div className="h-px w-6 bg-border" />}
                   <span className={`text-xs font-medium ${
                     (i === 0 && (step === "input" || step === "history")) ||
-                    (i === 1 && step === "processing") ||
-                    (i === 2 && step === "results")
+                    (i === 1 && (step === "downloading" || step === "preview")) ||
+                    (i === 2 && step === "processing") ||
+                    (i === 3 && step === "results")
                       ? "text-primary"
                       : "text-muted-foreground"
                   }`}>
@@ -223,6 +257,21 @@ const Index = () => {
                 <h2 className="text-2xl font-bold text-foreground">Historial de Análisis</h2>
                 <HistoryPanel onLoadResult={handleLoadFromHistory} />
               </div>
+            </motion.div>
+          )}
+          {step === "downloading" && (
+            <motion.div key="downloading" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <ProcessingPipeline currentStep={0} />
+            </motion.div>
+          )}
+          {step === "preview" && downloadedData && (
+            <motion.div key="preview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <CoverPreviewStep
+                coverUrl={downloadedData.cover_url}
+                productImageUrl={downloadedData.product_image_url}
+                onConfirm={handleConfirmPreview}
+                onCancel={handleReset}
+              />
             </motion.div>
           )}
           {step === "processing" && (
