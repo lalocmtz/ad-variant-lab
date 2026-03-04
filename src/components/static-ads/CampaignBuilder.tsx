@@ -9,7 +9,7 @@ import { Download, Loader2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import type { Brand } from "@/pages/StaticAds";
+import type { Brand } from "@/pages/BrandSystemPage";
 import type { CustomerProfile } from "./ProfilesPanel";
 
 interface Template { id: string; name: string; image_url: string; }

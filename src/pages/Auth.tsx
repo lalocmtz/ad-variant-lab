@@ -19,12 +19,12 @@ export default function Auth() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +33,7 @@ export default function Auth() {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        toast.success("Sesión iniciada");
+        toast.success("Welcome back");
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -41,10 +41,10 @@ export default function Auth() {
           options: { emailRedirectTo: window.location.origin },
         });
         if (error) throw error;
-        toast.success("Revisa tu email para confirmar tu cuenta");
+        toast.success("Check your email to confirm your account");
       }
     } catch (e: any) {
-      toast.error(e.message || "Error de autenticación");
+      toast.error(e.message || "Authentication error");
     } finally {
       setSubmitting(false);
     }
@@ -52,14 +52,14 @@ export default function Auth() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm border-border">
+      <Card className="w-full max-w-sm shadow-elevated rounded-2xl border-border">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-primary">
-            <span className="text-lg font-bold text-primary-foreground">PV</span>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-foreground">
+            <span className="text-lg font-bold text-background">TC</span>
           </div>
-          <CardTitle className="text-xl">{isLogin ? "Iniciar Sesión" : "Crear Cuenta"}</CardTitle>
+          <CardTitle className="text-xl">{isLogin ? "Welcome back" : "Create account"}</CardTitle>
           <CardDescription>
-            {isLogin ? "Accede a tu cuenta de Perfect Variant" : "Regístrate para comenzar"}
+            {isLogin ? "Sign in to Tryholo Copilot" : "Get started with Tryholo Copilot"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -71,12 +71,13 @@ export default function Auth() {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                placeholder="you@email.com"
                 required
+                className="bg-background"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -85,21 +86,18 @@ export default function Auth() {
                 placeholder="••••••••"
                 required
                 minLength={6}
+                className="bg-background"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full gradient-cta text-white border-0" disabled={submitting}>
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isLogin ? "Entrar" : "Registrarse"}
+              {isLogin ? "Sign in" : "Create account"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            {isLogin ? "¿No tienes cuenta?" : "¿Ya tienes cuenta?"}{" "}
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-primary hover:underline"
-            >
-              {isLogin ? "Regístrate" : "Inicia sesión"}
+            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+            <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-foreground font-medium hover:underline">
+              {isLogin ? "Sign up" : "Sign in"}
             </button>
           </p>
         </CardContent>

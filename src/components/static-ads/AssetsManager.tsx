@@ -8,7 +8,7 @@ import { Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import type { Brand } from "@/pages/StaticAds";
+import type { Brand } from "@/pages/BrandSystemPage";
 
 interface Asset { id: string; name: string; category: string; image_url: string; }
 interface Template { id: string; name: string; image_url: string; }

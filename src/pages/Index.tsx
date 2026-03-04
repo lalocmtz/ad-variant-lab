@@ -188,8 +188,8 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="bg-background">
-      <main className="mx-auto max-w-5xl px-6 py-12">
+      <div className="bg-background">
+      <main className="mx-auto max-w-5xl px-8 py-8">
         <AnimatePresence mode="wait">
           {step === "input" && (
             <motion.div key="input" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
