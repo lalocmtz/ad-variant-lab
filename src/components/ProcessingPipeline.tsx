@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Download, Layers, Mic, FileText, Brain, Shuffle, ImageIcon, CheckCircle2 } from "lucide-react";
+import { Download, Layers, Mic, FileText, Brain, Shuffle, ImageIcon, Volume2, Video, CheckCircle2 } from "lucide-react";
 
 const steps = [
   { label: "Descargando video", icon: Download },
@@ -9,6 +9,8 @@ const steps = [
   { label: "Analizando estructura", icon: Brain },
   { label: "Generando variantes", icon: Shuffle },
   { label: "Generando imágenes", icon: ImageIcon },
+  { label: "Generando voiceover", icon: Volume2 },
+  { label: "Animando video", icon: Video },
   { label: "Listo", icon: CheckCircle2 },
 ];
 
@@ -20,9 +22,9 @@ const ProcessingPipeline = ({ currentStep }: ProcessingPipelineProps) => {
   return (
     <div className="mx-auto max-w-md space-y-10">
       <div className="space-y-3 text-center">
-        <h2 className="text-2xl font-bold text-foreground">Analizando Anuncio</h2>
+        <h2 className="text-2xl font-bold text-foreground">Procesando Pipeline</h2>
         <p className="text-sm text-muted-foreground">
-          Extrayendo estructura del video original...
+          {currentStep >= 7 ? "Generando audio y animación..." : "Extrayendo estructura del video original..."}
         </p>
       </div>
 

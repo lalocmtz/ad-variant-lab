@@ -30,12 +30,17 @@ export interface VariantResult {
   scene_geometry?: SceneGeometry;
   hisfield_master_motion_prompt: string;
   negative_prompt: string;
+  audio_url?: string;
+  animation_task_id?: string;
+  video_url?: string;
+  suggested_voice_gender?: string;
 }
 
 export interface AnalysisResult {
   input_mode: string;
   has_voice: boolean;
   content_type: string;
+  suggested_voice_gender?: string;
   source_blueprint: Record<string, unknown>;
   variants: VariantResult[];
 }
@@ -169,10 +174,85 @@ const Index = () => {
       }
       setPipelineStep(7);
 
+      // Phase 3: Generate voiceover for each variant (if has_voice)
+      if (analysisData.has_voice) {
+        setPipelineStep(7); // "Generando voiceover"
+        for (const v of variants) {
+          try {
+            const { data: voiceData, error: voiceError } = await supabase.functions.invoke("generate-voiceover", {
+              body: {
+                script: v.script,
+                has_voice: analysisData.has_voice,
+                content_type: analysisData.content_type,
+                suggested_voice_gender: analysisData.suggested_voice_gender || "female",
+                variant_id: v.variant_id,
+              },
+            });
+            if (!voiceError && voiceData?.audio_url) {
+              v.audio_url = voiceData.audio_url;
+            }
+          } catch (e) {
+            console.error(`Voiceover error for ${v.variant_id}:`, e);
+          }
+        }
+      }
+
+      // Phase 4: Animate each variant with Infinitalk (if audio exists)
+      setPipelineStep(8); // "Animando video"
+      for (const v of variants) {
+        if (!v.audio_url || !v.generated_image_url) continue;
+        try {
+          const { data: animData, error: animError } = await supabase.functions.invoke("animate-variant", {
+            body: {
+              image_url: v.generated_image_url,
+              audio_url: v.audio_url,
+              prompt: v.hisfield_master_motion_prompt?.substring(0, 500) || "A person talking naturally while holding a product, TikTok style.",
+            },
+          });
+          if (!animError && animData?.task_id) {
+            v.animation_task_id = animData.task_id;
+          }
+        } catch (e) {
+          console.error(`Animation error for ${v.variant_id}:`, e);
+        }
+      }
+
+      // Phase 5: Poll animation tasks
+      const pendingVariants = variants.filter(v => v.animation_task_id);
+      if (pendingVariants.length > 0) {
+        const maxPolls = 60; // max 5 minutes (5s intervals)
+        for (let poll = 0; poll < maxPolls; poll++) {
+          const allDone = pendingVariants.every(v => v.video_url);
+          if (allDone) break;
+
+          await new Promise(r => setTimeout(r, 5000));
+
+          for (const v of pendingVariants) {
+            if (v.video_url) continue;
+            try {
+              const { data: checkData } = await supabase.functions.invoke("check-animation-task", {
+                body: { task_id: v.animation_task_id },
+              });
+              if (checkData?.status === "completed" && checkData?.video_url) {
+                v.video_url = checkData.video_url;
+              } else if (checkData?.status === "failed") {
+                console.error(`Animation failed for ${v.variant_id}`);
+                v.animation_task_id = undefined; // stop polling
+              }
+            } catch (e) {
+              console.error(`Poll error for ${v.variant_id}:`, e);
+            }
+          }
+        }
+      }
+
+      setPipelineStep(9); // "Listo"
+
       const analysisResults: AnalysisResult = {
         input_mode: analysisData.input_mode,
         has_voice: analysisData.has_voice,
         content_type: analysisData.content_type,
+        suggested_voice_gender: analysisData.suggested_voice_gender,
         source_blueprint: analysisData.source_blueprint,
         variants,
       };
