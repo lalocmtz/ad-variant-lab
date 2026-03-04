@@ -33,10 +33,10 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
     <div className="mx-auto max-w-xl space-y-10">
       <div className="space-y-3 text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground">
-          Generador de Variantes
+          Video Variant Console
         </h2>
         <p className="text-sm text-muted-foreground">
-          Pega el link de un anuncio de TikTok Shop. Recibe variantes con imagen y prompt para Kling.
+          Input a TikTok Shop URL. Receive variants with images and motion prompts.
         </p>
       </div>
 
