@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Style variation descriptors (non-human, avoids safety filters)
+// Style variation descriptors for product-only (no_avatar) mode
 const VARIANT_STYLES = [
   { setting: "warm golden hour lighting, wooden table surface", props: "a small potted succulent nearby" },
   { setting: "cool blue-toned morning light, marble countertop", props: "a glass of water with lemon nearby" },
@@ -18,7 +18,7 @@ function getVariantStyle(variantIndex: number) {
   return VARIANT_STYLES[variantIndex % VARIANT_STYLES.length];
 }
 
-function buildPrompt(
+function buildPromptNoAvatar(
   basePrompt: string,
   sceneGeometry?: Record<string, string>,
   variantIndex?: number,
@@ -31,7 +31,6 @@ function buildPrompt(
   const geometryBlock = sceneGeometry
     ? `
 Camera distance: ${sceneGeometry.camera_distance || "medium_close"}
-Product held in: ${sceneGeometry.product_hand || "right"} hand
 Product position: ${sceneGeometry.product_position || "center"}
 Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
 Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
@@ -71,17 +70,67 @@ ${basePrompt}
 NEGATIVE: No people, no faces, no hands, no body parts, no text overlays, no logos other than on product, no watermarks, no distorted elements, no product redesign.`;
 }
 
+function buildPromptAvatar(
+  basePrompt: string,
+  sceneGeometry?: Record<string, string>,
+  variantIndex?: number,
+  totalVariants?: number,
+): string {
+  const idx = variantIndex ?? 0;
+  const total = totalVariants ?? 3;
+
+  const geometryBlock = sceneGeometry
+    ? `
+Camera distance: ${sceneGeometry.camera_distance || "medium_close"}
+Product held in: ${sceneGeometry.product_hand || "right"} hand
+Product position: ${sceneGeometry.product_position || "center"}
+Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
+Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
+    : "";
+
+  return `REFERENCE FRAME: See the attached cover frame image below.
+PRODUCT REFERENCE: See the attached product image below.
+
+This is VARIANT ${idx + 1} of ${total}.
+
+TASK: Generate a realistic UGC-style image based on the reference frame. Keep the same scene composition and product placement. The person in the scene should look natural and diverse.
+
+PRODUCT RULES:
+- The product MUST match the PRODUCT REFERENCE image exactly.
+- Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
+- Product must be clearly visible, readable, and prominent.
+
+SCENE GEOMETRY:
+${geometryBlock}
+- Replicate the exact composition, framing, and pose from the reference frame.
+
+STYLE (UGC — CRITICAL):
+- This MUST look like a raw smartphone selfie video frame (TikTok style).
+- Natural lighting, slight soft focus, natural color grading.
+- Include natural skin texture and imperfections for realism.
+
+OUTPUT: 9:16 vertical, maximum resolution, photorealistic.
+
+VARIANT CONTEXT:
+${basePrompt}
+
+NEGATIVE: No text overlays, no logos, no watermarks, no extra hands, no distorted fingers, no product redesign, no studio lighting, no stock photo aesthetic.`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants } = await req.json();
+    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants, video_mode } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const fullPrompt = buildPrompt(prompt, scene_geometry, variant_index, total_variants);
+    const mode = video_mode || "avatar";
+    const fullPrompt = mode === "no_avatar"
+      ? buildPromptNoAvatar(prompt, scene_geometry, variant_index, total_variants)
+      : buildPromptAvatar(prompt, scene_geometry, variant_index, total_variants);
 
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: "text", text: fullPrompt },
@@ -97,9 +146,9 @@ serve(async (req) => {
     console.log("Generating variant image:", {
       variantIndex: variant_index,
       totalVariants: total_variants,
+      videoMode: mode,
       hasCover: !!cover_url,
       hasProduct: !!product_image_url,
-      style: getVariantStyle(variant_index ?? 0),
     });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

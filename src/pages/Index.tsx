@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import InputStep from "@/components/InputStep";
+import type { VideoMode } from "@/components/InputStep";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultsView from "@/components/ResultsView";
 import CoverPreviewStep from "@/components/CoverPreviewStep";
@@ -46,6 +47,7 @@ interface DownloadedData {
   product_image_url: string;
   variantCount: number;
   originalUrl: string;
+  videoMode: VideoMode;
 }
 
 const Index = () => {
@@ -74,6 +76,7 @@ const Index = () => {
     productImage: File | null;
     referenceActor: File | null;
     variantCount: number;
+    videoMode: VideoMode;
   }) => {
     setStep("downloading");
     setError(null);
@@ -106,6 +109,7 @@ const Index = () => {
         product_image_url: productImageUrl,
         variantCount: formData.variantCount,
         originalUrl: formData.url,
+        videoMode: formData.videoMode,
       });
       setStep("preview");
     } catch (e) {
@@ -129,6 +133,7 @@ const Index = () => {
           metadata: downloadedData.metadata,
           cover_url: downloadedData.cover_url,
           product_image_url: downloadedData.product_image_url,
+          video_mode: downloadedData.videoMode,
         },
       });
       if (analysisError || analysisData?.error) {
@@ -149,6 +154,7 @@ const Index = () => {
               product_image_url: downloadedData.product_image_url,
               variant_index: i,
               total_variants: analysisData.variants.length,
+              video_mode: downloadedData.videoMode,
             },
           });
           variants.push({
