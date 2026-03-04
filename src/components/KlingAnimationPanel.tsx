@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Loader2, RefreshCw, AlertCircle, Scissors, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import VideoTrimmerDialog from "@/components/VideoTrimmerDialog";
@@ -11,7 +10,7 @@ import type { VariantResult } from "@/pages/Index";
 interface AnimationTask {
   variantIndex: number;
   taskId: string | null;
-  status: "pending" | "submitting" | "processing" | "completed" | "failed";
+  status: "pending" | "submitting" | "processing" | "merging_audio" | "completed" | "failed";
   videoUrl: string;
   error?: string;
   startTime?: number;
@@ -25,13 +24,13 @@ interface KlingAnimationPanelProps {
 }
 
 const POLL_INTERVAL = 12000;
-const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 const STATE_LABELS: Record<string, string> = {
   waiting: "En cola de espera...",
   queuing: "En cola de procesamiento...",
   generating: "Generando video...",
   processing: "Procesando...",
+  merging_audio: "Agregando audio del video original...",
   unknown: "Procesando...",
 };
 
@@ -51,13 +50,12 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
   const [showTrimmer, setShowTrimmer] = useState(false);
   const [trimmedVideoUrl, setTrimmedVideoUrl] = useState<string | null>(null);
   const [trimmedDuration, setTrimmedDuration] = useState<number | null>(null);
-  const [, setTick] = useState(0); // force re-render for timer
+  const [, setTick] = useState(0);
   const intervalRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Timer tick for elapsed display
   useEffect(() => {
-    const hasProcessing = tasks.some(t => t.status === "processing" || t.status === "submitting");
+    const hasProcessing = tasks.some(t => t.status === "processing" || t.status === "submitting" || t.status === "merging_audio");
     if (hasProcessing && !timerRef.current) {
       timerRef.current = setInterval(() => setTick(t => t + 1), 1000);
     } else if (!hasProcessing && timerRef.current) {
@@ -70,29 +68,70 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
     };
   }, [tasks]);
 
-  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       Object.values(intervalRefs.current).forEach(clearInterval);
     };
   }, []);
 
-  const pollTask = useCallback(async (taskId: string, variantIndex: number) => {
-    // Check timeout
-    setTasks(prev => {
-      const task = prev.find(t => t.variantIndex === variantIndex);
-      if (task?.startTime && Date.now() - task.startTime > TIMEOUT_MS) {
-        clearInterval(intervalRefs.current[variantIndex]);
-        delete intervalRefs.current[variantIndex];
-        return prev.map(t =>
-          t.variantIndex === variantIndex
-            ? { ...t, status: "failed" as const, error: "Tiempo de espera agotado (10 min). La tarea sigue en cola en el servidor. Puedes reintentar." }
-            : t
-        );
-      }
-      return prev;
-    });
+  const mergeAudio = useCallback(async (klingVideoUrl: string, variantIndex: number) => {
+    setTasks(prev =>
+      prev.map(t =>
+        t.variantIndex === variantIndex
+          ? { ...t, status: "merging_audio" as const, detailState: "merging_audio" }
+          : t
+      )
+    );
 
+    try {
+      const activeVideoUrl = trimmedVideoUrl || videoUrl;
+      const { data, error } = await supabase.functions.invoke("merge-audio", {
+        body: {
+          kling_video_url: klingVideoUrl,
+          original_video_url: activeVideoUrl,
+        },
+      });
+
+      if (error) {
+        console.error("merge-audio error:", error);
+        // If merge fails, still show the silent video rather than failing completely
+        toast.warning("No se pudo agregar audio. Video entregado sin audio.");
+        setTasks(prev =>
+          prev.map(t =>
+            t.variantIndex === variantIndex
+              ? { ...t, status: "completed" as const, videoUrl: klingVideoUrl }
+              : t
+          )
+        );
+        return;
+      }
+
+      const finalUrl = data.merged_url || klingVideoUrl;
+      setTasks(prev =>
+        prev.map(t =>
+          t.variantIndex === variantIndex
+            ? { ...t, status: "completed" as const, videoUrl: finalUrl }
+            : t
+        )
+      );
+      
+      if (data.had_audio) {
+        toast.success(`Variante ${variantIndex + 1}: Video con audio listo`);
+      }
+    } catch (e) {
+      console.error("merge-audio exception:", e);
+      toast.warning("Error al agregar audio. Video entregado sin audio.");
+      setTasks(prev =>
+        prev.map(t =>
+          t.variantIndex === variantIndex
+            ? { ...t, status: "completed" as const, videoUrl: klingVideoUrl }
+            : t
+        )
+      );
+    }
+  }, [videoUrl, trimmedVideoUrl]);
+
+  const pollTask = useCallback(async (taskId: string, variantIndex: number) => {
     try {
       const { data, error } = await supabase.functions.invoke("poll-kling", {
         body: { taskId },
@@ -109,13 +148,8 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
       if (status === "completed" || status === "succeed" || status === "success") {
         clearInterval(intervalRefs.current[variantIndex]);
         delete intervalRefs.current[variantIndex];
-        setTasks(prev =>
-          prev.map(t =>
-            t.variantIndex === variantIndex
-              ? { ...t, status: "completed", videoUrl: data.video_url, detailState }
-              : t
-          )
-        );
+        // Don't mark as completed yet — merge audio first
+        mergeAudio(data.video_url, variantIndex);
       } else if (status === "failed" || status === "error") {
         clearInterval(intervalRefs.current[variantIndex]);
         delete intervalRefs.current[variantIndex];
@@ -127,7 +161,6 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
           )
         );
       } else {
-        // Update detail state for UI
         setTasks(prev =>
           prev.map(t =>
             t.variantIndex === variantIndex ? { ...t, detailState } : t
@@ -137,7 +170,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
     } catch (e) {
       console.error(`Poll exception for variant ${variantIndex}:`, e);
     }
-  }, []);
+  }, [mergeAudio]);
 
   const startAnimation = useCallback(async () => {
     const numVideos = parseInt(count);
@@ -343,10 +376,11 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
 };
 
 function TaskCard({ task, onRetry }: { task: AnimationTask; onRetry: (i: number) => void }) {
-  const isActive = task.status === "processing" || task.status === "submitting";
+  const isActive = task.status === "processing" || task.status === "submitting" || task.status === "merging_audio";
   const elapsed = isActive && task.startTime ? Date.now() - task.startTime : 0;
-  const progressPercent = isActive ? Math.min(95, (elapsed / TIMEOUT_MS) * 100) : task.status === "completed" ? 100 : 0;
-  const stateLabel = STATE_LABELS[task.detailState || "unknown"] || STATE_LABELS.unknown;
+  const stateLabel = task.status === "merging_audio" 
+    ? STATE_LABELS.merging_audio 
+    : STATE_LABELS[task.detailState || "unknown"] || STATE_LABELS.unknown;
 
   if (task.status === "completed" && task.videoUrl) {
     return (
@@ -377,10 +411,14 @@ function TaskCard({ task, onRetry }: { task: AnimationTask; onRetry: (i: number)
         <div className="w-full space-y-2 text-center">
           <p className="text-sm font-medium text-foreground">Variante {task.variantIndex + 1}</p>
           <p className="text-xs text-muted-foreground">{task.status === "submitting" ? "Enviando..." : stateLabel}</p>
-          <Progress value={progressPercent} className="h-1.5 w-full" />
+          {/* Indeterminate pulsing progress bar */}
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+            <div className="absolute inset-0 h-full w-1/3 animate-pulse rounded-full bg-primary" 
+                 style={{ animation: "indeterminate 1.5s ease-in-out infinite" }} />
+          </div>
           <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground/70">
             <Clock className="h-3 w-3" />
-            <span>{formatElapsed(elapsed)} / 10:00</span>
+            <span>{formatElapsed(elapsed)}</span>
           </div>
         </div>
       </div>
