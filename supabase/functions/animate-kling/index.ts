@@ -92,26 +92,30 @@ serve(async (req) => {
     const payload = {
       model: "kling-2.6/motion-control",
       input: {
-        prompt: `VISUAL REFERENCE: use the generated image.
-MOTION REFERENCE: use the original TikTok video.
+        prompt: `VISUAL REFERENCE: Strictly use the generated image for the subject's appearance, identity, and background styling.
 
-Replicate the exact motion, timing, and gesture rhythm from the reference video.
-The actor is different but the behavior must match the original performance.
+MOTION REFERENCE: Strictly use the original TikTok video for all movement, pacing, and camera dynamics.
 
-Preserve:
-- camera distance: medium close-up
-- gesture rhythm: natural conversational gesturing with the right hand
-- product interaction timing: product is held steadily in frame from the start
-- pacing and beat structure: quick-paced, direct-to-camera testimonial
-- hand used: left hand holds the product
-- product orientation: upright, facing camera
+CORE OBJECTIVE: 1:1 Motion transfer. Replicate the exact motion, timing, facial expressions, and gesture rhythm from the reference video with absolute temporal stability.
 
-Replace:
-- actor identity (different person)
-- background details (same category of environment, subtle variations only)
+CRITICAL CONSTRAINTS (TO PREVENT ARTIFACTS):
+- STRICT TEMPORAL CONSISTENCY: Maintain absolute structural integrity of the face, body, and background across the entire video.
+- NO MORPHING OR MELTING: Zero deformations during movement, camera zooms, or shot transitions.
+- ZERO HALLUCINATIONS: Do not invent unnatural physics, extra limbs, or physically impossible movements. Hands and fingers must remain anatomically correct and stable at all times.
+- PRODUCT STABILITY: The product held by the subject must remain solid; no warping, bending, or text shifting during movement.
 
-Maintain a natural handheld TikTok style.
-Do not add logos or new text overlays.`,
+PRESERVE FROM VIDEO:
+- Camera distance and natural handheld smartphone movement.
+- Gesture rhythm: natural conversational gesturing exactly as the driving video.
+- Exact product interaction timing and hand positioning.
+- Pacing: quick-paced, direct-to-camera testimonial.
+
+PRESERVE FROM IMAGE:
+- Actor identity (must look exactly like the VISUAL REFERENCE image).
+- Background details (must exactly match the VISUAL REFERENCE image).
+
+STYLE:
+Raw, unretouched UGC TikTok style. Natural lighting. DO NOT add logos, text overlays, or artificial studio effects.`,
         input_urls: [image_url],
         video_urls: [video_url],
         character_orientation: "video",
