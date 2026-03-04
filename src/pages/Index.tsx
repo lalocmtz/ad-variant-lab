@@ -80,13 +80,31 @@ const Index = () => {
       }
       setPipelineStep(1);
 
-      // Step 2: Analyze video with AI
+      // Step 1.5: Upload product image to storage
+      let productImageUrl = "";
+      if (formData.productImage) {
+        const ext = formData.productImage.name.split(".").pop() || "png";
+        const productFileName = `product_${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("videos")
+          .upload(productFileName, formData.productImage, { contentType: formData.productImage.type });
+        if (uploadErr) {
+          console.error("Product image upload error:", uploadErr);
+          throw new Error("Error subiendo imagen del producto");
+        }
+        const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(productFileName);
+        productImageUrl = pubUrl.publicUrl;
+      }
+
+      // Step 2: Analyze video with AI (now with cover frame + product image)
       setPipelineStep(2);
       const { data: analysisData, error: analysisError } = await supabase.functions.invoke("analyze-video", {
         body: {
           video_url: downloadData.video_url,
           variant_count: formData.variantCount,
           metadata: downloadData.metadata,
+          cover_url: downloadData.cover_url || "",
+          product_image_url: productImageUrl,
         },
       });
       if (analysisError || analysisData?.error) {
@@ -94,7 +112,7 @@ const Index = () => {
       }
       setPipelineStep(5);
 
-      // Step 3: Generate images for each variant (passing scene_geometry + video reference)
+      // Step 3: Generate images for each variant with visual references
       setPipelineStep(6);
       const variants: VariantResult[] = [];
       for (const variant of analysisData.variants) {
@@ -103,7 +121,8 @@ const Index = () => {
             body: {
               prompt: variant.base_image_prompt_9x16,
               scene_geometry: variant.scene_geometry,
-              video_url: downloadData.video_url,
+              cover_url: downloadData.cover_url || "",
+              product_image_url: productImageUrl,
             },
           });
           variants.push({

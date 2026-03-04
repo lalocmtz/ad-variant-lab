@@ -65,9 +65,13 @@ serve(async (req) => {
 
     const { data: publicUrlData } = supabase.storage.from("videos").getPublicUrl(fileName);
 
+    // Extract cover URLs (JPEG images) — these are real frames from the video
+    const coverUrl = data?.data?.origin_cover || data?.data?.cover || data?.origin_cover || data?.cover || "";
+
     return new Response(JSON.stringify({
       video_url: publicUrlData.publicUrl,
       file_name: fileName,
+      cover_url: coverUrl,
       metadata: {
         title: data?.data?.title || data?.title || "",
         duration: data?.data?.duration || data?.duration || 0,

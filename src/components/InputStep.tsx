@@ -22,7 +22,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
   const productInputRef = useRef<HTMLInputElement>(null);
   const actorInputRef = useRef<HTMLInputElement>(null);
 
-  const isValid = url.trim().length > 0 && url.includes("tiktok");
+  const isValid = url.trim().length > 0 && url.includes("tiktok") && productImage !== null;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -58,7 +58,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
           <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Image className="h-4 w-4 text-primary" />
             Imagen del Producto
-            <span className="text-xs text-muted-foreground">(Opcional pero recomendado)</span>
+            <span className="text-xs font-semibold text-destructive">(Obligatorio)</span>
           </Label>
           <input
             ref={productInputRef}
