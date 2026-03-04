@@ -51,12 +51,20 @@ serve(async (req) => {
   }
 
   try {
-    let { image_url, video_url } = await req.json();
+    let { image_url, video_url, video_duration } = await req.json();
 
     if (!image_url || !video_url) {
       return new Response(
         JSON.stringify({ error: "image_url and video_url are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate video duration (Kling accepts 3-30 seconds)
+    if (video_duration && video_duration > 30) {
+      return new Response(
+        JSON.stringify({ error: "El video excede 30 segundos. Kling solo acepta videos de 3 a 30 segundos." }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

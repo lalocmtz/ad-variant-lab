@@ -6,10 +6,11 @@ import type { AnalysisResult } from "@/pages/Index";
 interface ResultsViewProps {
   results: AnalysisResult;
   videoUrl: string;
+  videoDuration?: number;
   onReset: () => void;
 }
 
-const ResultsView = ({ results, videoUrl, onReset }: ResultsViewProps) => {
+const ResultsView = ({ results, videoUrl, videoDuration, onReset }: ResultsViewProps) => {
   return (
     <div className="space-y-8">
       <div className="space-y-1">
@@ -32,7 +33,7 @@ const ResultsView = ({ results, videoUrl, onReset }: ResultsViewProps) => {
       </div>
 
       {videoUrl && (
-        <KlingAnimationPanel variants={results.variants} videoUrl={videoUrl} />
+        <KlingAnimationPanel variants={results.variants} videoUrl={videoUrl} videoDuration={videoDuration} />
       )}
     </div>
   );

@@ -285,7 +285,7 @@ const Index = () => {
           )}
           {step === "results" && results && (
             <motion.div key="results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
-              <ResultsView results={results} videoUrl={downloadedData?.video_url || ""} onReset={handleReset} />
+              <ResultsView results={results} videoUrl={downloadedData?.video_url || ""} videoDuration={downloadedData?.metadata?.duration as number | undefined} onReset={handleReset} />
             </motion.div>
           )}
         </AnimatePresence>
