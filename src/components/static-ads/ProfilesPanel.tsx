@@ -5,7 +5,7 @@ import { Trash2, Users, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import type { Brand } from "@/pages/StaticAds";
+import type { Brand } from "@/pages/BrandSystemPage";
 
 export interface CustomerProfile {
   id: string;
