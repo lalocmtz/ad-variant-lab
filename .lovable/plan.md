@@ -1,33 +1,74 @@
 
 
-## Plan: Configurar APIs y construir el backend completo
+## Plan: Histórico de resultados + Mejora radical del prompt de imagen
 
-### APIs necesarias
+### 1. Tabla `analysis_history` en la base de datos
 
-Basándome en la arquitectura del sistema, necesito solicitar **2 API keys**:
+Crear una tabla para almacenar cada ejecución:
 
-1. **RapidAPI Key** — Para el TikTok Video Downloader (descargar videos de TikTok Shop)
-2. **Kie AI API Key** — Para Nano Banana Pro (generación de imágenes hiperrealistas 9:16)
+```sql
+create table public.analysis_history (
+  id uuid primary key default gen_random_uuid(),
+  tiktok_url text not null,
+  created_at timestamptz default now(),
+  variant_count int,
+  results jsonb not null
+);
+alter table public.analysis_history enable row level security;
+-- Acceso público de lectura/escritura (sin auth en este proyecto)
+create policy "Public read" on public.analysis_history for select using (true);
+create policy "Public insert" on public.analysis_history for insert with check (true);
+```
 
-**No necesito** pedir key para Gemini/análisis de video porque Lovable AI ya tiene acceso a `google/gemini-2.5-pro` y otros modelos a través del `LOVABLE_API_KEY` que ya está configurado.
+### 2. Frontend: Guardar y consultar historial
 
-### Lo que se construirá
+- En `Index.tsx`, tras recibir resultados exitosos, insertar un registro en `analysis_history` con el URL, fecha, y JSON de resultados.
+- Crear componente `HistoryPanel.tsx` que muestre una lista de análisis previos (URL truncado, fecha formateada, botón para ver resultados).
+- Agregar ruta `/history` o bien un panel lateral/sección en la página principal para acceder al historial.
+- Al clickear un registro del historial, cargar los resultados guardados en la vista de resultados.
 
-#### Edge Functions (3 funciones backend):
+### 3. Mejora del prompt de análisis (`analyze-video`)
 
-1. **`download-tiktok`** — Recibe URL de TikTok, llama a RapidAPI para descargar el video, lo guarda en storage, extrae metadata
-2. **`analyze-video`** — Envía keyframes + audio info a Gemini (`google/gemini-2.5-pro`) vía Lovable AI, devuelve el JSON blueprint + variantes
-3. **`generate-variant-image`** — Llama a Kie AI Nano Banana Pro para generar 1 imagen 9:16 por variante
+Actualizar el `systemPrompt` y `userPrompt` en la edge function para que Gemini devuelva campos adicionales de geometría de escena por variante:
 
-#### Storage bucket:
-- `videos` — Para almacenar videos descargados y keyframes
+- `scene_geometry`: `{ camera_distance, product_hand, product_position, camera_angle, lighting_direction }`
 
-#### Frontend:
-- Conectar `Index.tsx` al flujo real (edge functions en vez de mock data)
-- Simplificar `VariantCard` a solo: imagen + prompt Kling (copiable)
-- Toda la UI en español
+Estos campos se inyectarán automáticamente en el prompt de imagen.
 
-### Paso inmediato
+Agregar `scene_geometry` al schema de la tool call.
 
-Antes de implementar, necesito que ingreses las 2 API keys. Te las solicitaré en el siguiente mensaje.
+### 4. Mejora radical del prompt de imagen (`generate-variant-image`)
+
+Reescribir completamente el prompt en la edge function usando la estructura de 7 bloqueos que proporcionaste:
+
+1. **PRODUCT LOCK** — packaging idéntico al original
+2. **SCENE GEOMETRY LOCK** — misma composición de cámara (usando los datos de `scene_geometry` del análisis)
+3. **POSE LOCK** — misma posición de manos/producto
+4. **IDENTITY CHANGE ONLY** — solo cambia la persona
+5. **ULTRA REALISTIC UGC STYLE** — aspecto natural de smartphone
+6. **PRODUCT PRIORITY** — producto claramente visible
+7. **NATURAL SOCIAL MEDIA LOOK** — no publicitario
+
+El prompt se construirá dinámicamente insertando los datos de geometría de escena extraídos por Gemini.
+
+### 5. Mejora del prompt de Kling Motion (`analyze-video`)
+
+Actualizar las instrucciones para que `hisfield_master_motion_prompt` siga la estructura mejorada:
+- VISUAL REFERENCE + MOTION REFERENCE explícitos
+- Preservar distancia de cámara, ritmo de gestos, interacción con producto
+- Solo reemplazar identidad del actor y detalles de fondo
+- Compresión a 10-12s si el video original excede 25s
+
+### Archivos que se modificarán/crearán
+
+| Archivo | Acción |
+|---|---|
+| `supabase/migrations/...` | Nueva tabla `analysis_history` |
+| `supabase/functions/analyze-video/index.ts` | Prompts mejorados + campo `scene_geometry` |
+| `supabase/functions/generate-variant-image/index.ts` | Prompt de reconstrucción de escena completo |
+| `src/pages/Index.tsx` | Guardar en historial tras éxito |
+| `src/components/HistoryPanel.tsx` | Nuevo componente de historial |
+| `src/pages/History.tsx` | Nueva página de historial |
+| `src/App.tsx` | Ruta `/history` |
+| `src/pages/Index.tsx` tipos | Agregar `scene_geometry` a `VariantResult` |
 
