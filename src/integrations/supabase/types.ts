@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_templates: {
+        Row: {
+          brand_id: string
+          created_at: string | null
+          id: string
+          image_url: string
+          name: string
+          storage_path: string | null
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string | null
+          id?: string
+          image_url: string
+          name: string
+          storage_path?: string | null
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string
+          name?: string
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_templates_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analysis_history: {
         Row: {
           created_at: string | null
@@ -37,6 +72,218 @@ export type Database = {
           variant_count?: number | null
         }
         Relationships: []
+      }
+      brand_assets: {
+        Row: {
+          brand_id: string
+          category: string
+          created_at: string | null
+          id: string
+          image_url: string
+          name: string
+          storage_path: string | null
+        }
+        Insert: {
+          brand_id: string
+          category?: string
+          created_at?: string | null
+          id?: string
+          image_url: string
+          name: string
+          storage_path?: string | null
+        }
+        Update: {
+          brand_id?: string
+          category?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string
+          name?: string
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_assets_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brands: {
+        Row: {
+          brand_intelligence: string | null
+          colors: Json | null
+          created_at: string | null
+          description: string | null
+          fonts: Json | null
+          id: string
+          name: string
+        }
+        Insert: {
+          brand_intelligence?: string | null
+          colors?: Json | null
+          created_at?: string | null
+          description?: string | null
+          fonts?: Json | null
+          id?: string
+          name: string
+        }
+        Update: {
+          brand_intelligence?: string | null
+          colors?: Json | null
+          created_at?: string | null
+          description?: string | null
+          fonts?: Json | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      campaign_ads: {
+        Row: {
+          campaign_id: string
+          created_at: string | null
+          id: string
+          image_url: string | null
+          profile_id: string | null
+          prompt: string | null
+          status: string | null
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          profile_id?: string | null
+          prompt?: string | null
+          status?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          profile_id?: string | null
+          prompt?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_ads_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_ads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "customer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          aspect_ratio: string | null
+          asset_id: string | null
+          brand_id: string
+          created_at: string | null
+          cta: string | null
+          id: string
+          name: string
+          status: string | null
+          template_id: string | null
+        }
+        Insert: {
+          aspect_ratio?: string | null
+          asset_id?: string | null
+          brand_id: string
+          created_at?: string | null
+          cta?: string | null
+          id?: string
+          name: string
+          status?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          aspect_ratio?: string | null
+          asset_id?: string | null
+          brand_id?: string
+          created_at?: string | null
+          cta?: string | null
+          id?: string
+          name?: string
+          status?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "brand_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "ad_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_profiles: {
+        Row: {
+          age_range: string | null
+          brand_id: string
+          created_at: string | null
+          desires: string | null
+          id: string
+          messaging_angle: Json | null
+          name: string
+          pain_points: string | null
+        }
+        Insert: {
+          age_range?: string | null
+          brand_id: string
+          created_at?: string | null
+          desires?: string | null
+          id?: string
+          messaging_angle?: Json | null
+          name: string
+          pain_points?: string | null
+        }
+        Update: {
+          age_range?: string | null
+          brand_id?: string
+          created_at?: string | null
+          desires?: string | null
+          id?: string
+          messaging_angle?: Json | null
+          name?: string
+          pain_points?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_profiles_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
