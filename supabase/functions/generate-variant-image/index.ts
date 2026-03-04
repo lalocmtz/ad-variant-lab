@@ -99,7 +99,7 @@ serve(async (req) => {
       totalVariants: total_variants,
       hasCover: !!cover_url,
       hasProduct: !!product_image_url,
-      descriptor: getVariantDescriptor(variant_index ?? 0),
+      style: getVariantStyle(variant_index ?? 0),
     });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
