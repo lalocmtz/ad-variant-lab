@@ -1,56 +1,49 @@
 
 
-## Diagnóstico: 3 Problemas de Raíz
+## Diagnostico
 
-Después de inspeccionar todo el flujo (frontend, edge functions, logs, y network requests), encontré **tres fallos críticos** que explican exactamente lo que ves:
+Viendo las imágenes: Variantes A y B son casi clones del original (mismo actor, solo cambia color de playera). Variante C es la unica buena (persona completamente diferente, HD). Hay dos problemas de raiz:
 
-### 1. La imagen del producto que subes SE IGNORA COMPLETAMENTE
-El formulario (`InputStep.tsx`) recoge el `File` del producto y lo pasa a `Index.tsx`, pero `Index.tsx` **nunca lo sube a storage ni lo convierte a base64**. La imagen se descarta silenciosamente — nunca llega a ninguna edge function.
+### Problema 1: Sin diversidad explicita por variante
+El `analyze-video` genera `base_image_prompt_9x16` para cada variante, pero NO fuerza descripciones de actores radicalmente diferentes. Gemini produce prompts genéricos como "a young latino man" para las 3 variantes, y el modelo de imagen genera la misma persona con variaciones minimas.
 
-### 2. Gemini NO ve el video — solo lee el título
-La función `analyze-video` recibe el `video_url` pero **solo lo menciona como texto** en el prompt. Gemini nunca recibe contenido visual. Está inventando la descripción del producto basándose únicamente en el título ("300 cápsulas de aceite de orégano") — por eso describe "botella blanca de VivoNu" cuando el producto real es una bolsa verde.
+### Problema 2: Modelo incorrecto
+Se usa `google/gemini-3-pro-image-preview` pero el usuario pidio explicitamente **nano banana** (`google/gemini-2.5-flash-image`).
 
-### 3. La generación de imagen no tiene referencia visual
-`generate-variant-image` genera puramente de texto. No recibe ni la imagen del producto ni un frame del video. El modelo inventa un packaging genérico.
-
-**Dato clave encontrado**: La API de RapidAPI ya devuelve campos `cover` y `origin_cover` (imágenes JPEG del video) que nunca se extraen. Estos son frames reales del video que SÍ se pueden pasar como `image_url` a Gemini y al modelo de imagen.
+### Problema 3: No hay variante index en el prompt
+Cada variante se genera con el mismo prompt base sin indicar "esta es variante 1 de 3, DEBE ser una persona completamente diferente a las demás". No hay mecanismo de diversidad.
 
 ---
 
-## Plan de Corrección (de raíz)
+## Plan de Correccion
 
-### Paso 1: `download-tiktok` — Extraer cover del video
-- Extraer `data.cover` y `data.origin_cover` de la respuesta de RapidAPI (son URLs de imagen JPEG)
-- Devolverlos como `cover_url` en la respuesta junto con `video_url`
-- Este cover es el "hook frame" real del video
+### 1. `analyze-video/index.ts` — Forzar diversidad explicita de actores
 
-### Paso 2: Frontend `Index.tsx` — Subir imagen de producto a storage
-- Antes de llamar a `analyze-video`, subir `formData.productImage` al bucket `videos` como imagen (JPEG/PNG)
-- Obtener la URL pública
-- Pasar `product_image_url` y `cover_url` a las funciones de análisis y generación
-- Hacer obligatoria la imagen del producto: bloquear el botón si no hay imagen
+Agregar al system prompt una **tabla de diversidad obligatoria** que exija que cada variante tenga un actor con etnia, edad, genero y rasgos fisicos EXPLICITAMENTE diferentes. El `base_image_prompt_9x16` debe incluir descripcion detallada del actor unico (ej: "A 45-year-old Black woman with braided hair", "A 22-year-old East Asian man with buzzcut").
 
-### Paso 3: `InputStep.tsx` — Hacer obligatoria la imagen del producto
-- Cambiar validación: `isValid` requiere `productImage !== null`
-- Actualizar texto para indicar que es obligatorio
+Agregar al tool schema un campo `actor_description` obligatorio por variante.
 
-### Paso 4: `analyze-video` — Gemini VE el frame del video
-- Recibir `cover_url` y `product_image_url`
-- Enviar ambas como contenido multimodal (`image_url` type) — son JPEGs, formato soportado
-- Gemini ahora puede VER el producto real y la escena real para describir geometría, pose, y producto con precisión
+### 2. `generate-variant-image/index.ts` — Tres cambios criticos
 
-### Paso 5: `generate-variant-image` — Imagen generada CON referencias visuales
-- Recibir `product_image_url` (obligatorio) y `cover_url` como imágenes de referencia
-- Pasar ambas al modelo de imagen como `image_url` en el contenido multimodal
-- El prompt de reconstrucción ahora tiene las dos referencias obligatorias para bloquear packaging y composición
+**a)** Cambiar modelo a `google/gemini-2.5-flash-image` (nano banana).
+
+**b)** Inyectar `variant_index` y `total_variants` en el prompt para que el modelo sepa que DEBE crear una persona unica.
+
+**c)** Agregar al prompt una seccion de **CRITICAL DIVERSITY RULE**: "This is variant {X} of {N}. The person MUST be completely different from the original video actor. Specify: {actor_description from analysis}. Generate a PHOTOREALISTIC, HIGH DEFINITION image."
+
+**d)** Agregar instruccion de calidad HD explicita: "Output resolution must be maximum quality. Ultra-realistic, high-definition, sharp detail."
+
+### 3. `Index.tsx` — Pasar variant_index al generador
+
+En el loop de generacion, pasar `variant_index` (0, 1, 2...) y `total_variants` al edge function para que el prompt sepa cual variante es.
+
+---
 
 ### Archivos a modificar
 
 | Archivo | Cambio |
 |---|---|
-| `supabase/functions/download-tiktok/index.ts` | Extraer y devolver `cover_url` de RapidAPI |
-| `src/components/InputStep.tsx` | Hacer obligatoria la imagen del producto |
-| `src/pages/Index.tsx` | Subir imagen del producto a storage, propagar `cover_url` y `product_image_url` |
-| `supabase/functions/analyze-video/index.ts` | Recibir y pasar imágenes como contenido multimodal a Gemini |
-| `supabase/functions/generate-variant-image/index.ts` | Recibir y pasar imágenes de referencia al modelo de generación |
+| `supabase/functions/analyze-video/index.ts` | Forzar actor_description unico y diverso por variante en system prompt + schema |
+| `supabase/functions/generate-variant-image/index.ts` | Cambiar a nano banana, inyectar diversidad + HD + variant_index |
+| `src/pages/Index.tsx` | Pasar variant_index y total_variants al generate-variant-image |
 
