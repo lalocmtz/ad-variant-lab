@@ -71,7 +71,6 @@ const VideoTrimmerDialog = ({
       video.currentTime = 0;
     });
     video.addEventListener("error", () => {
-      // If CORS blocks thumbnails, generate empty placeholders
       setThumbnails(Array(THUMB_COUNT).fill(""));
       video.remove();
     });
@@ -126,7 +125,6 @@ const VideoTrimmerDialog = ({
     setIsPlaying(!isPlaying);
   };
 
-  // Click on timeline to reposition selection window
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
@@ -140,7 +138,6 @@ const VideoTrimmerDialog = ({
     }
   };
 
-  // Drag the selection window
   const handleSelectionDrag = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.stopPropagation();
@@ -171,83 +168,201 @@ const VideoTrimmerDialog = ({
     [startTime, videoDuration]
   );
 
-  // Trim and upload
+  // --- Trim with WebCodecs + mp4-muxer (Chrome/Edge 94+) ---
+  const trimWithWebCodecs = async (): Promise<Blob> => {
+    const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
+
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.src = videoUrl;
+    video.muted = true;
+    video.playsInline = true;
+
+    await new Promise<void>((res, rej) => {
+      video.onloadedmetadata = () => res();
+      video.onerror = () => rej(new Error("Failed to load video"));
+    });
+
+    const w = video.videoWidth || 720;
+    const h = video.videoHeight || 1280;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({
+      target,
+      video: { codec: "avc", width: w, height: h },
+      fastStart: "in-memory",
+    });
+
+    const encoder = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error: (e) => console.error("Encoder error:", e),
+    });
+
+    encoder.configure({
+      codec: "avc1.42001f",
+      width: w,
+      height: h,
+      bitrate: 2_000_000,
+    });
+
+    // Seek to start
+    video.currentTime = startTime;
+    await new Promise<void>((r) => {
+      video.onseeked = () => r();
+    });
+
+    let frameCount = 0;
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        video.pause();
+        resolve();
+      }, (clipDuration + 5) * 1000); // safety timeout
+
+      const onFrame = () => {
+        if (video.currentTime >= endTime || video.paused) {
+          video.pause();
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
+
+        ctx.drawImage(video, 0, 0, w, h);
+        const frame = new VideoFrame(canvas, {
+          timestamp: Math.round((video.currentTime - startTime) * 1_000_000),
+        });
+        encoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
+        frame.close();
+        frameCount++;
+
+        setTrimProgress(
+          Math.min(95, ((video.currentTime - startTime) / clipDuration) * 100)
+        );
+
+        (video as any).requestVideoFrameCallback(onFrame);
+      };
+
+      (video as any).requestVideoFrameCallback(onFrame);
+      video.playbackRate = 2;
+      video.play().catch(reject);
+    });
+
+    await encoder.flush();
+    encoder.close();
+    muxer.finalize();
+    video.remove();
+    canvas.remove();
+
+    return new Blob([target.buffer], { type: "video/mp4" });
+  };
+
+  // --- Trim with MediaRecorder video/mp4 (Safari) ---
+  const trimWithMediaRecorder = async (): Promise<Blob> => {
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.src = videoUrl;
+    video.muted = true;
+    video.playsInline = true;
+
+    await new Promise<void>((res, rej) => {
+      video.onloadedmetadata = () => res();
+      video.onerror = () => rej(new Error("Video load failed"));
+    });
+
+    video.currentTime = startTime;
+    await new Promise<void>((r) => {
+      video.onseeked = () => r();
+    });
+
+    const stream = (video as any).captureStream();
+    const recorder = new MediaRecorder(stream, { mimeType: "video/mp4" });
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e: BlobEvent) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      recorder.onstop = () => resolve();
+      recorder.onerror = () => reject(new Error("Recording failed"));
+
+      recorder.start(100);
+      video.playbackRate = 4;
+      video.play();
+
+      const progressInterval = setInterval(() => {
+        const elapsed = video.currentTime - startTime;
+        setTrimProgress(Math.min(95, (elapsed / clipDuration) * 100));
+      }, 200);
+
+      const timeout = (clipDuration / 4) * 1000 + 1000;
+      setTimeout(() => {
+        clearInterval(progressInterval);
+        video.pause();
+        recorder.stop();
+        stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+      }, timeout);
+    });
+
+    video.remove();
+    return new Blob(chunks, { type: "video/mp4" });
+  };
+
+  // --- Main save handler ---
   const handleSave = async () => {
     setIsTrimming(true);
     setTrimProgress(0);
 
     try {
-      const video = document.createElement("video");
-      video.crossOrigin = "anonymous";
-      video.src = videoUrl;
-      video.muted = true;
-      video.playsInline = true;
+      const canWebCodecs = typeof VideoEncoder !== "undefined";
+      const canMP4Recorder =
+        typeof MediaRecorder !== "undefined" &&
+        MediaRecorder.isTypeSupported("video/mp4");
 
-      await new Promise<void>((resolve, reject) => {
-        video.addEventListener("loadedmetadata", () => resolve(), { once: true });
-        video.addEventListener("error", () => reject(new Error("Video load failed")), { once: true });
-      });
+      if (!canWebCodecs && !canMP4Recorder) {
+        toast.error(
+          "Tu navegador no soporta exportar video MP4. Usa Chrome, Edge o Safari."
+        );
+        setIsTrimming(false);
+        return;
+      }
 
-      video.currentTime = startTime;
-      await new Promise<void>((resolve) => {
-        video.addEventListener("seeked", () => resolve(), { once: true });
-      });
+      let blob: Blob;
+      if (canWebCodecs) {
+        blob = await trimWithWebCodecs();
+      } else {
+        blob = await trimWithMediaRecorder();
+      }
 
-      // Use captureStream + MediaRecorder
-      const stream = (video as any).captureStream();
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-          ? "video/webm;codecs=vp9"
-          : "video/webm",
-      });
+      if (blob.size === 0) {
+        throw new Error("El video recortado está vacío");
+      }
 
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
+      setTrimProgress(97);
 
-      await new Promise<void>((resolve, reject) => {
-        recorder.onstop = () => resolve();
-        recorder.onerror = () => reject(new Error("Recording failed"));
-
-        recorder.start(100); // Collect data every 100ms
-        video.playbackRate = 4;
-        video.play();
-
-        // Track progress
-        const progressInterval = setInterval(() => {
-          const elapsed = video.currentTime - startTime;
-          setTrimProgress(Math.min(100, (elapsed / clipDuration) * 100));
-        }, 200);
-
-        // Stop after clip duration (at 4x speed)
-        const timeout = (clipDuration / 4) * 1000 + 1000;
-        setTimeout(() => {
-          clearInterval(progressInterval);
-          video.pause();
-          recorder.stop();
-          stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-        }, timeout);
-      });
-
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const fileName = `trimmed_${Date.now()}.webm`;
-
+      const fileName = `trimmed_${Date.now()}.mp4`;
       const { error: uploadErr } = await supabase.storage
         .from("videos")
-        .upload(fileName, blob, { contentType: "video/webm" });
+        .upload(fileName, blob, { contentType: "video/mp4" });
 
       if (uploadErr) throw new Error(`Upload: ${uploadErr.message}`);
 
-      const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(fileName);
+      const { data: pubUrl } = supabase.storage
+        .from("videos")
+        .getPublicUrl(fileName);
 
-      video.remove();
       toast.success("Video recortado exitosamente");
       onTrimmed(pubUrl.publicUrl, clipDuration);
       onClose();
     } catch (err) {
       console.error("Trim error:", err);
-      toast.error("Error al recortar el video. Intenta con un video más corto.");
+      toast.error(
+        "Error al recortar el video. Intenta con un video más corto."
+      );
     } finally {
       setIsTrimming(false);
     }
@@ -316,30 +431,31 @@ const VideoTrimmerDialog = ({
                       )
                     )
                   : Array.from({ length: THUMB_COUNT }).map((_, i) => (
-                      <div key={i} className="h-full flex-1 bg-muted/60 animate-pulse" />
+                      <div
+                        key={i}
+                        className="h-full flex-1 bg-muted/60 animate-pulse"
+                      />
                     ))}
               </div>
 
               {/* Selection window */}
               <div
                 className="absolute top-0 bottom-0 border-2 border-primary rounded cursor-grab active:cursor-grabbing z-10"
-                style={{ left: `${selectionLeft}%`, width: `${selectionWidth}%` }}
+                style={{
+                  left: `${selectionLeft}%`,
+                  width: `${selectionWidth}%`,
+                }}
                 onMouseDown={handleSelectionDrag}
               >
-                {/* Left handle */}
                 <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary rounded-l" />
-                {/* Right handle */}
                 <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-primary rounded-r" />
-                {/* Brightened thumbnails inside selection */}
                 <div className="absolute inset-0 bg-primary/10" />
-                {/* Time label */}
                 <div className="absolute bottom-1 left-2 text-[10px] font-mono font-bold text-primary">
                   {fmt(startTime)}
                 </div>
               </div>
             </div>
 
-            {/* Total duration */}
             <span className="text-xs font-mono text-muted-foreground shrink-0">
               {fmt(videoDuration)}
             </span>
