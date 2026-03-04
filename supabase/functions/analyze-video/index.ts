@@ -33,6 +33,23 @@ CRITICAL OBSERVATION RULES:
 - Extract EXACT scene geometry from the cover frame: camera distance, which hand holds product, product position in frame, camera angle, lighting direction
 - The product description must match the uploaded product image, NOT the video title
 
+CRITICAL — SCRIPT FIELD RULES:
+The "script" field contains SPOKEN DIALOGUE ONLY — the exact words the person SAYS OUT LOUD to camera.
+This text will be converted to voice audio via TTS, so it MUST sound like a real person talking naturally.
+- WRONG example: "El actor se gira hacia la cámara y muestra el producto"
+- CORRECT example: "¿Quieres una piel perfecta? ¡Mira lo que descubrí!"
+- Each variant MUST have a DIFFERENT script iteration — same core message, different wording and personality.
+- The script must be natural conversational Spanish, as if a real influencer is recording a TikTok.
+- Do NOT include stage directions, action descriptions, or camera instructions in the script field.
+- Visual/action descriptions go ONLY in the shotlist "description" field.
+
+CRITICAL — ACTOR DIVERSITY RULE:
+Each variant MUST feature a visually DISTINCT person in the base_image_prompt_9x16.
+- Variant A, B, and C must look like three COMPLETELY DIFFERENT people.
+- Vary: ethnicity, age range (18-45), hair color, hair style, facial features, skin tone.
+- NEVER make any variant resemble the original actor from the source video.
+- Explicitly describe the new actor's appearance in each base_image_prompt_9x16.
+
 ALL prompts (base_image_prompt_9x16, hisfield_master_motion_prompt, negative_prompt) MUST be in ENGLISH.
 All other fields (variant_summary, shotlist descriptions, script) should be in Spanish.
 
@@ -41,6 +58,7 @@ For base_image_prompt_9x16, describe the product EXACTLY as seen in the product 
 - Exact colors and design elements visible
 - Exact text/brand name visible on the packaging
 - Include: "The person is holding the EXACT product shown in the product reference image"
+- Include a DETAILED description of the NEW actor (different for each variant): ethnicity, age, hair, features
 
 For hisfield_master_motion_prompt, use this EXACT structure:
 ---
@@ -94,11 +112,11 @@ INSTRUCTIONS:
 For each variant:
 - variant_id: A, B, C...
 - variant_summary: short summary (Spanish)
-- shotlist: [{shot, duration, description}] based on observed beats
-- script: {hook, body, cta} — describe visual actions (Spanish)
+- shotlist: [{shot, duration, description}] based on observed beats — descriptions are VISUAL STAGE DIRECTIONS (what happens on screen)
+- script: {hook, body, cta} — the EXACT WORDS the person SAYS OUT LOUD. This is SPOKEN DIALOGUE, not stage directions. Must be natural conversational Spanish. Each variant must have a DIFFERENT script iteration.
 - on_screen_text_plan: [{timestamp, text}] — 3 blocks (0-2s, 2-6s, 6-10/12s)
 - scene_geometry: OBSERVED from cover frame {camera_distance, product_hand, product_position, camera_angle, lighting_direction}
-- base_image_prompt_9x16: ENGLISH strict reconstruction prompt describing the EXACT product from the product image, with all 7 locks
+- base_image_prompt_9x16: ENGLISH strict reconstruction prompt with a COMPLETELY DIFFERENT actor for each variant (vary ethnicity, age, hair, features)
 - hisfield_master_motion_prompt: ENGLISH motion prompt
 - negative_prompt: ENGLISH — "no logos, no watermarks, no random text, no extra hands, no distorted fingers, no product redesign"`,
     });
