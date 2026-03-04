@@ -16,12 +16,12 @@ serve(async (req) => {
     const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
     if (!RAPIDAPI_KEY) throw new Error("RAPIDAPI_KEY not configured");
 
-    // Call RapidAPI TikTok Video Downloader
-    const apiUrl = `https://tiktok-video-downloader-api.p.rapidapi.com/media?videoUrl=${encodeURIComponent(url)}`;
+    // Call RapidAPI TikTok Download Video (tiktok-download-video1)
+    const apiUrl = `https://tiktok-download-video1.p.rapidapi.com/?url=${encodeURIComponent(url)}`;
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: {
-        "x-rapidapi-host": "tiktok-video-downloader-api.p.rapidapi.com",
+        "x-rapidapi-host": "tiktok-download-video1.p.rapidapi.com",
         "x-rapidapi-key": RAPIDAPI_KEY,
       },
     });
@@ -33,18 +33,19 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log("RapidAPI response keys:", Object.keys(data));
+    console.log("RapidAPI response keys:", JSON.stringify(Object.keys(data)));
+    console.log("RapidAPI data keys:", data.data ? JSON.stringify(Object.keys(data.data)) : "no data field");
 
-    // Extract video URL from response
+    // Extract video URL - this API typically returns data.play or data.hdplay
     const videoUrl = data?.data?.play || data?.data?.hdplay || data?.play || data?.hdplay;
     if (!videoUrl) {
-      console.error("Full RapidAPI response:", JSON.stringify(data));
-      throw new Error("Could not extract video URL from API response");
+      console.error("Full response structure:", JSON.stringify(data).substring(0, 2000));
+      throw new Error("No se pudo extraer la URL del video");
     }
 
     // Download the video
     const videoResponse = await fetch(videoUrl);
-    if (!videoResponse.ok) throw new Error("Failed to download video");
+    if (!videoResponse.ok) throw new Error("Error descargando el video");
     const videoBlob = await videoResponse.arrayBuffer();
 
     // Upload to Supabase Storage
@@ -59,7 +60,7 @@ serve(async (req) => {
 
     if (uploadError) {
       console.error("Upload error:", uploadError);
-      throw new Error("Failed to upload video to storage");
+      throw new Error("Error subiendo video al storage");
     }
 
     const { data: publicUrlData } = supabase.storage.from("videos").getPublicUrl(fileName);
