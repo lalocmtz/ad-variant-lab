@@ -1,58 +1,41 @@
 
 
-## Plan: Modulo de Animacion Kling Motion Control
+## Diagnostico
 
-### Resumen
-Agregar un modulo independiente post-generacion de imagenes que permite al usuario animar las variantes usando la API de Kling Motion Control (KIE AI). No se toca ningun codigo existente del flujo de descarga, analisis o generacion de imagenes.
+Hay dos problemas claros:
 
-### 1. Nueva Edge Function: `animate-kling/index.ts`
+### Problema 1: Diversidad demografica forzada en analyze-video
+En `analyze-video/index.ts` lineas 36-53, hay una "MANDATORY ACTOR DIVERSITY TABLE" que explicitamente fuerza etnias diferentes (Black/African, East Asian, Caucasian) y dice "NO TWO variants may share the same ethnicity". Esto contradice directamente el prompt que el usuario proporciono, que dice: "Match the EXACT ethnicity and skin tone of the original person". Hay que eliminar esa tabla de diversidad y reemplazarla con instrucciones que mantengan la misma demografia del original.
 
-Recibe: `image_url` (variante generada), `video_url` (video original TikTok).
+### Problema 2: Kling rechaza las imagenes (File type not supported)
+Los logs muestran que `animate-kling` envia `image_url` como `data:image/png;base64,...` (un data URL enorme). KIE AI no soporta data URLs base64 — necesita una URL HTTP publica. La solucion es que antes de enviar a Kling, el edge function suba la imagen base64 al storage bucket "videos" y use la URL publica resultante.
 
-Hace POST a `https://api.kie.ai/api/v1/jobs/createTask` con:
-- Model: `kling-2.6/motion-control`
-- El prompt maestro hardcodeado (el que proporcionaste)
-- `input_urls`: [image_url]
-- `video_urls`: [video_url]
-- `character_orientation`: "video"
-- `mode`: "720p"
-- Header: `Authorization: Bearer ${KIE_API_KEY}`
+---
 
-Devuelve el `taskId`.
+## Plan de Correccion
 
-### 2. Nueva Edge Function: `poll-kling/index.ts`
+### 1. `analyze-video/index.ts` — Eliminar tabla de diversidad etnica
 
-Recibe: `taskId`. Consulta el estado de la tarea en KIE AI. Devuelve `status` y `video_url` cuando esta listo.
+Reemplazar las lineas 36-53 (MANDATORY ACTOR DIVERSITY TABLE) con instrucciones que sigan el prompt original del usuario:
+- Mantener la MISMA etnia, tono de piel, grupo de edad y genero del actor original
+- Solo cambiar rasgos faciales (estructura facial, ojos, nariz, boca) para crear individuos distintos
+- Cada variante debe ser una persona diferente pero del MISMO perfil demografico
+- Mantener estilo UGC/TikTok amateur, sin aspecto de foto de stock
 
-### 3. Frontend: `ResultsView.tsx` - Agregar seccion de animacion
+### 2. `animate-kling/index.ts` — Convertir base64 a URL publica
 
-Debajo de la grilla de variantes:
-- Dropdown: "¿Cuantos videos quieres generar? (1 a 5)"
-- Boton: "Animar Variantes (Kling Motion)"
-- Al hacer clic, envia las primeras N imagenes + video_url al backend
-- Grilla de resultados de video con skeleton/spinner por variante ("Animando variante X...")
-- Polling cada 12 segundos por tarea hasta obtener URL del .mp4
-- Reemplaza spinner con `<video>` player al completarse
+Antes de enviar a KIE AI:
+1. Detectar si `image_url` es un data URL base64
+2. Si lo es, decodificar el base64 y subir el buffer al bucket "videos" de storage
+3. Obtener la URL publica del archivo subido
+4. Enviar esa URL HTTP a KIE AI en lugar del data URL
 
-### 4. `ResultsView.tsx` - Props adicionales
+Esto requiere crear un cliente Supabase dentro del edge function usando `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
 
-Necesita recibir `videoUrl` (del video original descargado) desde `Index.tsx` para pasarlo al modulo de animacion.
+### Archivos a modificar
 
-### 5. `Index.tsx` - Pasar video_url a ResultsView
-
-Pasar `downloadedData.video_url` como prop a `ResultsView` sin modificar el flujo existente.
-
-### Archivos a crear/modificar
-
-| Archivo | Accion |
+| Archivo | Cambio |
 |---|---|
-| `supabase/functions/animate-kling/index.ts` | **Crear** - POST a KIE AI createTask |
-| `supabase/functions/poll-kling/index.ts` | **Crear** - Polling de estado de tarea |
-| `src/components/ResultsView.tsx` | **Modificar** - Agregar UI de animacion |
-| `src/components/KlingAnimationPanel.tsx` | **Crear** - Componente de animacion con polling |
-| `src/pages/Index.tsx` | **Modificar** - Pasar videoUrl a ResultsView |
-
-### Detalle tecnico del polling
-
-El componente `KlingAnimationPanel` mantendra un array de `{ taskId, status, videoUrl }`. Usara `setInterval` de 12s por cada tarea activa. Cuando `status === "completed"`, muestra el video. Si `status === "failed"`, muestra error con opcion de reintentar.
+| `supabase/functions/analyze-video/index.ts` | Eliminar tabla de diversidad, aplicar "same demographic, different face" |
+| `supabase/functions/animate-kling/index.ts` | Subir base64 a storage antes de enviar URL a KIE AI |
 
