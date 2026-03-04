@@ -7,12 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Brand } from "@/pages/StaticAds";
 
 interface Asset { id: string; name: string; category: string; image_url: string; }
 interface Template { id: string; name: string; image_url: string; }
 
 export default function AssetsManager({ brand }: { brand: Brand }) {
+  const { user } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [assetCategory, setAssetCategory] = useState("product_image");
@@ -45,6 +47,7 @@ export default function AssetsManager({ brand }: { brand: Brand }) {
           category: assetCategory,
           image_url: pubUrl.publicUrl,
           storage_path: path,
+          user_id: user?.id,
         });
         if (error) throw error;
       } else {
@@ -53,6 +56,7 @@ export default function AssetsManager({ brand }: { brand: Brand }) {
           name: file.name,
           image_url: pubUrl.publicUrl,
           storage_path: path,
+          user_id: user?.id,
         });
         if (error) throw error;
       }
@@ -72,15 +76,12 @@ export default function AssetsManager({ brand }: { brand: Brand }) {
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      {/* Brand Assets */}
       <Card>
         <CardHeader><CardTitle>Brand Assets</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Select value={assetCategory} onValueChange={setAssetCategory}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="product_image">Product Image</SelectItem>
                 <SelectItem value="logo">Logo</SelectItem>
@@ -112,7 +113,6 @@ export default function AssetsManager({ brand }: { brand: Brand }) {
         </CardContent>
       </Card>
 
-      {/* Ad Templates */}
       <Card>
         <CardHeader><CardTitle>Ad Templates (Referencias)</CardTitle></CardHeader>
         <CardContent className="space-y-4">

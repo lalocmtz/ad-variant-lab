@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Brand } from "@/pages/StaticAds";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function BrandSetup({ brand, onSaved }: Props) {
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [colors, setColors] = useState("");
@@ -51,7 +53,7 @@ export default function BrandSetup({ brand, onSaved }: Props) {
         toast.success("Brand actualizado");
         onSaved(brand.id);
       } else {
-        const { data, error } = await supabase.from("brands").insert(payload).select("id").single();
+        const { data, error } = await supabase.from("brands").insert({ ...payload, user_id: user?.id }).select("id").single();
         if (error) throw error;
         toast.success("Brand creado");
         onSaved(data.id);
