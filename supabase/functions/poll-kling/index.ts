@@ -29,13 +29,11 @@ serve(async (req) => {
       );
     }
 
-    const response = await fetch("https://api.kie.ai/api/v1/jobs/queryTask", {
-      method: "POST",
+    const response = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${KIE_API_KEY}`,
       },
-      body: JSON.stringify({ taskId }),
     });
 
     const data = await response.json();
@@ -43,14 +41,28 @@ serve(async (req) => {
 
     if (!response.ok) {
       return new Response(
-        JSON.stringify({ error: data.message || "Poll request failed" }),
+        JSON.stringify({ error: data.message || data.msg || "Poll request failed" }),
         { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const taskData = data.data || data;
-    const status = taskData.status || "processing";
-    const videoUrl = taskData.output?.video_url || taskData.video_url || taskData.output_urls?.[0] || "";
+    const state = (taskData.state || "").toLowerCase();
+
+    let videoUrl = "";
+    if (state === "success" && taskData.resultJson) {
+      try {
+        const resultObj = JSON.parse(taskData.resultJson);
+        videoUrl = resultObj.resultUrls?.[0] || "";
+      } catch (e) {
+        console.error("Failed to parse resultJson:", e);
+      }
+    }
+
+    // Map KIE states to our status
+    let status = "processing";
+    if (state === "success") status = "completed";
+    else if (state === "fail") status = "failed";
 
     return new Response(
       JSON.stringify({ status, video_url: videoUrl, raw: taskData }),

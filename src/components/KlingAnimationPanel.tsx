@@ -18,11 +18,13 @@ interface AnimationTask {
 interface KlingAnimationPanelProps {
   variants: VariantResult[];
   videoUrl: string;
+  videoDuration?: number;
 }
 
 const POLL_INTERVAL = 12000;
 
-const KlingAnimationPanel = ({ variants, videoUrl }: KlingAnimationPanelProps) => {
+const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimationPanelProps) => {
+  const isTooLong = videoDuration !== undefined && videoDuration > 30;
   const [count, setCount] = useState("1");
   const [tasks, setTasks] = useState<AnimationTask[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -104,6 +106,7 @@ const KlingAnimationPanel = ({ variants, videoUrl }: KlingAnimationPanelProps) =
           body: {
             image_url: variant.generated_image_url,
             video_url: videoUrl,
+            video_duration: videoDuration,
           },
         });
 
@@ -152,7 +155,7 @@ const KlingAnimationPanel = ({ variants, videoUrl }: KlingAnimationPanelProps) =
 
     try {
       const { data, error } = await supabase.functions.invoke("animate-kling", {
-        body: { image_url: variant.generated_image_url, video_url: videoUrl },
+        body: { image_url: variant.generated_image_url, video_url: videoUrl, video_duration: videoDuration },
       });
 
       if (error || !data?.taskId) {
@@ -196,7 +199,17 @@ const KlingAnimationPanel = ({ variants, videoUrl }: KlingAnimationPanelProps) =
         </p>
       </div>
 
-      {tasks.length === 0 && (
+      {isTooLong && (
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+          <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium text-destructive">Video demasiado largo ({Math.round(videoDuration!)}s)</p>
+            <p className="text-xs text-muted-foreground">Kling solo acepta videos de 3 a 30 segundos. Usa un TikTok más corto.</p>
+          </div>
+        </div>
+      )}
+
+      {!isTooLong && tasks.length === 0 && (
         <div className="flex items-end gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
