@@ -94,7 +94,7 @@ const Index = () => {
       }
       setPipelineStep(5);
 
-      // Step 3: Generate images for each variant (passing scene_geometry)
+      // Step 3: Generate images for each variant (passing scene_geometry + video reference)
       setPipelineStep(6);
       const variants: VariantResult[] = [];
       for (const variant of analysisData.variants) {
@@ -103,6 +103,7 @@ const Index = () => {
             body: {
               prompt: variant.base_image_prompt_9x16,
               scene_geometry: variant.scene_geometry,
+              video_url: downloadData.video_url,
             },
           });
           variants.push({
