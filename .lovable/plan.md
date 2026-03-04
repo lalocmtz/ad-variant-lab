@@ -1,36 +1,56 @@
 
 
-## Plan: Mejorar el flujo de análisis y generación de imágenes
+## Diagnóstico: 3 Problemas de Raíz
 
-### Problema raíz
-El sistema actual tiene dos fallos críticos:
-1. **Gemini NO está viendo el video**. Solo recibe la URL como texto y metadata (título, duración, autor). Gemini tiene capacidad multimodal y puede analizar video directamente si se le pasa como `image_url` en el contenido.
-2. **La generación de imagen es solo texto**. No se pasa ninguna referencia visual (ni el frame del video, ni la imagen del producto). El modelo genera "a ciegas".
+Después de inspeccionar todo el flujo (frontend, edge functions, logs, y network requests), encontré **tres fallos críticos** que explican exactamente lo que ves:
 
-### Cambios
+### 1. La imagen del producto que subes SE IGNORA COMPLETAMENTE
+El formulario (`InputStep.tsx`) recoge el `File` del producto y lo pasa a `Index.tsx`, pero `Index.tsx` **nunca lo sube a storage ni lo convierte a base64**. La imagen se descarta silenciosamente — nunca llega a ninguna edge function.
 
-#### 1. `analyze-video/index.ts` — Hacer que Gemini VEA el video
-- Enviar el `video_url` como contenido multimodal (`image_url` type) para que Gemini-2.5-Pro realmente analice los frames del video.
-- Reestructurar el prompt con el esquema mejorado del usuario: `content_type` como enum (`HUMAN_TALKING|HANDS_DEMO|PRODUCT_ONLY|TEXT_ONLY`), `beat_timeline` como objetos `{beat, time, what_happens}`, `motion_signature` detallado, `hook_frame` index, `product_interaction` con campos específicos.
-- Añadir lógica de `has_voice` real basada en lo que Gemini observe en el video.
-- Mejorar el prompt de Kling motion para incluir datos concretos (camera distance, hand used, product orientation, gesture rhythm, cut timing, beat order).
+### 2. Gemini NO ve el video — solo lee el título
+La función `analyze-video` recibe el `video_url` pero **solo lo menciona como texto** en el prompt. Gemini nunca recibe contenido visual. Está inventando la descripción del producto basándose únicamente en el título ("300 cápsulas de aceite de orégano") — por eso describe "botella blanca de VivoNu" cuando el producto real es una bolsa verde.
 
-#### 2. `generate-variant-image/index.ts` — Pasar referencia visual del video
-- Enviar el `video_url` (o el frame del hook) como `image_url` al modelo de generación de imagen para que tenga referencia visual real de la composición original.
-- Reestructurar el prompt para ser menos descriptivo/creativo y más de reconstrucción con restricciones duras, insertando los datos de `scene_geometry` de forma explícita.
-- Agregar `negative_prompt` global: `no logos, no watermarks, no random text, no extra hands, no distorted fingers, no product redesign`.
+### 3. La generación de imagen no tiene referencia visual
+`generate-variant-image` genera puramente de texto. No recibe ni la imagen del producto ni un frame del video. El modelo inventa un packaging genérico.
 
-#### 3. `Index.tsx` — Pasar `video_url` hasta la generación de imagen
-- Propagar el `video_url` descargado al paso de generación de imagen para que se pueda usar como referencia visual.
+**Dato clave encontrado**: La API de RapidAPI ya devuelve campos `cover` y `origin_cover` (imágenes JPEG del video) que nunca se extraen. Estos son frames reales del video que SÍ se pueden pasar como `image_url` a Gemini y al modelo de imagen.
 
-#### 4. Pipeline steps — Alinear con la realidad
-- Ajustar los pasos del pipeline para reflejar lo que realmente sucede (descargar → analizar con Gemini multimodal → generar imágenes con referencia).
+---
+
+## Plan de Corrección (de raíz)
+
+### Paso 1: `download-tiktok` — Extraer cover del video
+- Extraer `data.cover` y `data.origin_cover` de la respuesta de RapidAPI (son URLs de imagen JPEG)
+- Devolverlos como `cover_url` en la respuesta junto con `video_url`
+- Este cover es el "hook frame" real del video
+
+### Paso 2: Frontend `Index.tsx` — Subir imagen de producto a storage
+- Antes de llamar a `analyze-video`, subir `formData.productImage` al bucket `videos` como imagen (JPEG/PNG)
+- Obtener la URL pública
+- Pasar `product_image_url` y `cover_url` a las funciones de análisis y generación
+- Hacer obligatoria la imagen del producto: bloquear el botón si no hay imagen
+
+### Paso 3: `InputStep.tsx` — Hacer obligatoria la imagen del producto
+- Cambiar validación: `isValid` requiere `productImage !== null`
+- Actualizar texto para indicar que es obligatorio
+
+### Paso 4: `analyze-video` — Gemini VE el frame del video
+- Recibir `cover_url` y `product_image_url`
+- Enviar ambas como contenido multimodal (`image_url` type) — son JPEGs, formato soportado
+- Gemini ahora puede VER el producto real y la escena real para describir geometría, pose, y producto con precisión
+
+### Paso 5: `generate-variant-image` — Imagen generada CON referencias visuales
+- Recibir `product_image_url` (obligatorio) y `cover_url` como imágenes de referencia
+- Pasar ambas al modelo de imagen como `image_url` en el contenido multimodal
+- El prompt de reconstrucción ahora tiene las dos referencias obligatorias para bloquear packaging y composición
 
 ### Archivos a modificar
 
 | Archivo | Cambio |
 |---|---|
-| `supabase/functions/analyze-video/index.ts` | Enviar video como contenido multimodal + prompt mejorado |
-| `supabase/functions/generate-variant-image/index.ts` | Recibir y usar `video_url` como referencia visual |
-| `src/pages/Index.tsx` | Pasar `video_url` a generate-variant-image |
+| `supabase/functions/download-tiktok/index.ts` | Extraer y devolver `cover_url` de RapidAPI |
+| `src/components/InputStep.tsx` | Hacer obligatoria la imagen del producto |
+| `src/pages/Index.tsx` | Subir imagen del producto a storage, propagar `cover_url` y `product_image_url` |
+| `supabase/functions/analyze-video/index.ts` | Recibir y pasar imágenes como contenido multimodal a Gemini |
+| `supabase/functions/generate-variant-image/index.ts` | Recibir y pasar imágenes de referencia al modelo de generación |
 
