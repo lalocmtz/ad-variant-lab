@@ -1,49 +1,58 @@
 
 
-## Diagnostico
+## Plan: Modulo de Animacion Kling Motion Control
 
-Viendo las imágenes: Variantes A y B son casi clones del original (mismo actor, solo cambia color de playera). Variante C es la unica buena (persona completamente diferente, HD). Hay dos problemas de raiz:
+### Resumen
+Agregar un modulo independiente post-generacion de imagenes que permite al usuario animar las variantes usando la API de Kling Motion Control (KIE AI). No se toca ningun codigo existente del flujo de descarga, analisis o generacion de imagenes.
 
-### Problema 1: Sin diversidad explicita por variante
-El `analyze-video` genera `base_image_prompt_9x16` para cada variante, pero NO fuerza descripciones de actores radicalmente diferentes. Gemini produce prompts genéricos como "a young latino man" para las 3 variantes, y el modelo de imagen genera la misma persona con variaciones minimas.
+### 1. Nueva Edge Function: `animate-kling/index.ts`
 
-### Problema 2: Modelo incorrecto
-Se usa `google/gemini-3-pro-image-preview` pero el usuario pidio explicitamente **nano banana** (`google/gemini-2.5-flash-image`).
+Recibe: `image_url` (variante generada), `video_url` (video original TikTok).
 
-### Problema 3: No hay variante index en el prompt
-Cada variante se genera con el mismo prompt base sin indicar "esta es variante 1 de 3, DEBE ser una persona completamente diferente a las demás". No hay mecanismo de diversidad.
+Hace POST a `https://api.kie.ai/api/v1/jobs/createTask` con:
+- Model: `kling-2.6/motion-control`
+- El prompt maestro hardcodeado (el que proporcionaste)
+- `input_urls`: [image_url]
+- `video_urls`: [video_url]
+- `character_orientation`: "video"
+- `mode`: "720p"
+- Header: `Authorization: Bearer ${KIE_API_KEY}`
 
----
+Devuelve el `taskId`.
 
-## Plan de Correccion
+### 2. Nueva Edge Function: `poll-kling/index.ts`
 
-### 1. `analyze-video/index.ts` — Forzar diversidad explicita de actores
+Recibe: `taskId`. Consulta el estado de la tarea en KIE AI. Devuelve `status` y `video_url` cuando esta listo.
 
-Agregar al system prompt una **tabla de diversidad obligatoria** que exija que cada variante tenga un actor con etnia, edad, genero y rasgos fisicos EXPLICITAMENTE diferentes. El `base_image_prompt_9x16` debe incluir descripcion detallada del actor unico (ej: "A 45-year-old Black woman with braided hair", "A 22-year-old East Asian man with buzzcut").
+### 3. Frontend: `ResultsView.tsx` - Agregar seccion de animacion
 
-Agregar al tool schema un campo `actor_description` obligatorio por variante.
+Debajo de la grilla de variantes:
+- Dropdown: "¿Cuantos videos quieres generar? (1 a 5)"
+- Boton: "Animar Variantes (Kling Motion)"
+- Al hacer clic, envia las primeras N imagenes + video_url al backend
+- Grilla de resultados de video con skeleton/spinner por variante ("Animando variante X...")
+- Polling cada 12 segundos por tarea hasta obtener URL del .mp4
+- Reemplaza spinner con `<video>` player al completarse
 
-### 2. `generate-variant-image/index.ts` — Tres cambios criticos
+### 4. `ResultsView.tsx` - Props adicionales
 
-**a)** Cambiar modelo a `google/gemini-2.5-flash-image` (nano banana).
+Necesita recibir `videoUrl` (del video original descargado) desde `Index.tsx` para pasarlo al modulo de animacion.
 
-**b)** Inyectar `variant_index` y `total_variants` en el prompt para que el modelo sepa que DEBE crear una persona unica.
+### 5. `Index.tsx` - Pasar video_url a ResultsView
 
-**c)** Agregar al prompt una seccion de **CRITICAL DIVERSITY RULE**: "This is variant {X} of {N}. The person MUST be completely different from the original video actor. Specify: {actor_description from analysis}. Generate a PHOTOREALISTIC, HIGH DEFINITION image."
+Pasar `downloadedData.video_url` como prop a `ResultsView` sin modificar el flujo existente.
 
-**d)** Agregar instruccion de calidad HD explicita: "Output resolution must be maximum quality. Ultra-realistic, high-definition, sharp detail."
+### Archivos a crear/modificar
 
-### 3. `Index.tsx` — Pasar variant_index al generador
-
-En el loop de generacion, pasar `variant_index` (0, 1, 2...) y `total_variants` al edge function para que el prompt sepa cual variante es.
-
----
-
-### Archivos a modificar
-
-| Archivo | Cambio |
+| Archivo | Accion |
 |---|---|
-| `supabase/functions/analyze-video/index.ts` | Forzar actor_description unico y diverso por variante en system prompt + schema |
-| `supabase/functions/generate-variant-image/index.ts` | Cambiar a nano banana, inyectar diversidad + HD + variant_index |
-| `src/pages/Index.tsx` | Pasar variant_index y total_variants al generate-variant-image |
+| `supabase/functions/animate-kling/index.ts` | **Crear** - POST a KIE AI createTask |
+| `supabase/functions/poll-kling/index.ts` | **Crear** - Polling de estado de tarea |
+| `src/components/ResultsView.tsx` | **Modificar** - Agregar UI de animacion |
+| `src/components/KlingAnimationPanel.tsx` | **Crear** - Componente de animacion con polling |
+| `src/pages/Index.tsx` | **Modificar** - Pasar videoUrl a ResultsView |
+
+### Detalle tecnico del polling
+
+El componente `KlingAnimationPanel` mantendra un array de `{ taskId, status, videoUrl }`. Usara `setInterval` de 12s por cada tarea activa. Cuando `status === "completed"`, muestra el video. Si `status === "failed"`, muestra error con opcion de reintentar.
 
