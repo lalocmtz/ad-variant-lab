@@ -5,119 +5,76 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function buildStrictPrompt(
+function buildPrompt(
   basePrompt: string,
   sceneGeometry?: Record<string, string>,
   variantIndex?: number,
   totalVariants?: number,
-  actorDescription?: string,
 ): string {
   const geometryBlock = sceneGeometry
     ? `
-Observed camera distance: ${sceneGeometry.camera_distance || "medium_close"}
+Camera distance: ${sceneGeometry.camera_distance || "medium_close"}
 Product held in: ${sceneGeometry.product_hand || "right"} hand
-Product position in frame: ${sceneGeometry.product_position || "center"}
+Product position: ${sceneGeometry.product_position || "center"}
 Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
 Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
     : "";
 
-  const diversityBlock = `
-═══════════════════════════════════════════════════
-CRITICAL DIVERSITY RULE
-═══════════════════════════════════════════════════
+  return `REFERENCE FRAME: See the attached cover frame image below.
+PRODUCT REFERENCE: See the attached product image below.
+
 This is VARIANT ${(variantIndex ?? 0) + 1} of ${totalVariants ?? 3}.
-The person in this image MUST be COMPLETELY DIFFERENT from the original video actor.
-The person MUST NOT resemble any other variant's actor.
 
-MANDATORY ACTOR FOR THIS VARIANT:
-${actorDescription || "A person with completely different ethnicity, age, and appearance from the original"}
+TASK: Generate a highly realistic variant of this exact scene, but replace the subject with a DIFFERENT person of the EXACT SAME demographic profile.
 
-Generate this EXACT person described above. Do NOT default to the original actor.
-Do NOT generate a generic person. Follow the actor description PRECISELY.
-═══════════════════════════════════════════════════`;
+DEMOGRAPHIC CONSTRAINTS (CRITICAL):
+- Match the EXACT ethnicity and skin tone of the original person. (e.g., if the original is a young Latino male, the generated person MUST be a young Latino male).
+- Match the EXACT age group.
+- Match the EXACT gender.
+- Hair style and color should be natural and appropriate for the demographic, avoiding radical fashion colors unless present in the original.
 
-  return `STRICT SCENE RECONSTRUCTION — CLONE THE REFERENCE FRAME
+FACIAL CHANGES:
+- Change the facial structure, eyes, nose, and mouth so it is clearly a distinct, non-existent individual, to avoid copyright issues.
+- Each variant (${(variantIndex ?? 0) + 1} of ${totalVariants ?? 3}) must have a UNIQUE face — no two variants should look alike.
 
-You are receiving TWO reference images:
-1. COVER FRAME — a real frame from the original TikTok video showing the exact scene, pose, camera angle, and composition to clone
-2. PRODUCT IMAGE — the EXACT product packaging that MUST appear in the generated image
+STYLE & REALISM (UGC STYLE — CRITICAL):
+- This MUST look like a raw, unretouched smartphone selfie video frame (TikTok style).
+- AVOID studio lighting, AVOID overly perfect flawless skin, AVOID professional bokeh.
+- Maintain the EXACT same background environment, lighting quality, and camera distance as the reference frame.
+- Include natural skin imperfections: pores, slight blemishes, uneven skin tone.
+- Slightly soft focus, natural color grading, no post-processing look.
 
-Your job is to RECREATE the EXACT SAME scene from the cover frame with a COMPLETELY DIFFERENT person (described below), holding the EXACT product from the product image.
-
-${diversityBlock}
-
-MANDATORY RULES (violating any = failure):
-
-1. PRODUCT LOCK — USE THE PRODUCT IMAGE REFERENCE
-The product in the generated image MUST be a pixel-perfect copy of the product shown in the PRODUCT IMAGE reference.
-Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
-Copy the product EXACTLY as it appears in the product reference image.
-
-2. SCENE GEOMETRY LOCK — Match the COVER FRAME EXACTLY:
-- Same camera distance and framing
-- Same vertical 9:16 composition
-- Same subject position in frame
-- Same hand holding position and product placement
-- Same perspective and depth
-- Same lighting direction and quality
+SCENE GEOMETRY LOCK:
 ${geometryBlock}
+- Replicate the exact composition, framing, and pose from the reference frame.
+- Same hand holding the product, same arm angle, same product orientation.
 
-3. POSE LOCK
-The subject must hold the product in the EXACT same way as shown in the cover frame:
-- Same hand (left/right)
-- Same arm angle
-- Same product orientation relative to camera
-- Same proximity to camera
-- Same gesture
-
-4. IDENTITY CHANGE — THE MOST IMPORTANT RULE
-The person MUST match this description EXACTLY: ${actorDescription || "completely different person"}
-- DIFFERENT ethnicity from the original
-- DIFFERENT age range from the original
-- DIFFERENT hair style and color
-- DIFFERENT facial features
-Do NOT generate someone who looks similar to the original actor.
-
-5. ULTRA REALISTIC UGC STYLE — MAXIMUM QUALITY
-Must look like a real smartphone TikTok frame:
-- Ultra-realistic, HIGH DEFINITION, 4K quality
-- Natural, imperfect lighting
-- Casual environment
-- Handheld camera feel
-- Authentic human skin texture with pores and natural imperfections
-- Sharp detail on product packaging (must be readable)
-- No studio lighting, no advertising aesthetic
-- PHOTOREALISTIC quality — indistinguishable from a real photo
-
-6. PRODUCT PRIORITY
-Product must be clearly visible, readable, and prominent in the person's hand.
-The product packaging must EXACTLY match the product reference image.
-
-7. NATURAL SOCIAL MEDIA LOOK
-This should look like a random real TikTok frame, not a staged advertisement.
+PRODUCT LOCK:
+- The product in the generated image MUST be a pixel-perfect copy of the PRODUCT REFERENCE image.
+- Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
+- Product must be clearly visible, readable, and prominent.
 
 CAMERA: Front smartphone camera, medium close shot, slight handheld realism, natural daylight.
-OUTPUT: Maximum resolution, ultra-sharp, photorealistic, high-definition.
+OUTPUT: 9:16 vertical, maximum resolution, photorealistic.
 
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: Do NOT include any text overlays, logos, watermarks, extra hands, distorted fingers, or product redesign. Do NOT invent a different product packaging. Do NOT generate the same person as the original video.`;
+NEGATIVE: No text overlays, no logos, no watermarks, no extra hands, no distorted fingers, no product redesign, no studio lighting, no stock photo aesthetic, no plastic skin.`;
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants, actor_description } = await req.json();
+    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const fullPrompt = buildStrictPrompt(prompt, scene_geometry, variant_index, total_variants, actor_description);
+    const fullPrompt = buildPrompt(prompt, scene_geometry, variant_index, total_variants);
 
-    // Build multimodal content with visual references
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: "text", text: fullPrompt },
     ];
@@ -132,7 +89,6 @@ serve(async (req) => {
     console.log("Generating variant image:", {
       variantIndex: variant_index,
       totalVariants: total_variants,
-      actorDescription: actor_description?.substring(0, 80),
       hasCover: !!cover_url,
       hasProduct: !!product_image_url,
     });
@@ -145,9 +101,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: [
-          { role: "user", content },
-        ],
+        messages: [{ role: "user", content }],
         modalities: ["image", "text"],
       }),
     });

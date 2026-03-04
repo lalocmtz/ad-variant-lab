@@ -161,7 +161,6 @@ const Index = () => {
               product_image_url: downloadedData.product_image_url,
               variant_index: i,
               total_variants: totalVariants,
-              actor_description: variant.actor_description,
             },
           });
           variants.push({
