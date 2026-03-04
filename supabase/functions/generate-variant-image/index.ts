@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Style variation descriptors (non-human, avoids safety filters)
+// Style variation descriptors for product-only (no_avatar) mode
 const VARIANT_STYLES = [
   { setting: "warm golden hour lighting, wooden table surface", props: "a small potted succulent nearby" },
   { setting: "cool blue-toned morning light, marble countertop", props: "a glass of water with lemon nearby" },
@@ -18,7 +18,7 @@ function getVariantStyle(variantIndex: number) {
   return VARIANT_STYLES[variantIndex % VARIANT_STYLES.length];
 }
 
-function buildPrompt(
+function buildPromptNoAvatar(
   basePrompt: string,
   sceneGeometry?: Record<string, string>,
   variantIndex?: number,
@@ -31,7 +31,6 @@ function buildPrompt(
   const geometryBlock = sceneGeometry
     ? `
 Camera distance: ${sceneGeometry.camera_distance || "medium_close"}
-Product held in: ${sceneGeometry.product_hand || "right"} hand
 Product position: ${sceneGeometry.product_position || "center"}
 Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
 Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
@@ -69,6 +68,53 @@ VARIANT CONTEXT:
 ${basePrompt}
 
 NEGATIVE: No people, no faces, no hands, no body parts, no text overlays, no logos other than on product, no watermarks, no distorted elements, no product redesign.`;
+}
+
+function buildPromptAvatar(
+  basePrompt: string,
+  sceneGeometry?: Record<string, string>,
+  variantIndex?: number,
+  totalVariants?: number,
+): string {
+  const idx = variantIndex ?? 0;
+  const total = totalVariants ?? 3;
+
+  const geometryBlock = sceneGeometry
+    ? `
+Camera distance: ${sceneGeometry.camera_distance || "medium_close"}
+Product held in: ${sceneGeometry.product_hand || "right"} hand
+Product position: ${sceneGeometry.product_position || "center"}
+Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
+Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
+    : "";
+
+  return `REFERENCE FRAME: See the attached cover frame image below.
+PRODUCT REFERENCE: See the attached product image below.
+
+This is VARIANT ${idx + 1} of ${total}.
+
+TASK: Generate a realistic UGC-style image based on the reference frame. Keep the same scene composition and product placement. The person in the scene should look natural and diverse.
+
+PRODUCT RULES:
+- The product MUST match the PRODUCT REFERENCE image exactly.
+- Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
+- Product must be clearly visible, readable, and prominent.
+
+SCENE GEOMETRY:
+${geometryBlock}
+- Replicate the exact composition, framing, and pose from the reference frame.
+
+STYLE (UGC — CRITICAL):
+- This MUST look like a raw smartphone selfie video frame (TikTok style).
+- Natural lighting, slight soft focus, natural color grading.
+- Include natural skin texture and imperfections for realism.
+
+OUTPUT: 9:16 vertical, maximum resolution, photorealistic.
+
+VARIANT CONTEXT:
+${basePrompt}
+
+NEGATIVE: No text overlays, no logos, no watermarks, no extra hands, no distorted fingers, no product redesign, no studio lighting, no stock photo aesthetic.`;
 }
 
 serve(async (req) => {
