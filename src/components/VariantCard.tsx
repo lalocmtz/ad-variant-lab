@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { Copy, Check, Volume2, Video, Loader2, Play } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Volume2, Video, Loader2 } from "lucide-react";
 import type { VariantResult } from "@/pages/Index";
 
 interface VariantCardProps {
@@ -10,13 +8,6 @@ interface VariantCardProps {
 type AnimationStatus = "idle" | "generating_audio" | "animating" | "completed" | "failed";
 
 const VariantCard = ({ variant }: VariantCardProps) => {
-  const [copied, setCopied] = useState(false);
-
-  const copyPrompt = () => {
-    navigator.clipboard.writeText(variant.hisfield_master_motion_prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const animationStatus: AnimationStatus = variant.video_url
     ? "completed"
@@ -118,28 +109,6 @@ const VariantCard = ({ variant }: VariantCardProps) => {
             <audio src={variant.audio_url} controls className="w-full h-8" />
           )}
 
-          {/* Motion prompt */}
-          <details className="group">
-            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
-              Prompt Kling Motion ▸
-            </summary>
-            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-xs text-secondary-foreground max-h-32 overflow-y-auto">
-              {variant.hisfield_master_motion_prompt}
-            </pre>
-          </details>
-
-          <Button
-            onClick={copyPrompt}
-            variant="outline"
-            size="sm"
-            className="w-full gap-2 text-xs"
-          >
-            {copied ? (
-              <><Check className="h-3 w-3 text-primary" /> Copiado</>
-            ) : (
-              <><Copy className="h-3 w-3" /> Copiar Prompt</>
-            )}
-          </Button>
         </div>
       </div>
     </div>
