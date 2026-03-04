@@ -29,11 +29,13 @@ serve(async (req) => {
       );
     }
 
-    const response = await fetch(`https://api.kie.ai/api/v1/jobs/status?taskId=${taskId}`, {
-      method: "GET",
+    const response = await fetch("https://api.kie.ai/api/v1/jobs/queryTask", {
+      method: "POST",
       headers: {
+        "Content-Type": "application/json",
         Authorization: `Bearer ${KIE_API_KEY}`,
       },
+      body: JSON.stringify({ taskId }),
     });
 
     const data = await response.json();
