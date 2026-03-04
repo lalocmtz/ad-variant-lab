@@ -9,7 +9,7 @@ interface ResultsViewProps {
 
 const ResultsView = ({ results, onReset }: ResultsViewProps) => {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-1">
         <button
           onClick={onReset}
@@ -21,12 +21,9 @@ const ResultsView = ({ results, onReset }: ResultsViewProps) => {
         <h2 className="text-2xl font-bold text-foreground">
           Variantes Generadas ({results.variants.length})
         </h2>
-        <p className="text-sm text-muted-foreground">
-          {results.has_voice ? `Voz: ${results.content_type}` : "Modo silencioso — sin voiceover"}
-        </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-1">
+      <div className="grid gap-6 md:grid-cols-2">
         {results.variants.map((variant) => (
           <VariantCard key={variant.variant_id} variant={variant} />
         ))}
