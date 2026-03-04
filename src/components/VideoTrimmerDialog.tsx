@@ -196,6 +196,7 @@ const VideoTrimmerDialog = ({
       target,
       video: { codec: "avc", width: w, height: h },
       fastStart: "in-memory",
+      firstTimestampBehavior: "offset",
     });
 
     const encoder = new VideoEncoder({
