@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { Video, Image, LogOut, ExternalLink, Loader2 } from "lucide-react";
+import { Video, Image, LayoutDashboard, Palette, FolderOpen, Clock, Settings, Plus, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -19,95 +18,64 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const modules = [
-  { title: "Video Variants", url: "/", icon: Video },
-  { title: "Static Ads", url: "/static-ads", icon: Image },
+const createItems = [
+  { title: "Video Variants", url: "/create/video", icon: Video },
+  { title: "Static Variants", url: "/create/static", icon: Image },
 ];
 
-interface HistoryEntry {
-  id: string;
-  tiktok_url: string;
-  created_at: string;
-  variant_count: number;
-  results: any;
-}
-
-function HistorySidebar({ onLoad }: { onLoad: (r: any) => void }) {
-  const [entries, setEntries] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (!user) return;
-    const fetch = async () => {
-      const { data } = await supabase
-        .from("analysis_history")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(15);
-      if (data) setEntries(data as unknown as HistoryEntry[]);
-      setLoading(false);
-    };
-    fetch();
-  }, [user]);
-
-  if (loading) return <Loader2 className="mx-auto mt-4 h-4 w-4 animate-spin text-muted-foreground" />;
-  if (entries.length === 0) return <p className="px-2 text-xs text-muted-foreground">Sin historial</p>;
-
-  return (
-    <div className="space-y-1 px-1">
-      {entries.map((e) => {
-        const coverUrl = e.results?.variants?.[0]?.generated_image_url;
-        const date = new Date(e.created_at!);
-        return (
-          <button
-            key={e.id}
-            onClick={() => onLoad(e.results)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
-          >
-            {coverUrl ? (
-              <img src={coverUrl} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
-            ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-secondary">
-                <Video className="h-3 w-3 text-muted-foreground" />
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[11px] font-medium text-foreground">{e.variant_count} variantes</p>
-              <p className="text-[10px] text-muted-foreground">{date.toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}</p>
-            </div>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+const libraryItems = [
+  { title: "Brand System", url: "/library/brand", icon: Palette },
+  { title: "Assets", url: "/library/assets", icon: FolderOpen },
+  { title: "History", url: "/library/history", icon: Clock },
+];
 
 function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut } = useAuth();
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarContent className="flex flex-col h-full">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarContent className="flex flex-col h-full bg-sidebar">
+        {/* Logo */}
         <SidebarGroup>
-          <div className="flex items-center gap-2 px-2 py-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg gradient-primary">
-              <span className="text-sm font-bold text-primary-foreground">PV</span>
+          <div className="flex items-center gap-2.5 px-3 py-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground">
+              <span className="text-xs font-bold text-background">TC</span>
             </div>
             {!collapsed && (
-              <span className="text-sm font-semibold text-foreground truncate">Perfect Variant</span>
+              <span className="text-sm font-semibold text-foreground tracking-tight">Tryholo Copilot</span>
             )}
           </div>
-          <SidebarGroupLabel>Módulos</SidebarGroupLabel>
+        </SidebarGroup>
+
+        {/* Dashboard */}
+        <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {modules.map((item) => (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.pathname === "/dashboard"}>
+                  <NavLink to="/dashboard" end className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-foreground font-medium">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    {!collapsed && <span>Dashboard</span>}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Create */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-section-label px-3">Create</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {createItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location.pathname === item.url}>
-                    <NavLink to={item.url} end className="hover:bg-muted/50" activeClassName="bg-muted text-primary font-medium">
+                    <NavLink to={item.url} end className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-foreground font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -118,30 +86,49 @@ function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {!collapsed && location.pathname === "/" && (
-          <SidebarGroup className="flex-1 overflow-auto">
-            <SidebarGroupLabel>Historial</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <HistorySidebar onLoad={() => {
-                // Will be handled via event
-                window.dispatchEvent(new CustomEvent("load-history", { detail: arguments[0] }));
-              }} />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        {/* Library */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-section-label px-3">Library</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {libraryItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location.pathname === item.url}>
+                    <NavLink to={item.url} end className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-foreground font-medium">
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        <div className="mt-auto border-t border-border p-2">
-          {!collapsed && user && (
-            <div className="mb-2 truncate px-2 text-[11px] text-muted-foreground">{user.email}</div>
-          )}
+        {/* Bottom section */}
+        <div className="mt-auto border-t border-sidebar-border p-2 space-y-1">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={location.pathname === "/settings"}>
+                <NavLink to="/settings" end className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-foreground font-medium">
+                  <Settings className="mr-2 h-4 w-4" />
+                  {!collapsed && <span>Settings</span>}
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton onClick={signOut} className="text-muted-foreground hover:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
-                {!collapsed && <span>Cerrar sesión</span>}
+                {!collapsed && <span>Log out</span>}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
+          {!collapsed && (
+            <Button onClick={() => navigate("/dashboard")} className="w-full gradient-cta text-white border-0 mt-2" size="sm">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New Project
+            </Button>
+          )}
         </div>
       </SidebarContent>
     </Sidebar>
@@ -151,10 +138,10 @@ function AppSidebar() {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-10 flex items-center border-b border-border/50 px-4">
+          <header className="h-12 flex items-center border-b border-border/50 px-4 bg-card/50">
             <SidebarTrigger />
           </header>
           <main className="flex-1 overflow-auto">
