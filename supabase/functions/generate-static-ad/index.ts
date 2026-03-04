@@ -8,8 +8,14 @@ const corsHeaders = {
 async function urlToBase64DataUri(url: string): Promise<string> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
-  const buffer = await res.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const buffer = new Uint8Array(await res.arrayBuffer());
+  // Convert in chunks to avoid stack overflow
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < buffer.length; i += chunkSize) {
+    binary += String.fromCharCode(...buffer.subarray(i, i + chunkSize));
+  }
+  const base64 = btoa(binary);
   const contentType = res.headers.get("content-type") || "image/png";
   return `data:${contentType};base64,${base64}`;
 }
