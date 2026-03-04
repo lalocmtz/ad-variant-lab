@@ -75,7 +75,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry, video_url } = await req.json();
+    const { prompt, scene_geometry } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -83,16 +83,8 @@ serve(async (req) => {
 
     const fullPrompt = buildStrictPrompt(prompt, scene_geometry);
 
-    // Build message content — include video frame as visual reference if available
-    const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
-      { type: "text", text: fullPrompt },
-    ];
-
-    // Pass the original video URL as visual reference so the model can SEE the composition to clone
-    if (video_url) {
-      content.push({ type: "image_url", image_url: { url: video_url } });
-    }
-
+    // Note: video URLs (.mp4) cannot be passed as image_url — only PNG/JPEG/WebP/GIF supported.
+    // The prompt contains all scene geometry data extracted by Gemini from the video analysis step.
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -102,7 +94,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         messages: [
-          { role: "user", content },
+          { role: "user", content: fullPrompt },
         ],
         modalities: ["image", "text"],
       }),
