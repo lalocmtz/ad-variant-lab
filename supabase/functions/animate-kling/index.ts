@@ -16,7 +16,6 @@ async function uploadBase64ToStorage(base64DataUrl: string): Promise<string> {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // Extract mime type and base64 data
   const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
   if (!match) throw new Error("Invalid base64 data URL format");
 
@@ -25,7 +24,6 @@ async function uploadBase64ToStorage(base64DataUrl: string): Promise<string> {
   const ext = mimeType.split("/")[1] || "png";
   const fileName = `kling-input-${crypto.randomUUID()}.${ext}`;
 
-  // Decode base64 to Uint8Array
   const binaryString = atob(base64Data);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
@@ -45,6 +43,13 @@ async function uploadBase64ToStorage(base64DataUrl: string): Promise<string> {
   return publicData.publicUrl;
 }
 
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -54,26 +59,27 @@ serve(async (req) => {
     let { image_url, video_url, video_duration } = await req.json();
 
     if (!image_url || !video_url) {
-      return new Response(
-        JSON.stringify({ error: "image_url and video_url are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "image_url and video_url are required" }, 400);
     }
 
-    // Validate video duration (Kling accepts 3-30 seconds)
+    // Validate video duration
     if (video_duration && video_duration > 30) {
-      return new Response(
-        JSON.stringify({ error: "El video excede 30 segundos. Kling solo acepta videos de 3 a 30 segundos." }),
-        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({
+        error: "El video excede 30 segundos. Kling solo acepta videos de 3 a 30 segundos.",
+      }, 422);
+    }
+
+    // Validate video format (KIE rejects webm)
+    const videoExt = video_url.split("?")[0].split(".").pop()?.toLowerCase();
+    if (videoExt === "webm") {
+      return jsonResponse({
+        error: "Formato de video no soportado (.webm). Kling requiere formato MP4.",
+      }, 422);
     }
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "KIE_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "KIE_API_KEY not configured" }, 500);
     }
 
     // Convert base64 data URL to public HTTP URL
@@ -127,22 +133,18 @@ Do not add logos or new text overlays.`,
     const data = await response.json();
     console.log("KIE AI response:", JSON.stringify(data));
 
-    if (!response.ok) {
-      return new Response(
-        JSON.stringify({ error: data.message || "KIE AI request failed", details: data }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Check both HTTP status AND semantic response code
+    if (!response.ok || (data.code && data.code !== 200)) {
+      const errorMsg = data.msg || data.message || "KIE AI request failed";
+      console.error("KIE AI error:", errorMsg);
+      return jsonResponse({ error: errorMsg, details: data }, 422);
     }
 
-    return new Response(
-      JSON.stringify({ taskId: data.data?.taskId || data.taskId || data.data?.task_id }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      taskId: data.data?.taskId || data.taskId || data.data?.task_id,
+    });
   } catch (error) {
     console.error("animate-kling error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: error.message }, 500);
   }
 });

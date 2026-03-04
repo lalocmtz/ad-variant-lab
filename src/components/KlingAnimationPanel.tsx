@@ -117,10 +117,22 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
         });
 
         if (error || !data?.taskId) {
+          // Parse error from edge function response body
+          let errorMsg = "Error enviando tarea";
+          if (data?.error) {
+            errorMsg = data.error;
+          } else if (error?.message) {
+            try {
+              const parsed = JSON.parse(error.message);
+              errorMsg = parsed.error || error.message;
+            } catch {
+              errorMsg = error.message;
+            }
+          }
           setTasks((prev) =>
             prev.map((t) =>
               t.variantIndex === i
-                ? { ...t, status: "failed", error: data?.error || error?.message || "Error enviando tarea" }
+                ? { ...t, status: "failed", error: errorMsg }
                 : t
             )
           );
