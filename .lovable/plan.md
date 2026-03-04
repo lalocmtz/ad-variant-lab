@@ -1,56 +1,83 @@
 
 
-## Diagnóstico: 3 Problemas de Raíz
+## Plan: Integrar ElevenLabs TTS + Infinitalk Video Animation
 
-Después de inspeccionar todo el flujo (frontend, edge functions, logs, y network requests), encontré **tres fallos críticos** que explican exactamente lo que ves:
+### Resumen
 
-### 1. La imagen del producto que subes SE IGNORA COMPLETAMENTE
-El formulario (`InputStep.tsx`) recoge el `File` del producto y lo pasa a `Index.tsx`, pero `Index.tsx` **nunca lo sube a storage ni lo convierte a base64**. La imagen se descarta silenciosamente — nunca llega a ninguna edge function.
+Convertir el flujo actual (imagen estática + prompt de Kling) en un pipeline completo que entrega **videos animados con voz**. El sistema generará audio con ElevenLabs basado en el guion, luego animará la imagen con Infinitalk (kie.ai) usando ese audio.
 
-### 2. Gemini NO ve el video — solo lee el título
-La función `analyze-video` recibe el `video_url` pero **solo lo menciona como texto** en el prompt. Gemini nunca recibe contenido visual. Está inventando la descripción del producto basándose únicamente en el título ("300 cápsulas de aceite de orégano") — por eso describe "botella blanca de VivoNu" cuando el producto real es una bolsa verde.
+### Secrets Necesarios
 
-### 3. La generación de imagen no tiene referencia visual
-`generate-variant-image` genera puramente de texto. No recibe ni la imagen del producto ni un frame del video. El modelo inventa un packaging genérico.
+Antes de implementar, necesito que configures dos API keys:
 
-**Dato clave encontrado**: La API de RapidAPI ya devuelve campos `cover` y `origin_cover` (imágenes JPEG del video) que nunca se extraen. Estos son frames reales del video que SÍ se pueden pasar como `image_url` a Gemini y al modelo de imagen.
+1. **ELEVENLABS_API_KEY** -- de [elevenlabs.io/app/settings](https://elevenlabs.io)
+2. **KIE_API_KEY** -- de [kie.ai/api-key](https://kie.ai/api-key) (Infinitalk)
 
----
+### Arquitectura del Pipeline Extendido
 
-## Plan de Corrección (de raíz)
+```text
+Flujo actual (no se toca):
+  TikTok URL → download-tiktok → preview → analyze-video → generate-variant-image
+                                                                     ↓
+Nuevo flujo (se agrega):                                       imagen generada
+                                                                     ↓
+  analyze-video detecta has_voice + content_type ──→ selección de voz ElevenLabs
+                                                                     ↓
+  Edge: generate-voiceover ──→ script.hook+body+cta → ElevenLabs TTS → audio_url
+                                                                     ↓
+  Edge: animate-variant ──→ Infinitalk from-audio (imagen + audio + prompt) → taskId
+                                                                     ↓
+  Edge: check-animation-task ──→ polling taskId → video_url final
+                                                                     ↓
+  Frontend: ResultsView muestra video player por variante
+```
 
-### Paso 1: `download-tiktok` — Extraer cover del video
-- Extraer `data.cover` y `data.origin_cover` de la respuesta de RapidAPI (son URLs de imagen JPEG)
-- Devolverlos como `cover_url` en la respuesta junto con `video_url`
-- Este cover es el "hook frame" real del video
+### Nuevos Edge Functions (3)
 
-### Paso 2: Frontend `Index.tsx` — Subir imagen de producto a storage
-- Antes de llamar a `analyze-video`, subir `formData.productImage` al bucket `videos` como imagen (JPEG/PNG)
-- Obtener la URL pública
-- Pasar `product_image_url` y `cover_url` a las funciones de análisis y generación
-- Hacer obligatoria la imagen del producto: bloquear el botón si no hay imagen
-
-### Paso 3: `InputStep.tsx` — Hacer obligatoria la imagen del producto
-- Cambiar validación: `isValid` requiere `productImage !== null`
-- Actualizar texto para indicar que es obligatorio
-
-### Paso 4: `analyze-video` — Gemini VE el frame del video
-- Recibir `cover_url` y `product_image_url`
-- Enviar ambas como contenido multimodal (`image_url` type) — son JPEGs, formato soportado
-- Gemini ahora puede VER el producto real y la escena real para describir geometría, pose, y producto con precisión
-
-### Paso 5: `generate-variant-image` — Imagen generada CON referencias visuales
-- Recibir `product_image_url` (obligatorio) y `cover_url` como imágenes de referencia
-- Pasar ambas al modelo de imagen como `image_url` en el contenido multimodal
-- El prompt de reconstrucción ahora tiene las dos referencias obligatorias para bloquear packaging y composición
-
-### Archivos a modificar
-
-| Archivo | Cambio |
+| Function | Responsabilidad |
 |---|---|
-| `supabase/functions/download-tiktok/index.ts` | Extraer y devolver `cover_url` de RapidAPI |
-| `src/components/InputStep.tsx` | Hacer obligatoria la imagen del producto |
-| `src/pages/Index.tsx` | Subir imagen del producto a storage, propagar `cover_url` y `product_image_url` |
-| `supabase/functions/analyze-video/index.ts` | Recibir y pasar imágenes como contenido multimodal a Gemini |
-| `supabase/functions/generate-variant-image/index.ts` | Recibir y pasar imágenes de referencia al modelo de generación |
+| `generate-voiceover` | Recibe script (hook+body+cta), selecciona voz ElevenLabs según content_type/has_voice, genera audio MP3, lo sube a storage, devuelve URL pública |
+| `animate-variant` | Envía imagen + audio + prompt a Infinitalk `infinitalk/from-audio`, devuelve taskId |
+| `check-animation-task` | Consulta status del task en kie.ai, devuelve video_url cuando esté listo |
+
+### Lógica de Selección de Voz
+
+Basado en `has_voice` y `content_type` del análisis:
+- `has_voice: false` → modo silent, NO se genera voiceover, solo texto en pantalla. Infinitalk recibe audio silencioso o se salta
+- `HUMAN_TALKING` + `has_voice: true` → voz conversacional (ElevenLabs voice: Sarah/Laura para mujer, Roger/Brian para hombre)
+- `HANDS_DEMO` → voz explicativa neutra
+- El analyze-video ya detecta `has_voice` -- agregaremos `suggested_voice_gender` al schema para que Gemini sugiera género de voz basado en el actor observado
+
+### Cambios en Frontend
+
+1. **ResultsView / VariantCard redesign para desktop**:
+   - Layout horizontal: imagen pequeña (thumbnail) + sección de guion + video player
+   - Reemplazar la imagen 9:16 gigante por un thumbnail compacto
+   - Agregar video player para el video animado final
+   - Mostrar estado de generación (generando audio → animando → listo)
+
+2. **Pipeline extendido en Index.tsx**:
+   - Después de generar imágenes, ejecutar secuencialmente: voiceover → animate → poll
+   - Nuevos pasos en ProcessingPipeline: "Generando voz", "Animando video", "Finalizando"
+
+3. **VariantResult type update**:
+   - Agregar `audio_url`, `animation_task_id`, `video_url`, `suggested_voice_gender`
+
+### Archivos a Crear/Modificar
+
+| Archivo | Acción |
+|---|---|
+| `supabase/functions/generate-voiceover/index.ts` | Crear -- ElevenLabs TTS |
+| `supabase/functions/animate-variant/index.ts` | Crear -- Infinitalk from-audio |
+| `supabase/functions/check-animation-task/index.ts` | Crear -- Poll task status |
+| `supabase/functions/analyze-video/index.ts` | Modificar -- agregar `suggested_voice_gender` al schema |
+| `supabase/config.toml` | Agregar 3 nuevas functions |
+| `src/pages/Index.tsx` | Modificar -- extender pipeline con voiceover + animate + poll |
+| `src/components/VariantCard.tsx` | Rediseñar -- layout horizontal, video player, estados |
+| `src/components/ResultsView.tsx` | Modificar -- layout desktop optimizado |
+| `src/components/ProcessingPipeline.tsx` | Modificar -- agregar pasos nuevos |
+
+### Paso Inmediato
+
+Necesito que me proporciones los dos API keys antes de proceder con la implementación.
 
