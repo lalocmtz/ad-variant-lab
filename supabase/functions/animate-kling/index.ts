@@ -56,25 +56,16 @@ serve(async (req) => {
   }
 
   try {
-    let { image_url, video_url, video_duration } = await req.json();
+    let { image_url, video_url, video_duration, video_mode, motion_prompt } = await req.json();
 
-    if (!image_url || !video_url) {
-      return jsonResponse({ error: "image_url and video_url are required" }, 400);
+    const isNoAvatar = video_mode === "no_avatar";
+
+    // Validate required fields based on mode
+    if (!image_url) {
+      return jsonResponse({ error: "image_url is required" }, 400);
     }
-
-    // Validate video duration
-    if (video_duration && video_duration > 30) {
-      return jsonResponse({
-        error: "El video excede 30 segundos. Kling solo acepta videos de 3 a 30 segundos.",
-      }, 422);
-    }
-
-    // Validate video format (KIE rejects webm)
-    const videoExt = video_url.split("?")[0].split(".").pop()?.toLowerCase();
-    if (videoExt === "webm") {
-      return jsonResponse({
-        error: "Formato de video no soportado (.webm). Kling requiere formato MP4.",
-      }, 422);
+    if (!isNoAvatar && !video_url) {
+      return jsonResponse({ error: "video_url is required for avatar mode" }, 400);
     }
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
@@ -89,10 +80,43 @@ serve(async (req) => {
       console.log("Uploaded image, public URL:", image_url);
     }
 
-    const payload = {
-      model: "kling-2.6/motion-control",
-      input: {
-        prompt: `VISUAL REFERENCE: Strictly use the generated image for the subject's appearance, identity, and background styling.
+    let payload: Record<string, unknown>;
+
+    if (isNoAvatar) {
+      // ── Sora2 Image-to-Video (no_avatar mode) ──
+      const prompt = motion_prompt || "Smooth, cinematic product showcase with subtle camera movement. Natural lighting, photorealistic. No people, no faces.";
+
+      payload = {
+        model: "sora-2-image-to-video",
+        input: {
+          prompt,
+          image_urls: [image_url],
+          aspect_ratio: "portrait",
+          n_frames: "10",
+          remove_watermark: true,
+        },
+      };
+
+      console.log("Sending Sora2 task to KIE AI:", JSON.stringify({ image_url, mode: "no_avatar" }));
+    } else {
+      // ── Kling Motion Control (avatar mode) ──
+      if (video_duration && video_duration > 30) {
+        return jsonResponse({
+          error: "El video excede 30 segundos. Kling solo acepta videos de 3 a 30 segundos.",
+        }, 422);
+      }
+
+      const videoExt = video_url.split("?")[0].split(".").pop()?.toLowerCase();
+      if (videoExt === "webm") {
+        return jsonResponse({
+          error: "Formato de video no soportado (.webm). Kling requiere formato MP4.",
+        }, 422);
+      }
+
+      payload = {
+        model: "kling-2.6/motion-control",
+        input: {
+          prompt: `VISUAL REFERENCE: Strictly use the generated image for the subject's appearance, identity, and background styling.
 
 MOTION REFERENCE: Strictly use the original TikTok video for all movement, pacing, and camera dynamics.
 
@@ -116,14 +140,15 @@ PRESERVE FROM IMAGE:
 
 STYLE:
 Raw, unretouched UGC TikTok style. Natural lighting. DO NOT add logos, text overlays, or artificial studio effects.`,
-        input_urls: [image_url],
-        video_urls: [video_url],
-        character_orientation: "video",
-        mode: "720p",
-      },
-    };
+          input_urls: [image_url],
+          video_urls: [video_url],
+          character_orientation: "video",
+          mode: "720p",
+        },
+      };
 
-    console.log("Sending task to KIE AI:", JSON.stringify({ image_url, video_url }));
+      console.log("Sending Kling task to KIE AI:", JSON.stringify({ image_url, video_url }));
+    }
 
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",
@@ -137,7 +162,6 @@ Raw, unretouched UGC TikTok style. Natural lighting. DO NOT add logos, text over
     const data = await response.json();
     console.log("KIE AI response:", JSON.stringify(data));
 
-    // Check both HTTP status AND semantic response code
     if (!response.ok || (data.code && data.code !== 200)) {
       const errorMsg = data.msg || data.message || "KIE AI request failed";
       console.error("KIE AI error:", errorMsg);
