@@ -5,37 +5,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Unique physical descriptors per variant to force visual diversity
-const VARIANT_DESCRIPTORS = [
-  {
-    face: "slightly rounder face shape, thicker and bushier eyebrows, wider nose bridge, fuller cheeks",
-    hair: "wavy textured hair, slightly longer on top",
-    distinguishing: "a small beauty mark near the left cheek",
-  },
-  {
-    face: "angular jawline with a defined chin, thinner arched eyebrows, narrower almond-shaped eyes, thinner lips",
-    hair: "straight sleek hair, closely cropped sides",
-    distinguishing: "slightly more prominent forehead, subtle dimples",
-  },
-  {
-    face: "softer oval face shape, fuller and more defined lips, higher cheekbones, rounder eyes",
-    hair: "curly voluminous hair, medium length",
-    distinguishing: "light freckles across the nose bridge",
-  },
-  {
-    face: "square face shape, heavy-set brow ridge, broad flat nose, wide-set eyes",
-    hair: "short tightly coiled hair, fade on sides",
-    distinguishing: "strong jawline with a cleft chin",
-  },
-  {
-    face: "heart-shaped face, delicate pointed chin, large expressive eyes, small upturned nose",
-    hair: "long flowing straight hair, side-parted",
-    distinguishing: "high arched eyebrows, subtle laugh lines",
-  },
+// Style variation descriptors (non-human, avoids safety filters)
+const VARIANT_STYLES = [
+  { setting: "warm golden hour lighting, wooden table surface", props: "a small potted succulent nearby" },
+  { setting: "cool blue-toned morning light, marble countertop", props: "a glass of water with lemon nearby" },
+  { setting: "soft pink sunset glow, clean white desk", props: "a folded towel nearby" },
+  { setting: "bright natural daylight, light grey fabric background", props: "a small candle nearby" },
+  { setting: "warm indoor lamplight, dark wood surface", props: "a ceramic cup nearby" },
 ];
 
-function getVariantDescriptor(variantIndex: number) {
-  return VARIANT_DESCRIPTORS[variantIndex % VARIANT_DESCRIPTORS.length];
+function getVariantStyle(variantIndex: number) {
+  return VARIANT_STYLES[variantIndex % VARIANT_STYLES.length];
 }
 
 function buildPrompt(
