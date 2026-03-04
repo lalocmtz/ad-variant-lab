@@ -44,6 +44,7 @@ function formatElapsed(ms: number): string {
 
 const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimationPanelProps) => {
   const isTooLong = videoDuration !== undefined && videoDuration > 30;
+  const canAnimateDirectly = !isTooLong;
   const [count, setCount] = useState("1");
   const [tasks, setTasks] = useState<AnimationTask[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -301,7 +302,17 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration }: KlingAnimati
         </div>
       )}
 
-      {(!isTooLong || trimmedVideoUrl) && tasks.length === 0 && (
+      {canAnimateDirectly && !trimmedVideoUrl && (
+        <div className="flex items-center gap-3 rounded-lg border border-border/30 bg-muted/30 p-4">
+          <Scissors className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground flex-1">Video de {Math.round(videoDuration || 0)}s — listo para animar. También puedes recortarlo si lo deseas.</p>
+          <Button variant="ghost" size="sm" onClick={() => setShowTrimmer(true)} className="shrink-0 text-xs">
+            Recortar
+          </Button>
+        </div>
+      )}
+
+      {(canAnimateDirectly || trimmedVideoUrl) && tasks.length === 0 && (
         <div className="flex items-end gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">¿Cuántos videos generar?</label>
