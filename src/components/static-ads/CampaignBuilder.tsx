@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Download, Loader2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Brand } from "@/pages/StaticAds";
 import type { CustomerProfile } from "./ProfilesPanel";
 
@@ -16,6 +17,7 @@ interface Asset { id: string; name: string; image_url: string; category: string;
 interface CampaignAd { id: string; profile_id: string | null; prompt: string | null; image_url: string | null; status: string; }
 
 export default function CampaignBuilder({ brand }: { brand: Brand }) {
+  const { user } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [profiles, setProfiles] = useState<CustomerProfile[]>([]);
@@ -50,9 +52,7 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
     });
   };
 
-  const selectAll = () => {
-    setSelectedProfiles(new Set(profiles.map(p => p.id)));
-  };
+  const selectAll = () => setSelectedProfiles(new Set(profiles.map(p => p.id)));
 
   const generate = async () => {
     if (!selectedTemplate || !selectedAsset || selectedProfiles.size === 0) {
@@ -69,7 +69,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
     const totalAds = targetProfiles.length * count;
     setProgress({ current: 0, total: totalAds });
 
-    // Create campaign
     const { data: campaign, error: campErr } = await supabase.from("campaigns").insert({
       brand_id: brand.id,
       name: `Campaign ${new Date().toLocaleDateString()}`,
@@ -78,6 +77,7 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
       cta,
       aspect_ratio: aspectRatio,
       status: "generating",
+      user_id: user?.id,
     }).select("id").single();
 
     if (campErr || !campaign) {
@@ -118,13 +118,13 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
             status: error || data?.error ? "failed" : "completed",
           };
 
-          // Save to DB
           await supabase.from("campaign_ads").insert({
             campaign_id: campaign.id,
             profile_id: profile.id,
             prompt: ad.prompt,
             image_url: ad.image_url,
             status: ad.status,
+            user_id: user?.id,
           });
 
           ads.push(ad);
@@ -144,7 +144,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Template selection */}
         <Card>
           <CardHeader><CardTitle className="text-sm">1. Template de Referencia</CardTitle></CardHeader>
           <CardContent>
@@ -160,7 +159,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
           </CardContent>
         </Card>
 
-        {/* Asset selection */}
         <Card>
           <CardHeader><CardTitle className="text-sm">2. Producto (Asset)</CardTitle></CardHeader>
           <CardContent>
@@ -176,7 +174,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
           </CardContent>
         </Card>
 
-        {/* Config */}
         <Card>
           <CardHeader><CardTitle className="text-sm">3. Configuración</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -210,7 +207,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
         </Card>
       </div>
 
-      {/* Profile selection */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm">4. Perfiles Objetivo</CardTitle>
@@ -230,7 +226,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
         </CardContent>
       </Card>
 
-      {/* Generate button */}
       <div className="flex items-center gap-4">
         <Button onClick={generate} disabled={generating} size="lg">
           {generating ? (
@@ -241,7 +236,6 @@ export default function CampaignBuilder({ brand }: { brand: Brand }) {
         </Button>
       </div>
 
-      {/* Generated ads gallery */}
       {generatedAds.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-foreground">Ads Generados</h3>

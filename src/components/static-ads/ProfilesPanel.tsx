@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Trash2, Users, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Brand } from "@/pages/StaticAds";
 
 export interface CustomerProfile {
@@ -20,6 +18,7 @@ export interface CustomerProfile {
 }
 
 export default function ProfilesPanel({ brand }: { brand: Brand }) {
+  const { user } = useAuth();
   const [profiles, setProfiles] = useState<CustomerProfile[]>([]);
   const [generating, setGenerating] = useState(false);
 
@@ -39,6 +38,7 @@ export default function ProfilesPanel({ brand }: { brand: Brand }) {
           brand_name: brand.name,
           brand_description: brand.description,
           brand_intelligence: brand.brand_intelligence,
+          user_id: user?.id,
         },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
