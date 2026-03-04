@@ -31,38 +31,34 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
 
   return (
     <div className="mx-auto max-w-xl space-y-10">
-      {/* Title */}
       <div className="space-y-3 text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground">
-          Motion Prompt Generator
+          Generador de Variantes
         </h2>
         <p className="text-sm text-muted-foreground">
-          Paste a winning TikTok Shop ad. Get controlled variants ready for Kling.
+          Pega el link de un anuncio de TikTok Shop. Recibe variantes con imagen y prompt para Kling.
         </p>
       </div>
 
-      {/* Form */}
       <div className="space-y-6">
-        {/* TikTok URL */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Link className="h-4 w-4 text-primary" />
-            TikTok Video URL
+            URL del Video de TikTok
           </Label>
           <Input
-            placeholder="Paste TikTok Shop URL"
+            placeholder="Pega el link de TikTok Shop aquí"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="h-12 border-border bg-card font-mono text-sm text-foreground placeholder:text-muted-foreground focus:ring-primary"
           />
         </div>
 
-        {/* Product Image */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Image className="h-4 w-4 text-primary" />
-            Upload Product Image
-            <span className="text-xs text-muted-foreground">(Optional but recommended)</span>
+            Imagen del Producto
+            <span className="text-xs text-muted-foreground">(Opcional pero recomendado)</span>
           </Label>
           <input
             ref={productInputRef}
@@ -81,19 +77,18 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
               <div className="flex flex-col items-center gap-1">
                 <Upload className="h-5 w-5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  Upload product image to preserve packaging in variants
+                  Sube la imagen del producto para preservarlo en las variantes
                 </span>
               </div>
             )}
           </button>
         </div>
 
-        {/* Reference Actor */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
             <User className="h-4 w-4 text-primary" />
-            Upload Reference Actor
-            <span className="text-xs text-muted-foreground">(Optional)</span>
+            Actor de Referencia
+            <span className="text-xs text-muted-foreground">(Opcional)</span>
           </Label>
           <input
             ref={actorInputRef}
@@ -112,17 +107,16 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
               <div className="flex flex-col items-center gap-1">
                 <Upload className="h-5 w-5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  Guide the type of person in generated variants
+                  Guía el tipo de persona en las variantes generadas
                 </span>
               </div>
             )}
           </button>
         </div>
 
-        {/* Variant Count */}
         <div className="space-y-3">
           <Label className="flex items-center justify-between text-sm font-medium text-foreground">
-            <span>Number of Variants</span>
+            <span>Número de Variantes</span>
             <span className="font-mono text-primary">{variantCount}</span>
           </Label>
           <Slider
@@ -139,7 +133,6 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
           </div>
         </div>
 
-        {/* Submit */}
         <Button
           onClick={handleSubmit}
           disabled={!isValid}
@@ -147,7 +140,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
           size="lg"
         >
           <Sparkles className="h-4 w-4" />
-          Analyze & Generate Variants
+          Analizar y Generar Variantes
         </Button>
       </div>
     </div>
