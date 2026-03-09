@@ -5,7 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Style variation descriptors for product-only (no_avatar) mode
 const VARIANT_STYLES = [
   { setting: "warm golden hour lighting, wooden table surface", props: "a small potted succulent nearby" },
   { setting: "cool blue-toned morning light, marble countertop", props: "a glass of water with lemon nearby" },
@@ -79,6 +78,7 @@ function buildPromptAvatar(
   negativePrompt?: string,
   identityReplacementRules?: string[],
   overlayCleanupRequired?: boolean,
+  isRegeneration?: boolean,
 ): string {
   const idx = variantIndex ?? 0;
   const total = totalVariants ?? 3;
@@ -110,24 +110,30 @@ ACTOR IDENTITY FOR THIS VARIANT (MUST BE A COMPLETELY DIFFERENT PERSON):
     : `\nIDENTITY REPLACEMENT RULES:
 - Generate a completely new face identity
 - Do NOT preserve original facial structure
-- Different jawline than original
-- Different eye shape than original
-- Different eyebrow structure than original
-- Different hairstyle than original
-- Different facial proportions than original
+- Different jawline, eye shape, eyebrow structure, hairstyle, facial proportions
 - The difference must be immediately noticeable at first glance`;
 
   const cleanupBlock = overlayCleanupRequired
-    ? `\n-------------------------------------
-STEP 1 — FRAME CLEANUP (REQUIRED)
+    ? `\nSTEP 1 — FRAME CLEANUP (REQUIRED)
 The reference frame contains social media overlays. You MUST:
-- Remove all comment bubbles, usernames, timestamps
-- Remove all engagement icons, watermark logos
-- Remove all colored UI frames and captions
-- Reconstruct the raw underlying scene as it would appear without any social media UI
-The result should look like the raw camera recording before upload.
--------------------------------------\n`
+- Remove all comment bubbles, usernames, timestamps, engagement icons, watermarks, UI frames, captions
+- Reconstruct the raw underlying scene\n`
     : "";
+
+  const regenBlock = isRegeneration
+    ? `\nREGENERATION — STRONGER IDENTITY SWAP:
+- Previous generation was too similar to original
+- Generate a COMPLETELY NEW face identity from scratch
+- Increase diversity: different face shape, jawline, eye structure
+- Slightly loosen scene exactness to prioritize actor uniqueness
+- Product lock remains ABSOLUTE\n`
+    : "";
+
+  const marketPlausibility = `
+MARKET PLAUSIBILITY RULE:
+Keep the same broad market context and creator-market fit as the original ad.
+Do not arbitrarily shift the actor into an unrelated demographic presentation or creator vibe.
+Preserve audience plausibility, not exact identity.`;
 
   const customNegative = negativePrompt || "No same actor identity, no nearly identical faces, no sibling-like similarity, no only wardrobe changes, no unrealistic product, no studio lighting, no cinematic commercial style, no stock photo appearance.";
 
@@ -135,8 +141,9 @@ The result should look like the raw camera recording before upload.
 PRODUCT REFERENCE: See the attached product image below.
 
 This is VARIANT ${idx + 1} of ${total}.
-${cleanupBlock}
-MULTI-STAGE IMAGE GENERATION PIPELINE:
+${cleanupBlock}${regenBlock}
+GOAL: Generate a realistic UGC-style vertical image that preserves the winning ad mechanics but uses a clearly different actor.
+${marketPlausibility}
 
 STAGE A — FRAME CLEANUP
 Use the reference frame as structural guidance ONLY.
@@ -144,54 +151,52 @@ Remove any social media overlays, watermarks, captions, or UI elements.
 Reconstruct the raw underlying scene.
 
 STAGE B — SCENE RECONSTRUCTION
-Recreate the environment with high realism.
-Preserve:
-- Camera angle and approximate framing
-- Camera distance and lighting direction
-- Gesture structure and action being performed
-Allow small variations in:
-- Furniture layout and wall tone
-- Background details and decoration
+Preserve: camera angle, approximate framing, camera distance, lighting direction, gesture structure, action being performed.
+Allow small variations in: furniture layout, wall tone, background details, decoration.
 The scene should feel like the same TYPE of room but NOT an identical copy.
 ${geometryBlock}
 
 STAGE C — ACTOR IDENTITY REPLACEMENT (CRITICAL)
 Replace the original person with a COMPLETELY DIFFERENT individual.
 GENERATE A NEW FACE IDENTITY from scratch.
-The new actor must be CLEARLY different from the original — the difference must be obvious at first glance.
+The new actor must be CLEARLY different — the difference must be obvious at first glance.
 ${actorBlock}
 ${identityRulesBlock}
 
-PRODUCT RULES (ABSOLUTE TRUTH):
-- The product MUST match the PRODUCT REFERENCE image exactly.
-- Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
-- Product must be clearly visible, readable, and prominent.
-- The actor must hold the EXACT product from the reference.
+PRESERVE:
+- exact uploaded product (shape, color, label, proportions, packaging)
+- product interaction logic
+- same action being performed
+- same broad scene type
+- approximate framing and camera distance
+- natural handheld UGC realism
+- winning hook energy
+- same broad wardrobe logic if relevant
 
-WARDROBE & ACCESSORIES:
-- Preserve clothing category, color, and style from the winning mechanic
-- If accessories (watch, bracelet, lav mic) are part of the mechanic, preserve their logic
-- Do not let accessories become identity anchors
+CHANGE:
+- actor identity completely (face shape, jawline, eyebrows, eye shape, nose, lips, hairstyle, facial proportions)
 
-UGC REALISM (CRITICAL):
-- This MUST look like a real TikTok creator filming a product testimonial with a smartphone.
-- Natural indoor lighting, handheld phone camera perspective
-- Slightly imperfect framing, authentic creator posture
-- Natural skin texture with pores and imperfections
-- Casual environment, NOT a commercial, NOT a stock photo
+FORBIDDEN:
+- same face or similar face
+- sibling-like similarity
+- unrelated demographic drift
+- stock photo look, studio lighting, cinematic commercial look
+
+UGC REALISM: natural indoor lighting, handheld phone camera perspective, slightly imperfect framing, authentic creator posture, casual environment.
 
 PRIORITY ORDER:
-1. Exact product lock (packaging identical to reference)
-2. Winning mechanics preserved (framing, energy, intent, action)
-3. New actor identity (genuinely different person — HIGH distance)
-4. UGC realism (natural, smartphone-quality)
+1. Exact product lock
+2. Winning mechanics preserved
+3. New actor identity (HIGH distance)
+4. Market plausibility
+5. UGC realism
 
-OUTPUT: 9:16 vertical, hyper-realistic, full HD vertical resolution, maximum texture realism.
+OUTPUT: 9:16 vertical, hyper-realistic, full HD, maximum texture realism.
 
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: ${customNegative}, no social media overlays, no comment bubbles, no watermarks, no UI elements, no identical scene copy, no same facial features as original, no clone-like result.`;
+NEGATIVE: ${customNegative}, no social media overlays, no watermarks, no UI elements, no identical scene copy, no same facial features, no clone-like result, no unrelated demographic shift, no incorrect product.`;
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
@@ -266,12 +271,8 @@ serve(async (req) => {
     if (mode === "no_avatar") {
       fullPrompt = buildPromptNoAvatar(prompt, scene_geometry, variant_index, total_variants);
     } else {
-      let enhancedPrompt = prompt;
-      if (is_regeneration) {
-        enhancedPrompt = `${prompt}\n\nREGENERATION ATTEMPT — STRONGER IDENTITY SWAP REQUIRED:\n- The previous generation was too similar to the original actor\n- Generate a COMPLETELY NEW face identity — do NOT reuse any facial features from previous attempts\n- Increase diversity pressure: different face shape, different jawline, different eye structure\n- Slightly loosen scene exactness to prioritize actor uniqueness\n- Product lock remains ABSOLUTE`;
-      }
       fullPrompt = buildPromptAvatar(
-        enhancedPrompt,
+        prompt,
         scene_geometry,
         variant_index,
         total_variants,
@@ -279,10 +280,10 @@ serve(async (req) => {
         negative_prompt,
         identity_replacement_rules,
         overlay_cleanup_required,
+        is_regeneration,
       );
     }
 
-    // Convert external image URLs to base64 data URIs for reliable AI gateway access
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: "text", text: fullPrompt },
     ];
@@ -317,12 +318,9 @@ serve(async (req) => {
       hasCover: !!cover_url,
       hasProduct: !!product_image_url,
       hasActorDirection: !!actor_visual_direction,
-      hasIdentityRules: !!identity_replacement_rules,
-      overlayCleanup: !!overlay_cleanup_required,
       isRegeneration: !!is_regeneration,
     });
 
-    // Attempt generation with 1 automatic retry on empty response
     let imageUrl = await callImageGeneration(content, LOVABLE_API_KEY);
 
     if (!imageUrl) {

@@ -19,22 +19,6 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   pending: { label: "Generando...", cls: "bg-muted text-muted-foreground" },
 };
 
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast.success(`${label} copiado`);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <button onClick={copy} className="flex items-center gap-1 rounded-md border border-border/50 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-      {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}
-      {label}
-    </button>
-  );
-}
-
 function handleDownloadImage(url: string, variantId: string) {
   const a = document.createElement("a");
   a.href = url;
@@ -47,11 +31,19 @@ function handleDownloadImage(url: string, variantId: string) {
 }
 
 const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCardProps) => {
-  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const badge = STATUS_BADGES[variant.status] || STATUS_BADGES.ready;
-  const script = variant.script_variant;
-  const brief = variant.heygen_ready_brief;
   const isPending = variant.status === "pending";
+  const promptText = variant.prompt_package?.prompt_text || "";
+
+  const handleCopyPrompt = () => {
+    if (!promptText) return;
+    navigator.clipboard.writeText(promptText);
+    setCopied(true);
+    toast.success("Prompt copiado");
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card transition-all hover:border-primary/20">
@@ -80,7 +72,6 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
             {badge.label}
           </span>
         </div>
-        {/* Download button on image */}
         {variant.generated_image_url && !isPending && (
           <button
             onClick={() => handleDownloadImage(variant.generated_image_url, variant.variant_id)}
@@ -91,187 +82,107 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
         )}
       </div>
 
-      {/* Content */}
+      {/* Prompt block + actions */}
       <div className="space-y-3 p-4">
-        {/* Identity distance + archetype */}
-        <div className="flex items-center gap-2">
-          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary uppercase">
-            Distancia: {variant.identity_distance}
-          </span>
-          {variant.generation_attempt > 1 && (
-            <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-              Intento #{variant.generation_attempt}
-            </span>
-          )}
-        </div>
-
-        {/* 1. Who this variant is */}
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actor</p>
-          <p className="text-xs font-medium text-foreground">{variant.actor_archetype}</p>
-        </div>
-
-        {/* 2. How it should speak */}
-        {brief && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Performance</p>
-            <p className="text-[11px] text-foreground">{brief.delivery_style} · {brief.energy} · {brief.pace}</p>
-          </div>
-        )}
-
-        {/* 3. What it should say — Script */}
-        {script && (
+        {/* Universal prompt */}
+        {promptText && (
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Guión</p>
-            <div className="rounded-md bg-muted/50 p-2.5 space-y-1.5">
-              <div>
-                <span className="text-[9px] font-bold uppercase text-primary">Hook</span>
-                <p className="text-xs text-foreground">{script.hook}</p>
-              </div>
-              <div>
-                <span className="text-[9px] font-bold uppercase text-primary">Body</span>
-                <p className="text-xs text-foreground">{script.body}</p>
-              </div>
-              <div>
-                <span className="text-[9px] font-bold uppercase text-primary">CTA</span>
-                <p className="text-xs text-foreground">{script.cta}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              <span>{script.language}</span>
-              <span>·</span>
-              <span>{script.duration_target_seconds}s target</span>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Prompt universal para AIgen / Sora
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Copia y pega este bloque completo en tu generador. Ya incluye contexto, energía, delivery y guion variante.
+            </p>
+            <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2.5">
+              <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-foreground font-mono">
+                {promptText}
+              </pre>
             </div>
           </div>
         )}
 
-        {/* 4. Summary */}
-        <p className="text-[11px] text-muted-foreground italic">{variant.variant_summary}</p>
-
-        {/* Copy buttons */}
-        <div className="flex flex-wrap gap-1.5">
-          {script?.full_script && <CopyButton text={script.full_script} label="Guión" />}
-          {brief && (
-            <CopyButton
-              text={JSON.stringify(brief, null, 2)}
-              label="Brief HeyGen"
-            />
+        {/* Primary actions */}
+        <div className="flex gap-2">
+          {promptText && (
+            <Button variant="default" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleCopyPrompt}>
+              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? "Copiado" : "Copiar Prompt"}
+            </Button>
           )}
-          {variant.base_image_prompt_9x16 && (
-            <CopyButton text={variant.base_image_prompt_9x16} label="Image Prompt" />
+          {variant.generated_image_url && !isPending && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 text-[10px]"
+              onClick={() => handleDownloadImage(variant.generated_image_url, variant.variant_id)}
+            >
+              <Download className="h-3 w-3" />
+            </Button>
           )}
         </div>
 
-        {/* Expandable details */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-border/30 py-1 text-[10px] text-muted-foreground hover:bg-muted"
-        >
-          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          {expanded ? "Menos detalles" : "Más detalles"}
-        </button>
-
-        {expanded && (
-          <div className="space-y-3 text-[11px]">
-            {/* Image generation strategy */}
-            {variant.image_generation_strategy && variant.image_generation_strategy.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Pipeline de generación</p>
-                <div className="flex gap-1.5">
-                  {variant.image_generation_strategy.map((s, i) => (
-                    <span key={i} className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] text-primary capitalize">{s.replace(/_/g, " ")}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* On-screen text plan */}
-            {variant.on_screen_text_plan?.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Texto en pantalla</p>
-                {variant.on_screen_text_plan.map((t, i) => (
-                  <div key={i} className="flex gap-2">
-                    <span className="text-muted-foreground font-mono">{t.timestamp}</span>
-                    <span className="text-foreground">{t.text}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Shotlist */}
-            {variant.shotlist?.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Shotlist</p>
-                {variant.shotlist.map((s, i) => (
-                  <div key={i} className="flex gap-2">
-                    <span className="text-muted-foreground font-mono">Shot {s.shot} ({s.duration})</span>
-                    <span className="text-foreground">{s.description}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Actor visual direction */}
-            {variant.actor_visual_direction && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Dirección visual del actor</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {Object.entries(variant.actor_visual_direction).map(([k, v]) => (
-                    <div key={k}>
-                      <span className="text-muted-foreground">{k.replace(/_/g, " ")}: </span>
-                      <span className="text-foreground">{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Identity replacement rules */}
-            {variant.identity_replacement_rules && variant.identity_replacement_rules.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Reglas de reemplazo de identidad</p>
-                <ul className="list-disc list-inside space-y-0.5 text-foreground">
-                  {variant.identity_replacement_rules.map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {/* Similarity check */}
-            {variant.similarity_check_result && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Validación</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {Object.entries(variant.similarity_check_result).filter(([k]) => k !== "notes").map(([k, v]) => (
-                    <div key={k} className="flex gap-1">
-                      <span className="text-muted-foreground">{k.replace(/_/g, " ")}:</span>
-                      <span className={v === "pass" ? "text-green-600 font-medium" : "text-destructive font-medium"}>{v as string}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          {variant.status !== "approved" && variant.status !== "pending" && (
+        {/* Secondary actions */}
+        <div className="flex gap-2">
+          {variant.status !== "approved" && !isPending && (
             <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={onApprove}>
               <ThumbsUp className="h-3 w-3" /> Aprobar
             </Button>
           )}
-          {variant.status !== "rejected" && variant.status !== "pending" && (
+          {variant.status !== "rejected" && !isPending && (
             <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={onReject}>
               <ThumbsDown className="h-3 w-3" /> Rechazar
             </Button>
           )}
-          {variant.status !== "pending" && (
+          {!isPending && (
             <Button variant="outline" size="sm" className="gap-1 text-[10px]" onClick={onRegenerate}>
-              <RefreshCw className="h-3 w-3" /> Regenerar
+              <RefreshCw className="h-3 w-3" />
             </Button>
           )}
         </div>
+
+        {/* Collapsed technical details */}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-border/30 py-1 text-[10px] text-muted-foreground hover:bg-muted"
+        >
+          {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {showDetails ? "Ocultar detalles" : "Detalles técnicos (opcional)"}
+        </button>
+
+        {showDetails && (
+          <div className="space-y-2 text-[11px]">
+            <Detail label="Actor" value={variant.actor_archetype} />
+            <Detail label="Distancia" value={variant.identity_distance?.toUpperCase()} />
+            {variant.script_variant && (
+              <>
+                <Detail label="Hook" value={variant.script_variant.hook} />
+                <Detail label="Body" value={variant.script_variant.body} />
+                <Detail label="CTA" value={variant.script_variant.cta} />
+                <Detail label="Duración" value={`${variant.script_variant.duration_target_seconds}s`} />
+              </>
+            )}
+            {variant.heygen_ready_brief && (
+              <Detail label="Energía" value={`${variant.heygen_ready_brief.energy} · ${variant.heygen_ready_brief.pace} · ${variant.heygen_ready_brief.delivery_style}`} />
+            )}
+            {variant.generation_attempt > 1 && (
+              <Detail label="Intento" value={`#${variant.generation_attempt}`} />
+            )}
+            <Detail label="Resumen" value={variant.variant_summary} />
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+function Detail({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div>
+      <span className="text-muted-foreground">{label}: </span>
+      <span className="text-foreground">{value}</span>
+    </div>
+  );
+}
 
 export default VariantCard;
