@@ -137,10 +137,29 @@ serve(async (req) => {
       });
     }
 
+    // Kie AI may return error codes inside a 200 HTTP response
+    if (data.code && data.code !== 200) {
+      const kieErrorMap: Record<number, string> = {
+        401: "La autenticación con el proveedor de video falló.",
+        402: "No hay créditos suficientes para generar el video.",
+        422: "La solicitud de video fue rechazada por parámetros inválidos.",
+        429: "Se alcanzó el límite temporal de solicitudes. Intenta de nuevo.",
+        455: "El servicio de video está temporalmente en mantenimiento.",
+        500: "Error interno del proveedor de video.",
+        501: "La generación de video falló en el proveedor.",
+        505: "La función de generación de video está deshabilitada.",
+      };
+      const friendlyError = kieErrorMap[data.code] || `Error del proveedor de video (código ${data.code}): ${data.msg || "desconocido"}`;
+      console.error("Kie AI application error:", data.code, data.msg, JSON.stringify(data).substring(0, 500));
+      return new Response(JSON.stringify({ error: friendlyError, provider_code: data.code, provider_msg: data.msg }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const taskId = data.data?.taskId || data.taskId || data.data?.task_id || data.task_id;
     if (!taskId) {
-      console.error("No taskId in response:", JSON.stringify(data).substring(0, 500));
-      return new Response(JSON.stringify({ error: "El proveedor no devolvió un taskId válido." }), {
+      console.error("No taskId in response. Full response:", JSON.stringify(data).substring(0, 1000));
+      return new Response(JSON.stringify({ error: `El proveedor no devolvió un taskId válido. Respuesta: ${JSON.stringify(data).substring(0, 200)}` }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

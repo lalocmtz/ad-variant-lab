@@ -122,6 +122,25 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject, onVideoStateC
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const uploadBase64ToStorage = async (base64Url: string, variantId: string): Promise<string> => {
+    // If already a public URL, return as-is
+    if (!base64Url.startsWith("data:")) return base64Url;
+
+    const res = await fetch(base64Url);
+    const blob = await res.blob();
+    const ext = blob.type.includes("png") ? "png" : "jpg";
+    const fileName = `variant_${variantId}_${Date.now()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from("videos")
+      .upload(fileName, blob, { contentType: blob.type, upsert: true });
+
+    if (error) throw new Error(`Error subiendo imagen: ${error.message}`);
+
+    const { data: publicData } = supabase.storage.from("videos").getPublicUrl(fileName);
+    return publicData.publicUrl;
+  };
+
   const handleGenerateVideo = async () => {
     if (!variant.generated_image_url) {
       toast.error("La imagen de la variante es necesaria para generar video.");
@@ -137,10 +156,13 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject, onVideoStateC
     setVideoUrl(undefined);
 
     try {
+      // Upload base64 image to storage to get a public URL
+      const publicImageUrl = await uploadBase64ToStorage(variant.generated_image_url, variant.variant_id);
+
       const { data, error } = await supabase.functions.invoke("generate-video-sora", {
         body: {
           variantId: variant.variant_id,
-          imageUrl: variant.generated_image_url,
+          imageUrl: publicImageUrl,
           promptText,
           mode: "standard",
         },
