@@ -19,24 +19,99 @@ export interface SceneGeometry {
   lighting_direction: string;
 }
 
+export interface ActorVisualDirection {
+  gender_presentation: string;
+  approx_age_band: string;
+  face_shape: string;
+  hair_style: string;
+  hair_color: string;
+  skin_tone_range: string;
+  overall_vibe: string;
+  wardrobe: string;
+}
+
+export interface ScriptVariant {
+  language: string;
+  duration_target_seconds: number;
+  hook: string;
+  body: string;
+  cta: string;
+  full_script: string;
+}
+
+export interface HeygenReadyBrief {
+  avatar_instruction: string;
+  delivery_style: string;
+  pace: string;
+  energy: string;
+  facial_expression: string;
+  gesture_style: string;
+}
+
+export interface SimilarityCheckResult {
+  against_original: "pass" | "fail";
+  cross_variant_diversity: "pass" | "fail";
+  product_lock: "pass" | "fail";
+  mechanics_preserved: "pass" | "fail";
+  notes: string[];
+}
+
+export interface WinnerBlueprint {
+  duration_seconds: number;
+  primary_hook_type: string;
+  primary_hook_visual: string;
+  primary_hook_verbal: string;
+  core_emotion: string;
+  energy_profile: string;
+  performance_style: string;
+  cta_style: string;
+  conversion_mechanics: string[];
+  scene_type: string;
+  camera_style: string;
+  gesture_profile: string;
+  actor_profile_observed: {
+    gender_presentation: string;
+    approx_age_band: string;
+    creator_archetype: string;
+    presence_style: string;
+  };
+  scene_geometry: SceneGeometry;
+  beat_timeline: Array<{
+    start_sec: number;
+    end_sec: number;
+    beat_type: string;
+    description: string;
+  }>;
+}
+
+export type VariantStatus = "ready" | "needs_regeneration" | "approved" | "rejected" | "pending";
+
 export interface VariantResult {
   variant_id: string;
+  identity_distance: string;
   variant_summary: string;
-  shotlist: Array<{ shot: number; duration: string; description: string }>;
-  script: { hook: string; body: string; cta: string };
+  actor_archetype: string;
+  actor_visual_direction: ActorVisualDirection;
+  script_variant: ScriptVariant;
   on_screen_text_plan: Array<{ timestamp: string; text: string }>;
+  shotlist: Array<{ shot: number; duration: string; description: string }>;
+  scene_geometry: SceneGeometry;
   base_image_prompt_9x16: string;
-  generated_image_url: string;
-  scene_geometry?: SceneGeometry;
-  hisfield_master_motion_prompt: string;
+  heygen_ready_brief: HeygenReadyBrief;
   negative_prompt: string;
+  similarity_check_result: SimilarityCheckResult;
+  status: VariantStatus;
+  generation_attempt: number;
+  generated_image_url: string;
+  // Legacy compat
+  hisfield_master_motion_prompt?: string;
 }
 
 export interface AnalysisResult {
   input_mode: string;
   has_voice: boolean;
   content_type: string;
-  source_blueprint: Record<string, unknown>;
+  winner_blueprint: WinnerBlueprint;
   variants: VariantResult[];
 }
 
@@ -48,6 +123,8 @@ interface DownloadedData {
   variantCount: number;
   originalUrl: string;
   videoMode: VideoMode;
+  language: string;
+  diversity_intensity: string;
 }
 
 const Index = () => {
@@ -74,9 +151,10 @@ const Index = () => {
   const handleSubmit = useCallback(async (formData: {
     url: string;
     productImage: File | null;
-    referenceActor: File | null;
     variantCount: number;
     videoMode: VideoMode;
+    language: string;
+    diversity_intensity: string;
   }) => {
     setStep("downloading");
     setError(null);
@@ -110,6 +188,8 @@ const Index = () => {
         variantCount: formData.variantCount,
         originalUrl: formData.url,
         videoMode: formData.videoMode,
+        language: formData.language,
+        diversity_intensity: formData.diversity_intensity,
       });
       setStep("preview");
     } catch (e) {
@@ -134,6 +214,8 @@ const Index = () => {
           cover_url: downloadedData.cover_url,
           product_image_url: downloadedData.product_image_url,
           video_mode: downloadedData.videoMode,
+          language: downloadedData.language,
+          diversity_intensity: downloadedData.diversity_intensity,
         },
       });
       if (analysisError || analysisData?.error) {
@@ -155,14 +237,18 @@ const Index = () => {
               variant_index: i,
               total_variants: analysisData.variants.length,
               video_mode: downloadedData.videoMode,
+              actor_visual_direction: variant.actor_visual_direction,
+              negative_prompt: variant.negative_prompt,
             },
           });
           variants.push({
             ...variant,
+            status: variant.status || "ready",
+            generation_attempt: variant.generation_attempt || 1,
             generated_image_url: imageError || imageData?.error ? "" : imageData.image_url,
           });
         } catch {
-          variants.push({ ...variant, generated_image_url: "" });
+          variants.push({ ...variant, generated_image_url: "", status: "needs_regeneration", generation_attempt: 1 });
         }
       }
       setPipelineStep(7);
@@ -171,7 +257,7 @@ const Index = () => {
         input_mode: analysisData.input_mode,
         has_voice: analysisData.has_voice,
         content_type: analysisData.content_type,
-        source_blueprint: analysisData.source_blueprint,
+        winner_blueprint: analysisData.winner_blueprint,
         variants,
       };
 
@@ -186,6 +272,63 @@ const Index = () => {
     }
   }, [downloadedData, user]);
 
+  const handleRegenerateVariant = useCallback(async (variantIndex: number) => {
+    if (!results || !downloadedData) return;
+    const variant = results.variants[variantIndex];
+    if (!variant) return;
+
+    const updatedVariants = [...results.variants];
+    updatedVariants[variantIndex] = {
+      ...variant,
+      status: "pending" as VariantStatus,
+      generation_attempt: variant.generation_attempt + 1,
+    };
+    setResults({ ...results, variants: updatedVariants });
+
+    try {
+      const { data: imageData, error: imageError } = await supabase.functions.invoke("generate-variant-image", {
+        body: {
+          prompt: variant.base_image_prompt_9x16,
+          scene_geometry: variant.scene_geometry,
+          cover_url: downloadedData.cover_url,
+          product_image_url: downloadedData.product_image_url,
+          variant_index: variantIndex,
+          total_variants: results.variants.length,
+          video_mode: downloadedData.videoMode,
+          actor_visual_direction: variant.actor_visual_direction,
+          negative_prompt: variant.negative_prompt,
+        },
+      });
+
+      if (imageError || imageData?.error) {
+        updatedVariants[variantIndex] = {
+          ...updatedVariants[variantIndex],
+          status: "needs_regeneration",
+        };
+      } else {
+        updatedVariants[variantIndex] = {
+          ...updatedVariants[variantIndex],
+          generated_image_url: imageData.image_url,
+          status: "ready",
+        };
+      }
+      setResults({ ...results, variants: [...updatedVariants] });
+    } catch {
+      updatedVariants[variantIndex] = {
+        ...updatedVariants[variantIndex],
+        status: "needs_regeneration",
+      };
+      setResults({ ...results, variants: [...updatedVariants] });
+    }
+  }, [results, downloadedData]);
+
+  const handleUpdateVariantStatus = useCallback((variantIndex: number, newStatus: VariantStatus) => {
+    if (!results) return;
+    const updatedVariants = [...results.variants];
+    updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], status: newStatus };
+    setResults({ ...results, variants: updatedVariants });
+  }, [results]);
+
   const handleReset = useCallback(() => {
     setStep("input");
     setResults(null);
@@ -194,7 +337,7 @@ const Index = () => {
   }, []);
 
   return (
-      <div className="bg-background">
+    <div className="bg-background">
       <main className="mx-auto max-w-5xl px-8 py-8">
         <AnimatePresence mode="wait">
           {step === "input" && (
@@ -224,7 +367,15 @@ const Index = () => {
           )}
           {step === "results" && results && (
             <motion.div key="results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
-              <ResultsView results={results} videoUrl={downloadedData?.video_url || ""} videoDuration={downloadedData?.metadata?.duration as number | undefined} videoMode={downloadedData?.videoMode} onReset={handleReset} />
+              <ResultsView
+                results={results}
+                videoUrl={downloadedData?.video_url || ""}
+                videoDuration={downloadedData?.metadata?.duration as number | undefined}
+                videoMode={downloadedData?.videoMode}
+                onReset={handleReset}
+                onRegenerateVariant={handleRegenerateVariant}
+                onUpdateVariantStatus={handleUpdateVariantStatus}
+              />
             </motion.div>
           )}
         </AnimatePresence>
