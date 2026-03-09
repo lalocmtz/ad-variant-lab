@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, Zap, MessageSquare, Camera } from "lucide-react";
+import { ArrowLeft, Clock, Zap, MessageSquare, Camera, AlertTriangle, Tag, User } from "lucide-react";
 import VariantCard from "@/components/VariantCard";
 import KlingAnimationPanel from "@/components/KlingAnimationPanel";
 import type { AnalysisResult, VariantStatus } from "@/pages/Index";
@@ -39,6 +39,23 @@ const ResultsView = ({
         </h2>
       </div>
 
+      {/* Overlay & Content Status */}
+      <div className="flex flex-wrap gap-2">
+        {results.overlay_cleanup_required && (
+          <span className="flex items-center gap-1 rounded-md bg-yellow-500/10 px-2.5 py-1 text-xs font-medium text-yellow-600">
+            <AlertTriangle className="h-3 w-3" /> Overlays detectados — limpieza aplicada
+          </span>
+        )}
+        <span className="rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          {results.content_type}
+        </span>
+        {results.has_voice && (
+          <span className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+            Con voz
+          </span>
+        )}
+      </div>
+
       {/* Winner Blueprint Summary */}
       {bp && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
@@ -48,8 +65,14 @@ const ResultsView = ({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <BlueprintStat icon={<Clock className="h-4 w-4" />} label="Duración" value={`${bp.duration_seconds}s`} />
             <BlueprintStat icon={<Zap className="h-4 w-4" />} label="Hook" value={bp.primary_hook_type} />
+            {bp.primary_hook_label && (
+              <BlueprintStat icon={<Tag className="h-4 w-4" />} label="Hook Label" value={bp.primary_hook_label.replace(/_/g, " ")} />
+            )}
             <BlueprintStat icon={<MessageSquare className="h-4 w-4" />} label="Emoción" value={bp.core_emotion} />
             <BlueprintStat icon={<Camera className="h-4 w-4" />} label="Escena" value={bp.scene_type} />
+            {bp.actor_profile_observed?.creator_archetype && (
+              <BlueprintStat icon={<User className="h-4 w-4" />} label="Arquetipo" value={bp.actor_profile_observed.creator_archetype} />
+            )}
           </div>
           {bp.conversion_mechanics && bp.conversion_mechanics.length > 0 && (
             <div className="space-y-1">
@@ -57,6 +80,18 @@ const ResultsView = ({
               <div className="flex flex-wrap gap-1.5">
                 {bp.conversion_mechanics.map((m, i) => (
                   <span key={i} className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {m}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {bp.performance_mechanics && bp.performance_mechanics.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Mecánicas de performance</p>
+              <div className="flex flex-wrap gap-1.5">
+                {bp.performance_mechanics.map((m, i) => (
+                  <span key={i} className="rounded-md bg-accent/50 px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
                     {m}
                   </span>
                 ))}
@@ -85,7 +120,7 @@ const ResultsView = ({
           Variantes Generadas ({results.variants.length})
         </h3>
         <p className="text-xs text-muted-foreground">
-          Cada variante preserva la fórmula ganadora con un actor completamente distinto y guión adaptado.
+          Cada variante preserva la fórmula ganadora con un actor completamente distinto (distancia: HIGH) y guión adaptado.
         </p>
       </div>
 

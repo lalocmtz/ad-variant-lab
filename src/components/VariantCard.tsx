@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { VariantResult } from "@/pages/Index";
@@ -33,6 +33,17 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       {label}
     </button>
   );
+}
+
+function handleDownloadImage(url: string, variantId: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `variant_${variantId}.png`;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCardProps) => {
@@ -69,17 +80,35 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
             {badge.label}
           </span>
         </div>
+        {/* Download button on image */}
+        {variant.generated_image_url && !isPending && (
+          <button
+            onClick={() => handleDownloadImage(variant.generated_image_url, variant.variant_id)}
+            className="absolute right-2 top-2 rounded-md bg-background/80 p-1.5 text-foreground backdrop-blur-sm transition-colors hover:bg-background"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Content */}
       <div className="space-y-3 p-4">
+        {/* Identity distance + archetype */}
+        <div className="flex items-center gap-2">
+          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary uppercase">
+            Distancia: {variant.identity_distance}
+          </span>
+          {variant.generation_attempt > 1 && (
+            <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+              Intento #{variant.generation_attempt}
+            </span>
+          )}
+        </div>
+
         {/* 1. Who this variant is */}
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actor</p>
           <p className="text-xs font-medium text-foreground">{variant.actor_archetype}</p>
-          {variant.identity_distance && (
-            <p className="text-[10px] text-muted-foreground">Distancia: {variant.identity_distance}</p>
-          )}
         </div>
 
         {/* 2. How it should speak */}
@@ -144,6 +173,18 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
 
         {expanded && (
           <div className="space-y-3 text-[11px]">
+            {/* Image generation strategy */}
+            {variant.image_generation_strategy && variant.image_generation_strategy.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Pipeline de generación</p>
+                <div className="flex gap-1.5">
+                  {variant.image_generation_strategy.map((s, i) => (
+                    <span key={i} className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] text-primary capitalize">{s.replace(/_/g, " ")}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* On-screen text plan */}
             {variant.on_screen_text_plan?.length > 0 && (
               <div>
@@ -180,6 +221,17 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {/* Identity replacement rules */}
+            {variant.identity_replacement_rules && variant.identity_replacement_rules.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Reglas de reemplazo de identidad</p>
+                <ul className="list-disc list-inside space-y-0.5 text-foreground">
+                  {variant.identity_replacement_rules.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
               </div>
             )}
             {/* Similarity check */}
