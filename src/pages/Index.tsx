@@ -102,6 +102,8 @@ export interface WinnerBlueprint {
 
 export type VariantStatus = "ready" | "needs_regeneration" | "approved" | "rejected" | "pending";
 
+export type VideoGenerationStatus = "idle" | "queued" | "processing" | "completed" | "failed";
+
 export interface VariantResult {
   variant_id: string;
   identity_distance: string;
@@ -123,6 +125,12 @@ export interface VariantResult {
   generated_image_url: string;
   animation_prompt_json?: Record<string, unknown>;
   prompt_package?: AnimationPromptPackage;
+  // Video generation state
+  video_task_id?: string;
+  video_status?: VideoGenerationStatus;
+  video_url?: string;
+  video_error?: string;
+  video_mode?: string;
 }
 
 export interface AnalysisResult {
