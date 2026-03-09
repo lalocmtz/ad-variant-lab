@@ -75,6 +75,8 @@ function buildPromptAvatar(
   sceneGeometry?: Record<string, string>,
   variantIndex?: number,
   totalVariants?: number,
+  actorVisualDirection?: Record<string, string>,
+  negativePrompt?: string,
 ): string {
   const idx = variantIndex ?? 0;
   const total = totalVariants ?? 3;
@@ -88,40 +90,72 @@ Camera angle: ${sceneGeometry.camera_angle || "eye_level"}
 Lighting direction: ${sceneGeometry.lighting_direction || "natural_ambient"}`
     : "";
 
+  const actorBlock = actorVisualDirection
+    ? `
+ACTOR IDENTITY FOR THIS VARIANT (MUST BE A COMPLETELY DIFFERENT PERSON FROM THE ORIGINAL):
+- Gender presentation: ${actorVisualDirection.gender_presentation || "not specified"}
+- Age band: ${actorVisualDirection.approx_age_band || "not specified"}
+- Face shape: ${actorVisualDirection.face_shape || "distinct from original"}
+- Hair style: ${actorVisualDirection.hair_style || "different from original"}
+- Hair color: ${actorVisualDirection.hair_color || "different from original"}
+- Skin tone range: ${actorVisualDirection.skin_tone_range || "market-plausible"}
+- Overall vibe: ${actorVisualDirection.overall_vibe || "authentic UGC creator"}
+- Wardrobe: ${actorVisualDirection.wardrobe || "casual, different from original"}`
+    : "";
+
+  const customNegative = negativePrompt || "No same actor identity, no nearly identical faces, no sibling-like similarity, no only wardrobe changes, no unrealistic product, no studio lighting, no cinematic commercial style, no stock photo appearance.";
+
   return `REFERENCE FRAME: See the attached cover frame image below.
 PRODUCT REFERENCE: See the attached product image below.
 
 This is VARIANT ${idx + 1} of ${total}.
 
-TASK: Generate a realistic UGC-style image based on the reference frame. Keep the same scene composition and product placement. The person in the scene should look natural and diverse.
+CRITICAL REQUIREMENT — IDENTITY SWAP:
+The actor in this image MUST be a COMPLETELY DIFFERENT PERSON from the original video.
+The difference must be obvious at first glance.
+The actor must differ in: face shape, facial proportions, eyebrow structure, eye shape, nose shape, lip structure, jawline, hairline, hairstyle, overall vibe.
+Do NOT produce a near clone of the original actor. Do NOT just change clothes.
+${actorBlock}
 
-PRODUCT RULES:
+PRODUCT RULES (ABSOLUTE TRUTH):
 - The product MUST match the PRODUCT REFERENCE image exactly.
 - Do NOT redesign the package. Do NOT change colors, logo, label, shape, or typography.
 - Product must be clearly visible, readable, and prominent.
+- The actor must hold the EXACT product from the reference.
 
-SCENE GEOMETRY:
+SCENE & FRAMING:
 ${geometryBlock}
-- Replicate the exact composition, framing, and pose from the reference frame.
+- Preserve approximate framing, camera distance, product placement, and gesture logic from the reference.
+- The scene should be similar type of room/environment but NOT identical.
+- Allow: different furniture, slightly different wall tone, different background elements.
+- Do NOT copy the exact frame pixel by pixel.
 
 STYLE (UGC — CRITICAL):
-- This MUST look like a raw smartphone selfie video frame (TikTok style).
-- Natural lighting, slight soft focus, natural color grading.
-- Include natural skin texture and imperfections for realism.
+- This MUST look like a real TikTok creator filming a product testimonial with a smartphone.
+- Natural lighting, handheld phone camera perspective, slightly imperfect framing.
+- Natural skin texture and imperfections for realism.
+- Authentic creator posture, casual environment.
+- NOT a commercial. NOT a stock photo. NOT studio lighting.
 
-OUTPUT: 9:16 vertical, maximum resolution, photorealistic.
+PRIORITY ORDER:
+1. Exact product lock (packaging identical to reference)
+2. Winning mechanics preserved (framing, energy, intent)
+3. New actor identity (genuinely different person)
+4. UGC realism
+
+OUTPUT: 9:16 vertical, maximum resolution, photorealistic UGC style.
 
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: No text overlays, no logos, no watermarks, no extra hands, no distorted fingers, no product redesign, no studio lighting, no stock photo aesthetic.`;
+NEGATIVE: ${customNegative}`;
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants, video_mode } = await req.json();
+    const { prompt, scene_geometry, cover_url, product_image_url, variant_index, total_variants, video_mode, actor_visual_direction, negative_prompt } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -130,7 +164,7 @@ serve(async (req) => {
     const mode = video_mode || "avatar";
     const fullPrompt = mode === "no_avatar"
       ? buildPromptNoAvatar(prompt, scene_geometry, variant_index, total_variants)
-      : buildPromptAvatar(prompt, scene_geometry, variant_index, total_variants);
+      : buildPromptAvatar(prompt, scene_geometry, variant_index, total_variants, actor_visual_direction, negative_prompt);
 
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: "text", text: fullPrompt },
@@ -149,6 +183,7 @@ serve(async (req) => {
       videoMode: mode,
       hasCover: !!cover_url,
       hasProduct: !!product_image_url,
+      hasActorDirection: !!actor_visual_direction,
     });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

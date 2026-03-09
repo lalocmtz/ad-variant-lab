@@ -9,140 +9,123 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { video_url, variant_count, metadata, cover_url, product_image_url } = await req.json();
+    const { video_url, variant_count, metadata, cover_url, product_image_url, language, diversity_intensity } = await req.json();
     if (!video_url) throw new Error("video_url is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const numVariants = variant_count || 3;
+    const lang = language || "es-MX";
+    const diversity = diversity_intensity || "high";
 
-    const systemPrompt = `You are an expert TikTok Shop ad analyst. You are given REAL IMAGES from the video and the actual product photo.
+    const systemPrompt = `You are an expert TikTok ad deconstruction engine.
 
-Your job:
-1. LOOK at the cover frame image — observe the scene, actor, pose, camera angle, lighting, product interaction
-2. LOOK at the product image — this is the EXACT product packaging that must appear in all variants
-3. Determine if there is voice/speech based on metadata
-4. Classify the content type: HUMAN_TALKING, HANDS_DEMO, PRODUCT_ONLY, or TEXT_ONLY
-5. Build a source blueprint based on OBSERVED EVIDENCE from the images
-6. Generate ${numVariants} controlled variants that preserve the EXACT structure but change the actor
+Your job is not to copy the video. Your job is to extract the winning mechanics of the ad and rebuild them with different actors.
 
-CRITICAL OBSERVATION RULES:
-- You MUST describe what you ACTUALLY SEE in the cover frame image
-- Describe the EXACT product packaging from the product image: shape, color, labels, text, material
-- Extract EXACT scene geometry from the cover frame: camera distance, which hand holds product, product position in frame, camera angle, lighting direction
-- The product description must match the uploaded product image, NOT the video title
+The goal is to generate new ad variants that preserve the performance structure of a winning TikTok ad.
+The final output will be used to generate new UGC-style images and avatar videos via HeyGen.
+Therefore the analysis must be extremely precise.
 
-═══════════════════════════════════════════════════
-DEMOGRAPHIC CONSISTENCY LOCK (MANDATORY)
-═══════════════════════════════════════════════════
-ALL variants MUST feature the SAME demographic profile as the original actor observed in the cover frame.
+STEP 1 — UNDERSTAND THE ORIGINAL AD
+Analyze the full TikTok video and extract the exact mechanics that make it perform.
+Identify: total duration, hook timing, hook type, emotional trigger, visual framing, creator archetype, gesture style, product interaction, camera style, energy curve, CTA structure.
+Focus on performance mechanics, not the identity of the actor.
 
+STEP 2 — EXTRACT WINNING MECHANICS (winner_blueprint)
+Define the exact elements that must remain consistent in every variant:
+- ad duration, hook timing, product placement, product orientation
+- camera distance, handheld UGC realism, visual hook structure
+- gesture rhythm, emotional intention, creator authenticity
+- CTA logic, storytelling sequence, scene type
+
+STEP 3 — PRODUCT LOCK
+The user uploads a product image. This product is the ground truth reference.
 Rules:
-- Match the EXACT ethnicity and skin tone of the original person
-- Match the EXACT age range (same decade) of the original person
-- Match the EXACT gender of the original person
-- ONLY change facial structure (eyes, nose, mouth, jawline) to create a DISTINCT individual
-- Each variant is a DIFFERENT person but with the SAME demographic profile
-- You MUST fill the actor_description field with a DETAILED physical description (at least 25 words) that PRESERVES the original ethnicity, skin tone, age range, and gender while describing unique facial features
-- The base_image_prompt_9x16 MUST start with the actor_description
-- Style must be raw UGC / amateur TikTok — NOT stock photography, NOT studio lighting
-- Hair style can vary slightly but must be culturally consistent with the original
+- The product must match the uploaded reference exactly
+- Label design, color, proportions and shape must remain identical
+- The actor must hold the exact product provided
+- Do not reinterpret the product
 
-═══════════════════════════════════════════════════
+STEP 4 — IDENTITY SWAP (MANDATORY)
+The actor identity MUST change completely. Each variant must look like a completely different person.
+Diversity intensity: ${diversity}
 
-ALL prompts (base_image_prompt_9x16, hisfield_master_motion_prompt, negative_prompt) MUST be in ENGLISH.
-All other fields (variant_summary, shotlist descriptions, script) should be in Spanish.
+Forbidden outcomes:
+- same actor with minor edits
+- similar facial structure
+- sibling-like similarity
+- only wardrobe change
+- nearly identical faces
 
-For base_image_prompt_9x16, the prompt MUST follow this structure:
-1. START with the full actor_description (the unique person for this variant)
-2. Then describe the EXACT product from the product image
-3. Then describe the scene geometry matching the cover frame
-4. Include: "The person is holding the EXACT product shown in the product reference image"
-5. End with: "Ultra-realistic, high-definition, sharp detail, 4K quality, natural smartphone camera"
+Each variant must differ in: face shape, jawline, eyebrow structure, eye shape, nose shape, lip structure, hairline, hairstyle, facial proportions, overall vibe.
 
-For hisfield_master_motion_prompt, use this EXACT structure:
----
-VISUAL REFERENCE: use the generated image.
-MOTION REFERENCE: use the original TikTok video.
+The difference must be immediately noticeable at first glance.
+However, keep demographic plausibility for the target market.
 
-Replicate the exact motion, timing, and gesture rhythm from the reference video.
-The actor is different but the behavior must match the original performance.
+STEP 5 — SCENE VARIATION
+The scene must be similar but not identical.
+Allowed: same type of room, different furniture layout, slightly different background, different wall tone, different lighting nuance.
+Preserve: approximate framing, approximate camera distance, approximate composition.
+Do not copy the exact frame.
 
-Preserve:
-- camera distance: [specify observed value]
-- gesture rhythm: [describe observed rhythm]
-- product interaction timing: [describe observed timing]
-- pacing and beat structure: [describe observed pacing]
-- hand used: [left/right/both]
-- product orientation: [describe]
+STEP 6 — UGC REALISM
+Images must feel like authentic TikTok UGC: natural lighting, handheld phone camera perspective, slightly imperfect framing, authentic creator posture, casual environment.
+Avoid: studio lighting, cinematic framing, overly polished commercial aesthetics.
 
-Replace:
-- actor identity (different person)
-- background details (same category of environment, subtle variations only)
+STEP 7 — SCRIPT VARIANTS
+Each variant must include a script variant in language: ${lang}
+Rules:
+- preserve the original hook intention and emotional trigger
+- preserve duration and CTA logic
+- preserve the winner's conversion mechanics
+- change wording naturally — do NOT translate literally
+- each script must be slightly different
+- scripts must sound natural for an avatar delivery
 
-Maintain a natural handheld TikTok style.
-Do not add logos or new text overlays.
+STEP 8 — VARIANT DIVERSITY STRATEGY
+Variant A: same mechanics + different actor + same energy level + different outfit
+Variant B: same mechanics + different actor + different hairstyle + slight background variation + slightly different wording
+Variant C: same mechanics + different actor + compatible but different vibe + higher expressivity + alternative hook wording preserving intent
 
-Shot-by-shot timing:
-[Include specific timing from the shotlist]
+STEP 9 — INTERNAL VALIDATION
+Before finalizing, validate:
+- Does each variant clearly look like a different individual than the original?
+- Are A, B, C sufficiently different from each other?
+- Do all variants preserve the exact uploaded product?
+- Do all variants preserve the winning mechanics?
+If one fails, mark it as "needs_regeneration".
 
-If the source video is longer than 25 seconds, compress the sequence to 10-12 seconds while preserving the hook, demonstration, proof, and CTA structure.
----
+STEP 10 — OUTPUT
+Return ONLY valid JSON via the tool call. No markdown. No commentary.
+All prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
+Scripts and summaries must be in ${lang}.`;
 
-Respond EXCLUSIVELY with the JSON using the tool "analysis_result".`;
-
-    // Build multimodal user content with images
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
-    // Add the text instructions
     userContent.push({
       type: "text",
-      text: `Analyze this TikTok Shop ad and generate ${numVariants} variants based on what you OBSERVE in the images.
-
+      text: `Analyze this TikTok ad and generate ${numVariants} identity-swapped variants.
+Language for scripts: ${lang}
+Diversity intensity: ${diversity}
 Additional metadata: ${JSON.stringify(metadata || {})}
 
 INSTRUCTIONS:
-1. LOOK at the cover frame image — describe the scene, actor, pose, product placement, camera angle, lighting
-2. LOOK at the product image — describe the EXACT packaging (this is the real product, ignore the video title if it differs)
-3. Classify content type
-4. Build beat timeline from observed structure
-5. Extract scene geometry from the cover frame
-6. Generate variants that clone the structure with different actors, but ALWAYS showing the EXACT same product from the product image
-
-For each variant:
-- variant_id: A, B, C...
-- variant_summary: short summary (Spanish)
-- shotlist: [{shot, duration, description}] based on observed beats
-- script: {hook, body, cta} — describe visual actions (Spanish)
-- on_screen_text_plan: [{timestamp, text}] — 3 blocks (0-2s, 2-6s, 6-10/12s)
-- scene_geometry: OBSERVED from cover frame {camera_distance, product_hand, product_position, camera_angle, lighting_direction}
-- base_image_prompt_9x16: ENGLISH strict reconstruction prompt describing the EXACT product from the product image, with all 7 locks
-- hisfield_master_motion_prompt: ENGLISH motion prompt
-- negative_prompt: ENGLISH — "no logos, no watermarks, no random text, no extra hands, no distorted fingers, no product redesign"`,
+1. LOOK at the cover frame image — describe scene, actor, pose, product placement, camera angle, lighting
+2. LOOK at the product image — describe EXACT packaging (this is the real product)
+3. Extract winner_blueprint with all winning mechanics
+4. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors but SAME winning mechanics
+5. Each variant needs: identity-swapped image prompt, script variant in ${lang}, HeyGen-ready brief, validation checks`,
     });
 
-    // Add cover frame image (hook frame from the video)
     if (cover_url) {
-      userContent.push({
-        type: "image_url",
-        image_url: { url: cover_url },
-      });
+      userContent.push({ type: "image_url", image_url: { url: cover_url } });
     }
-
-    // Add product image (the EXACT product that must appear in variants)
     if (product_image_url) {
-      userContent.push({
-        type: "image_url",
-        image_url: { url: product_image_url },
-      });
+      userContent.push({ type: "image_url", image_url: { url: product_image_url } });
     }
 
-    console.log("Sending to Gemini with images:", {
-      hasCover: !!cover_url,
-      hasProduct: !!product_image_url,
-      numVariants,
-    });
+    console.log("Sending to Gemini:", { hasCover: !!cover_url, hasProduct: !!product_image_url, numVariants, lang, diversity });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -161,71 +144,64 @@ For each variant:
             type: "function",
             function: {
               name: "analysis_result",
-              description: "Return the complete analysis with source blueprint and variants",
+              description: "Return the complete analysis with winner blueprint and identity-swapped variants",
               parameters: {
                 type: "object",
                 properties: {
                   input_mode: { type: "string", enum: ["URL", "VIDEO", "IMAGE_ONLY", "VIDEO_PLUS_IMAGE"] },
                   has_voice: { type: "boolean" },
                   content_type: { type: "string", enum: ["HUMAN_TALKING", "HANDS_DEMO", "PRODUCT_ONLY", "TEXT_ONLY"] },
-                  source_blueprint: {
+                  winner_blueprint: {
                     type: "object",
                     properties: {
-                      source_understanding: {
+                      duration_seconds: { type: "number" },
+                      primary_hook_type: { type: "string" },
+                      primary_hook_visual: { type: "string" },
+                      primary_hook_verbal: { type: "string" },
+                      core_emotion: { type: "string" },
+                      energy_profile: { type: "string" },
+                      performance_style: { type: "string" },
+                      cta_style: { type: "string" },
+                      conversion_mechanics: { type: "array", items: { type: "string" } },
+                      scene_type: { type: "string" },
+                      camera_style: { type: "string" },
+                      gesture_profile: { type: "string" },
+                      actor_profile_observed: {
                         type: "object",
                         properties: {
-                          observed_scene: { type: "string" },
-                          observed_actor: { type: "string" },
-                          observed_product: { type: "string" },
-                          camera: {
-                            type: "object",
-                            properties: {
-                              distance: { type: "string" },
-                              angle: { type: "string" },
-                              framing_notes: { type: "string" },
-                            },
-                          },
-                          lighting: {
-                            type: "object",
-                            properties: {
-                              type: { type: "string" },
-                              direction: { type: "string" },
-                            },
-                          },
+                          gender_presentation: { type: "string" },
+                          approx_age_band: { type: "string" },
+                          creator_archetype: { type: "string" },
+                          presence_style: { type: "string" },
                         },
+                        required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style"],
+                      },
+                      scene_geometry: {
+                        type: "object",
+                        properties: {
+                          camera_distance: { type: "string" },
+                          product_hand: { type: "string" },
+                          product_position: { type: "string" },
+                          camera_angle: { type: "string" },
+                          lighting_direction: { type: "string" },
+                        },
+                        required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
                       },
                       beat_timeline: {
                         type: "array",
                         items: {
                           type: "object",
                           properties: {
-                            beat: { type: "string", enum: ["HOOK", "DEMO", "PROOF", "CTA"] },
-                            time: { type: "string" },
-                            what_happens: { type: "string" },
+                            start_sec: { type: "number" },
+                            end_sec: { type: "number" },
+                            beat_type: { type: "string" },
+                            description: { type: "string" },
                           },
-                          required: ["beat", "time", "what_happens"],
+                          required: ["start_sec", "end_sec", "beat_type", "description"],
                         },
                       },
-                      motion_signature: {
-                        type: "object",
-                        properties: {
-                          camera_style: { type: "string" },
-                          cuts: { type: "string" },
-                          gesture_rhythm: { type: "string" },
-                          product_movement: { type: "string" },
-                        },
-                      },
-                      product_interaction: {
-                        type: "object",
-                        properties: {
-                          hand_used: { type: "string" },
-                          orientation: { type: "string" },
-                          distance_to_camera: { type: "string" },
-                        },
-                      },
-                      duration_seconds: { type: "number" },
-                      core_message: { type: "string" },
                     },
+                    required: ["duration_seconds", "primary_hook_type", "core_emotion", "energy_profile", "cta_style", "conversion_mechanics", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline"],
                   },
                   variants: {
                     type: "array",
@@ -233,27 +209,34 @@ For each variant:
                       type: "object",
                       properties: {
                         variant_id: { type: "string" },
+                        identity_distance: { type: "string", enum: ["low", "medium", "high"] },
                         variant_summary: { type: "string" },
-                        shotlist: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              shot: { type: "number" },
-                              duration: { type: "string" },
-                              description: { type: "string" },
-                            },
-                            required: ["shot", "duration", "description"],
-                          },
-                        },
-                        script: {
+                        actor_archetype: { type: "string" },
+                        actor_visual_direction: {
                           type: "object",
                           properties: {
+                            gender_presentation: { type: "string" },
+                            approx_age_band: { type: "string" },
+                            face_shape: { type: "string" },
+                            hair_style: { type: "string" },
+                            hair_color: { type: "string" },
+                            skin_tone_range: { type: "string" },
+                            overall_vibe: { type: "string" },
+                            wardrobe: { type: "string" },
+                          },
+                          required: ["gender_presentation", "approx_age_band", "face_shape", "hair_style", "hair_color", "skin_tone_range", "overall_vibe", "wardrobe"],
+                        },
+                        script_variant: {
+                          type: "object",
+                          properties: {
+                            language: { type: "string" },
+                            duration_target_seconds: { type: "number" },
                             hook: { type: "string" },
                             body: { type: "string" },
                             cta: { type: "string" },
+                            full_script: { type: "string" },
                           },
-                          required: ["hook", "body", "cta"],
+                          required: ["language", "duration_target_seconds", "hook", "body", "cta", "full_script"],
                         },
                         on_screen_text_plan: {
                           type: "array",
@@ -264,6 +247,18 @@ For each variant:
                               text: { type: "string" },
                             },
                             required: ["timestamp", "text"],
+                          },
+                        },
+                        shotlist: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              shot: { type: "number" },
+                              duration: { type: "string" },
+                              description: { type: "string" },
+                            },
+                            required: ["shot", "duration", "description"],
                           },
                         },
                         scene_geometry: {
@@ -277,20 +272,45 @@ For each variant:
                           },
                           required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
                         },
-                        actor_description: { type: "string", description: "Detailed physical description of the unique actor for this variant (at least 25 words): ethnicity, age, gender, hair, skin tone, facial features, body type. MUST be completely different from other variants." },
                         base_image_prompt_9x16: { type: "string" },
-                        hisfield_master_motion_prompt: { type: "string" },
+                        heygen_ready_brief: {
+                          type: "object",
+                          properties: {
+                            avatar_instruction: { type: "string" },
+                            delivery_style: { type: "string" },
+                            pace: { type: "string" },
+                            energy: { type: "string" },
+                            facial_expression: { type: "string" },
+                            gesture_style: { type: "string" },
+                          },
+                          required: ["avatar_instruction", "delivery_style", "pace", "energy", "facial_expression", "gesture_style"],
+                        },
                         negative_prompt: { type: "string" },
+                        similarity_check_result: {
+                          type: "object",
+                          properties: {
+                            against_original: { type: "string", enum: ["pass", "fail"] },
+                            cross_variant_diversity: { type: "string", enum: ["pass", "fail"] },
+                            product_lock: { type: "string", enum: ["pass", "fail"] },
+                            mechanics_preserved: { type: "string", enum: ["pass", "fail"] },
+                            notes: { type: "array", items: { type: "string" } },
+                          },
+                          required: ["against_original", "cross_variant_diversity", "product_lock", "mechanics_preserved", "notes"],
+                        },
+                        status: { type: "string", enum: ["ready", "needs_regeneration"] },
+                        generation_attempt: { type: "number" },
                       },
                       required: [
-                        "variant_id", "variant_summary", "shotlist", "script",
-                        "on_screen_text_plan", "scene_geometry", "actor_description",
-                        "base_image_prompt_9x16", "hisfield_master_motion_prompt", "negative_prompt",
+                        "variant_id", "identity_distance", "variant_summary", "actor_archetype",
+                        "actor_visual_direction", "script_variant", "on_screen_text_plan",
+                        "shotlist", "scene_geometry", "base_image_prompt_9x16",
+                        "heygen_ready_brief", "negative_prompt",
+                        "similarity_check_result", "status", "generation_attempt",
                       ],
                     },
                   },
                 },
-                required: ["input_mode", "has_voice", "content_type", "source_blueprint", "variants"],
+                required: ["input_mode", "has_voice", "content_type", "winner_blueprint", "variants"],
               },
             },
           },
