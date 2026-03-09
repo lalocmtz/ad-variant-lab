@@ -136,10 +136,17 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject, onVideoStateC
         onVideoStateChange?.({ video_task_id: taskId, video_status: "completed", video_url: data.videoUrl });
         toast.success(`Video ${variant.variant_id} generado exitosamente`);
         stopPolling();
+      } else if (newStatus === "completed" && !data.videoUrl) {
+        setVideoStatus("failed");
+        setVideoError("El proveedor reportó éxito pero no devolvió URL de video.");
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: "El proveedor reportó éxito pero no devolvió URL de video." });
+        stopPolling();
       } else if (newStatus === "failed") {
         setVideoError(data.error || "La generación de video falló.");
         onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: data.error });
         toast.error(`Video ${variant.variant_id}: ${data.error || "falló"}`);
+        stopPolling();
+      } else if (data.shouldStopPolling) {
         stopPolling();
       }
     } catch (e) {
