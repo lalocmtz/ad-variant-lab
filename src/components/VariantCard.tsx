@@ -1,14 +1,16 @@
-import { useState } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Loader2, Download } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Loader2, Download, Play, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import type { VariantResult } from "@/pages/Index";
+import { supabase } from "@/integrations/supabase/client";
+import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
 
 interface VariantCardProps {
   variant: VariantResult;
   onRegenerate: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onVideoStateChange?: (videoState: { video_task_id?: string; video_status?: VideoGenerationStatus; video_url?: string; video_error?: string; video_mode?: string }) => void;
 }
 
 const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
@@ -17,6 +19,13 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   rejected: { label: "Rechazado", cls: "bg-destructive/10 text-destructive" },
   needs_regeneration: { label: "Regenerar", cls: "bg-yellow-500/10 text-yellow-600" },
   pending: { label: "Generando...", cls: "bg-muted text-muted-foreground" },
+};
+
+const VIDEO_STATUS_LABELS: Record<string, string> = {
+  queued: "En cola...",
+  processing: "Generando video...",
+  completed: "Video listo",
+  failed: "Generación fallida",
 };
 
 function handleDownloadImage(url: string, variantId: string) {
@@ -30,12 +39,80 @@ function handleDownloadImage(url: string, variantId: string) {
   document.body.removeChild(a);
 }
 
-const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCardProps) => {
+function handleDownloadVideo(url: string, variantId: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `video_${variantId}.mp4`;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+const VariantCard = ({ variant, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
+  const [videoTaskId, setVideoTaskId] = useState<string | undefined>(variant.video_task_id);
+  const [videoUrl, setVideoUrl] = useState<string | undefined>(variant.video_url);
+  const [videoError, setVideoError] = useState<string | undefined>(variant.video_error);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const badge = STATUS_BADGES[variant.status] || STATUS_BADGES.ready;
   const isPending = variant.status === "pending";
   const promptText = variant.prompt_package?.prompt_text || "";
+
+  const isVideoActive = videoStatus === "queued" || videoStatus === "processing";
+
+  // Sync from parent if props change
+  useEffect(() => {
+    if (variant.video_status) setVideoStatus(variant.video_status);
+    if (variant.video_task_id) setVideoTaskId(variant.video_task_id);
+    if (variant.video_url) setVideoUrl(variant.video_url);
+    if (variant.video_error) setVideoError(variant.video_error);
+  }, [variant.video_status, variant.video_task_id, variant.video_url, variant.video_error]);
+
+  // Polling logic
+  const pollTask = useCallback(async (taskId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("get-video-task", {
+        body: { taskId },
+      });
+      if (error || data?.error) {
+        console.error("Poll error:", data?.error || error?.message);
+        return;
+      }
+
+      const newStatus = data.status as VideoGenerationStatus;
+      setVideoStatus(newStatus);
+
+      if (newStatus === "completed" && data.videoUrl) {
+        setVideoUrl(data.videoUrl);
+        setVideoError(undefined);
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "completed", video_url: data.videoUrl });
+        toast.success(`Video ${variant.variant_id} generado exitosamente`);
+        if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+      } else if (newStatus === "failed") {
+        setVideoError(data.error || "La generación de video falló.");
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: data.error });
+        toast.error(`Video ${variant.variant_id}: ${data.error || "falló"}`);
+        if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+      }
+    } catch (e) {
+      console.error("Poll exception:", e);
+    }
+  }, [variant.variant_id, onVideoStateChange]);
+
+  useEffect(() => {
+    if (isVideoActive && videoTaskId) {
+      pollingRef.current = setInterval(() => pollTask(videoTaskId), 8000);
+      // Also poll immediately
+      pollTask(videoTaskId);
+      return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+    }
+    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  }, [isVideoActive, videoTaskId, pollTask]);
 
   const handleCopyPrompt = () => {
     if (!promptText) return;
@@ -43,6 +120,60 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
     setCopied(true);
     toast.success("Prompt copiado");
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!variant.generated_image_url) {
+      toast.error("La imagen de la variante es necesaria para generar video.");
+      return;
+    }
+    if (!promptText) {
+      toast.error("El prompt de animación es necesario.");
+      return;
+    }
+
+    setVideoStatus("queued");
+    setVideoError(undefined);
+    setVideoUrl(undefined);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-video-sora", {
+        body: {
+          variantId: variant.variant_id,
+          imageUrl: variant.generated_image_url,
+          promptText,
+          mode: "standard",
+        },
+      });
+
+      if (error || data?.error) {
+        const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
+        setVideoStatus("failed");
+        setVideoError(errMsg);
+        toast.error(errMsg);
+        onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+        return;
+      }
+
+      const taskId = data.taskId;
+      setVideoTaskId(taskId);
+      setVideoStatus("queued");
+      onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.mode });
+      toast.success("Generación de video iniciada");
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : "Error desconocido";
+      setVideoStatus("failed");
+      setVideoError(errMsg);
+      toast.error(errMsg);
+    }
+  };
+
+  const handleRetryVideo = () => {
+    setVideoStatus("idle");
+    setVideoError(undefined);
+    setVideoTaskId(undefined);
+    setVideoUrl(undefined);
+    handleGenerateVideo();
   };
 
   return (
@@ -82,7 +213,7 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
         )}
       </div>
 
-      {/* Universal prompt block + actions */}
+      {/* Content */}
       <div className="space-y-3 p-4">
         {/* Universal animation prompt */}
         {promptText && (
@@ -120,6 +251,72 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
             </Button>
           )}
         </div>
+
+        {/* Video generation */}
+        {variant.generated_image_url && promptText && !isPending && (
+          <div className="space-y-2">
+            {videoStatus === "idle" && !videoUrl && (
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full gap-1.5 text-[10px]"
+                onClick={handleGenerateVideo}
+              >
+                <Video className="h-3 w-3" />
+                Generar Video (15s)
+              </Button>
+            )}
+
+            {isVideoActive && (
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                <span className="text-[10px] text-muted-foreground">
+                  {VIDEO_STATUS_LABELS[videoStatus] || "Procesando..."}
+                </span>
+              </div>
+            )}
+
+            {videoStatus === "failed" && videoError && (
+              <div className="space-y-1.5">
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+                  <p className="text-[10px] text-destructive">{videoError}</p>
+                </div>
+                <Button variant="outline" size="sm" className="w-full gap-1 text-[10px]" onClick={handleRetryVideo}>
+                  <RefreshCw className="h-3 w-3" />
+                  Reintentar video
+                </Button>
+              </div>
+            )}
+
+            {videoStatus === "completed" && videoUrl && (
+              <div className="space-y-2">
+                <div className="overflow-hidden rounded-md border border-border">
+                  <video
+                    src={videoUrl}
+                    controls
+                    className="w-full"
+                    preload="metadata"
+                    playsInline
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="flex-1 gap-1 text-[10px]"
+                    onClick={() => handleDownloadVideo(videoUrl, variant.variant_id)}
+                  >
+                    <Download className="h-3 w-3" />
+                    Descargar video
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1 text-[10px]" onClick={handleRetryVideo}>
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Secondary actions */}
         <div className="flex gap-2">
@@ -166,6 +363,9 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
             )}
             {variant.generation_attempt > 1 && (
               <Detail label="Intento" value={`#${variant.generation_attempt}`} />
+            )}
+            {videoTaskId && (
+              <Detail label="Video Task" value={videoTaskId} />
             )}
             <Detail label="Resumen" value={variant.variant_summary} />
           </div>
