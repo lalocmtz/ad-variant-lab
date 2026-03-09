@@ -469,6 +469,13 @@ const Index = () => {
     setResults({ ...results, variants: updatedVariants });
   }, [results]);
 
+  const handleUpdateVariantVideoState = useCallback((variantIndex: number, videoState: { video_task_id?: string; video_status?: VideoGenerationStatus; video_url?: string; video_error?: string; video_mode?: string }) => {
+    if (!results) return;
+    const updatedVariants = [...results.variants];
+    updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], ...videoState };
+    setResults({ ...results, variants: updatedVariants });
+  }, [results]);
+
   const handleReset = useCallback(() => {
     setStep("input");
     setResults(null);
@@ -515,6 +522,7 @@ const Index = () => {
                 onReset={handleReset}
                 onRegenerateVariant={handleRegenerateVariant}
                 onUpdateVariantStatus={handleUpdateVariantStatus}
+                onUpdateVariantVideoState={handleUpdateVariantVideoState}
               />
             </motion.div>
           )}
