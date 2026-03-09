@@ -59,11 +59,13 @@ export interface SimilarityCheckResult {
 export interface WinnerBlueprint {
   duration_seconds: number;
   primary_hook_type: string;
+  primary_hook_label?: string;
   primary_hook_visual: string;
   primary_hook_verbal: string;
   core_emotion: string;
   energy_profile: string;
   performance_style: string;
+  performance_mechanics?: string[];
   cta_style: string;
   conversion_mechanics: string[];
   scene_type: string;
@@ -91,6 +93,8 @@ export interface VariantResult {
   identity_distance: string;
   variant_summary: string;
   actor_archetype: string;
+  identity_replacement_rules?: string[];
+  image_generation_strategy?: string[];
   actor_visual_direction: ActorVisualDirection;
   script_variant: ScriptVariant;
   on_screen_text_plan: Array<{ timestamp: string; text: string }>;
@@ -111,6 +115,8 @@ export interface AnalysisResult {
   input_mode: string;
   has_voice: boolean;
   content_type: string;
+  overlay_cleanup_required?: boolean;
+  clean_frame_strategy?: string;
   winner_blueprint: WinnerBlueprint;
   variants: VariantResult[];
 }
@@ -223,6 +229,8 @@ const Index = () => {
       }
       setPipelineStep(5);
 
+      const overlayCleanup = analysisData.overlay_cleanup_required || false;
+
       setPipelineStep(6);
       const variants: VariantResult[] = [];
       for (let i = 0; i < analysisData.variants.length; i++) {
@@ -239,6 +247,8 @@ const Index = () => {
               video_mode: downloadedData.videoMode,
               actor_visual_direction: variant.actor_visual_direction,
               negative_prompt: variant.negative_prompt,
+              identity_replacement_rules: variant.identity_replacement_rules,
+              overlay_cleanup_required: overlayCleanup,
             },
           });
           variants.push({
@@ -257,6 +267,8 @@ const Index = () => {
         input_mode: analysisData.input_mode,
         has_voice: analysisData.has_voice,
         content_type: analysisData.content_type,
+        overlay_cleanup_required: overlayCleanup,
+        clean_frame_strategy: analysisData.clean_frame_strategy,
         winner_blueprint: analysisData.winner_blueprint,
         variants,
       };
@@ -297,6 +309,9 @@ const Index = () => {
           video_mode: downloadedData.videoMode,
           actor_visual_direction: variant.actor_visual_direction,
           negative_prompt: variant.negative_prompt,
+          identity_replacement_rules: variant.identity_replacement_rules,
+          overlay_cleanup_required: results.overlay_cleanup_required,
+          is_regeneration: true,
         },
       });
 

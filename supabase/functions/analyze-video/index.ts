@@ -22,84 +22,80 @@ serve(async (req) => {
     const systemPrompt = `You are an expert TikTok ad deconstruction engine.
 
 Your job is not to copy the video. Your job is to extract the winning mechanics of the ad and rebuild them with different actors.
-
 The goal is to generate new ad variants that preserve the performance structure of a winning TikTok ad.
-The final output will be used to generate new UGC-style images and avatar videos via HeyGen.
-Therefore the analysis must be extremely precise.
+The analysis must separate: 1) overlay cleanup 2) scene reconstruction 3) actor identity replacement.
 
 STEP 1 — UNDERSTAND THE ORIGINAL AD
-Analyze the full TikTok video and extract the exact mechanics that make it perform.
-Identify: total duration, hook timing, hook type, emotional trigger, visual framing, creator archetype, gesture style, product interaction, camera style, energy curve, CTA structure.
-Focus on performance mechanics, not the identity of the actor.
+Analyze the full TikTok video and extract:
+- total duration, hook timing, hook type, hook label, emotional trigger
+- visual framing, creator archetype, gesture style, product interaction
+- camera style, energy curve, CTA structure, performance mechanics
+Focus on conversion mechanics, not actor identity.
 
-STEP 2 — EXTRACT WINNING MECHANICS (winner_blueprint)
-Define the exact elements that must remain consistent in every variant:
-- ad duration, hook timing, product placement, product orientation
-- camera distance, handheld UGC realism, visual hook structure
-- gesture rhythm, emotional intention, creator authenticity
-- CTA logic, storytelling sequence, scene type
+STEP 2 — DETECT OVERLAYS
+Inspect whether the source frame contains:
+- comments, usernames, timestamps, engagement icons
+- watermark logos, colored UI frames, captions
+If present: overlay_cleanup_required = true
 
-STEP 3 — PRODUCT LOCK
-The user uploads a product image. This product is the ground truth reference.
-Rules:
-- The product must match the uploaded reference exactly
-- Label design, color, proportions and shape must remain identical
-- The actor must hold the exact product provided
+STEP 3 — EXTRACT WINNING MECHANICS (winner_blueprint)
+Preserve: ad duration, hook timing, product placement, product orientation, camera distance, handheld UGC realism, visual hook structure, gesture rhythm, emotional intention, creator authenticity, CTA logic, storytelling sequence, scene type.
+
+STEP 4 — PRODUCT LOCK
+The uploaded product image is the ground truth reference.
+- Match the exact shape, color, label, proportions, and packaging details
 - Do not reinterpret the product
 
-STEP 4 — IDENTITY SWAP (MANDATORY)
-The actor identity MUST change completely. Each variant must look like a completely different person.
+STEP 5 — IDENTITY SWAP (MANDATORY — FORCED HIGH DISTANCE)
+The actor identity MUST change completely. identity_distance must ALWAYS be "high".
 Diversity intensity: ${diversity}
+
+Generate a NEW face identity for each variant. Every variant must be clearly different from:
+- the original actor
+- each other
 
 Forbidden outcomes:
 - same actor with minor edits
-- similar facial structure
-- sibling-like similarity
-- only wardrobe change
-- nearly identical faces
+- similar facial structure / sibling-like similarity
+- only wardrobe change / nearly identical faces
 
 Each variant must differ in: face shape, jawline, eyebrow structure, eye shape, nose shape, lip structure, hairline, hairstyle, facial proportions, overall vibe.
-
 The difference must be immediately noticeable at first glance.
-However, keep demographic plausibility for the target market.
+Keep demographic plausibility for the target market.
 
-STEP 5 — SCENE VARIATION
-The scene must be similar but not identical.
-Allowed: same type of room, different furniture layout, slightly different background, different wall tone, different lighting nuance.
-Preserve: approximate framing, approximate camera distance, approximate composition.
-Do not copy the exact frame.
-
-STEP 6 — UGC REALISM
-Images must feel like authentic TikTok UGC: natural lighting, handheld phone camera perspective, slightly imperfect framing, authentic creator posture, casual environment.
-Avoid: studio lighting, cinematic framing, overly polished commercial aesthetics.
+STEP 6 — SCENE RECONSTRUCTION
+Preserve: camera angle, approximate framing, camera distance, lighting direction, action, gesture logic.
+Allow small variations: furniture, wall tone, background details, decoration.
+The scene should feel like the same type of room but NOT an identical copy.
 
 STEP 7 — SCRIPT VARIANTS
 Each variant must include a script variant in language: ${lang}
-Rules:
-- preserve the original hook intention and emotional trigger
-- preserve duration and CTA logic
-- preserve the winner's conversion mechanics
-- change wording naturally — do NOT translate literally
-- each script must be slightly different
-- scripts must sound natural for an avatar delivery
+- Preserve hook intention, emotional trigger, duration, CTA logic, conversion mechanics
+- Change wording naturally — do NOT translate literally
+- Scripts must sound natural for avatar delivery
 
 STEP 8 — VARIANT DIVERSITY STRATEGY
-Variant A: same mechanics + different actor + same energy level + different outfit
+Variant A: same mechanics + different actor + same energy + different facial structure + different outfit nuance
 Variant B: same mechanics + different actor + different hairstyle + slight background variation + slightly different wording
-Variant C: same mechanics + different actor + compatible but different vibe + higher expressivity + alternative hook wording preserving intent
+Variant C: same mechanics + different actor + compatible different vibe + more expressive performance + alternative hook wording preserving intent
 
-STEP 9 — INTERNAL VALIDATION
-Before finalizing, validate:
-- Does each variant clearly look like a different individual than the original?
+STEP 9 — HOOK CLASSIFICATION
+Classify the primary hook using one of these labels:
+comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook
+
+STEP 10 — INTERNAL VALIDATION
+Validate:
+- Does each variant clearly look like a different individual from the original?
 - Are A, B, C sufficiently different from each other?
 - Do all variants preserve the exact uploaded product?
 - Do all variants preserve the winning mechanics?
 If one fails, mark it as "needs_regeneration".
 
-STEP 10 — OUTPUT
+STEP 11 — OUTPUT
 Return ONLY valid JSON via the tool call. No markdown. No commentary.
 All prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
-Scripts and summaries must be in ${lang}.`;
+Scripts and summaries must be in ${lang}.
+identity_distance MUST be "high" for ALL variants.`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
@@ -112,10 +108,12 @@ Additional metadata: ${JSON.stringify(metadata || {})}
 
 INSTRUCTIONS:
 1. LOOK at the cover frame image — describe scene, actor, pose, product placement, camera angle, lighting
-2. LOOK at the product image — describe EXACT packaging (this is the real product)
-3. Extract winner_blueprint with all winning mechanics
-4. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors but SAME winning mechanics
-5. Each variant needs: identity-swapped image prompt, script variant in ${lang}, HeyGen-ready brief, validation checks`,
+2. CHECK for social media overlays (comments, usernames, watermarks, captions) — set overlay_cleanup_required accordingly
+3. LOOK at the product image — describe EXACT packaging (this is the ground truth product)
+4. Extract winner_blueprint with all winning mechanics including primary_hook_label
+5. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance) but SAME winning mechanics
+6. Each variant needs: identity-swapped image prompt, identity_replacement_rules, image_generation_strategy, script variant in ${lang}, HeyGen-ready brief, validation checks
+7. identity_distance MUST be "high" for ALL variants`,
     });
 
     if (cover_url) {
@@ -151,16 +149,20 @@ INSTRUCTIONS:
                   input_mode: { type: "string", enum: ["URL", "VIDEO", "IMAGE_ONLY", "VIDEO_PLUS_IMAGE"] },
                   has_voice: { type: "boolean" },
                   content_type: { type: "string", enum: ["HUMAN_TALKING", "HANDS_DEMO", "PRODUCT_ONLY", "TEXT_ONLY"] },
+                  overlay_cleanup_required: { type: "boolean", description: "Whether the source frame contains social media overlays that need removal" },
+                  clean_frame_strategy: { type: "string", description: "Strategy for cleaning the frame, e.g. remove_ui_and_reconstruct_raw_scene" },
                   winner_blueprint: {
                     type: "object",
                     properties: {
                       duration_seconds: { type: "number" },
                       primary_hook_type: { type: "string" },
+                      primary_hook_label: { type: "string", enum: ["comment_reply_hook","price_objection_hook","shock_hook","before_after_hook","curiosity_hook","direct_problem_hook","testimonial_hook","founder_hook","demo_hook","social_proof_hook"] },
                       primary_hook_visual: { type: "string" },
                       primary_hook_verbal: { type: "string" },
                       core_emotion: { type: "string" },
                       energy_profile: { type: "string" },
                       performance_style: { type: "string" },
+                      performance_mechanics: { type: "array", items: { type: "string" } },
                       cta_style: { type: "string" },
                       conversion_mechanics: { type: "array", items: { type: "string" } },
                       scene_type: { type: "string" },
@@ -201,7 +203,7 @@ INSTRUCTIONS:
                         },
                       },
                     },
-                    required: ["duration_seconds", "primary_hook_type", "core_emotion", "energy_profile", "cta_style", "conversion_mechanics", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline"],
+                    required: ["duration_seconds", "primary_hook_type", "primary_hook_label", "core_emotion", "energy_profile", "cta_style", "conversion_mechanics", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline"],
                   },
                   variants: {
                     type: "array",
@@ -209,9 +211,11 @@ INSTRUCTIONS:
                       type: "object",
                       properties: {
                         variant_id: { type: "string" },
-                        identity_distance: { type: "string", enum: ["low", "medium", "high"] },
+                        identity_distance: { type: "string", enum: ["high"], description: "MUST always be high" },
                         variant_summary: { type: "string" },
                         actor_archetype: { type: "string" },
+                        identity_replacement_rules: { type: "array", items: { type: "string" }, description: "Explicit rules for replacing actor identity" },
+                        image_generation_strategy: { type: "array", items: { type: "string", enum: ["cleanup","reconstruct","replace_actor"] }, description: "Multi-stage pipeline steps" },
                         actor_visual_direction: {
                           type: "object",
                           properties: {
@@ -302,6 +306,7 @@ INSTRUCTIONS:
                       },
                       required: [
                         "variant_id", "identity_distance", "variant_summary", "actor_archetype",
+                        "identity_replacement_rules", "image_generation_strategy",
                         "actor_visual_direction", "script_variant", "on_screen_text_plan",
                         "shotlist", "scene_geometry", "base_image_prompt_9x16",
                         "heygen_ready_brief", "negative_prompt",
@@ -310,7 +315,7 @@ INSTRUCTIONS:
                     },
                   },
                 },
-                required: ["input_mode", "has_voice", "content_type", "winner_blueprint", "variants"],
+                required: ["input_mode", "has_voice", "content_type", "overlay_cleanup_required", "clean_frame_strategy", "winner_blueprint", "variants"],
               },
             },
           },
@@ -343,6 +348,13 @@ INSTRUCTIONS:
     }
 
     const result = JSON.parse(toolCall.function.arguments);
+
+    // Force identity_distance to high for all variants
+    if (result.variants) {
+      for (const v of result.variants) {
+        v.identity_distance = "high";
+      }
+    }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
