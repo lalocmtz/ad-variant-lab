@@ -24,7 +24,7 @@ serve(async (req) => {
       });
     }
 
-    const response = await fetch(`https://api.kie.ai/api/v1/jobs/getTask?taskId=${encodeURIComponent(taskId)}`, {
+    const response = await fetch(`https://api.kie.ai/api/v1/jobs/task/${encodeURIComponent(taskId)}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${KIE_API_KEY}`,
