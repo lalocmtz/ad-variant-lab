@@ -19,9 +19,9 @@ serve(async (req) => {
     const lang = language || "es-MX";
     const diversity = diversity_intensity || "high";
 
-    const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine.
+    const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine for 15-Second Reconstruction.
 
-Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different character.
+Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different actor in EXACTLY 15 SECONDS.
 
 The analysis must capture BOTH:
 1. the visual actions happening in the video
@@ -36,6 +36,7 @@ Analyze the uploaded video cover frame and extract:
 - environment and scene setup
 - camera style and lighting conditions
 - subject description (appearance, energy, body language)
+- creator role and trust profile
 - props used and product interaction
 - spoken script (reconstruct from visual cues and metadata)
 - persuasion mechanics and psychological triggers
@@ -50,9 +51,40 @@ CRITICAL RULES
 4. Generate script variations that maintain the same persuasion structure.
 5. Write descriptions short, clear, and generative-AI friendly.
 6. Preserve same broad market plausibility as the original ad context.
-7. Do not generate unrelated demographic shifts in variants.
-8. All image prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
-9. Scripts, summaries, and guion fields in ${lang}.
+7. Preserve same creator role and trust profile in variants.
+8. Do not generate unrelated demographic shifts in variants.
+9. Do not generate arbitrary gender swaps.
+10. All image prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
+11. Scripts, summaries, and guion fields in ${lang}.
+
+15-SECOND COMPRESSION RULE (MANDATORY)
+Every animation prompt package must be optimized for exactly 15 seconds.
+No matter how long the original source video is, compress the ad into a 15-second execution blueprint.
+
+Compression logic:
+- 0.0–2.5s: Hook (strongest attention grab)
+- 2.5–6.0s: Reframe / context / value revelation
+- 6.0–10.5s: Strongest demo + value proof beats only
+- 10.5–12.5s: Objection resolution / price logic
+- 12.5–15.0s: CTA (clear, direct)
+
+If original < 15s: adapt pacing notes but still output 15s-ready timeline.
+If original > 15s: compress by keeping ONLY the highest-conversion beats. Remove filler.
+
+NO TEXT / NO GRAPHICS / NO OVERLAYS RULE (MANDATORY)
+The generated video must NOT include:
+- comment bubbles, captions, subtitle overlays, on-screen text
+- animated graphics, stickers, UI elements, social media comment cards
+- usernames, watermark text, floating text
+- any added motion graphics
+
+If the original ad uses a comment-reply hook, preserve that as spoken context and performance logic ONLY — do NOT render the comment visually.
+
+CREATOR CONSISTENCY RULE (MANDATORY)
+Do NOT change the creator category unless explicitly requested.
+Preserve: same broad market, same gender presentation, same creator role, same trust profile, same buyer context, same broad audience plausibility.
+Allowed: new face identity, different facial structure, different hairstyle, different age nuance within narrow band, different wording.
+Not allowed: gender swap, creator archetype change, audience context change, trust profile change.
 
 ANALYSIS FOCUS
 
@@ -64,31 +96,36 @@ Persuasion Mechanics: Identify objection handling, price justification, value st
 
 Psychological Triggers: Detect curiosity, relatability, urgency, reassurance, authority, humor, savings logic, bundle logic, price anchoring, personal identification.
 
+Compression Logic: Determine which beats are essential to preserve performance in a strict 15-second version.
+
 MARKET PLAUSIBILITY RULE
 Preserve the same broad regional, linguistic, cultural, and audience plausibility as the original creator and ad context. Generate a clearly different individual, but do not introduce an unrelated demographic or creator-vibe shift unless explicitly requested.
 
-In actor_profile_observed.market_context, describe the original creator's market fit.
-Examples: "young Spanish-speaking Mexican fitness UGC creator", "Latina beauty creator for Spanish-speaking ecommerce audience"
+In actor_profile_observed, describe:
+- market_context: e.g. "young Spanish-speaking Mexican fitness UGC creator"
+- rol_del_creador: e.g. "relatable explainer", "hype influencer", "testimonial giver"
+- perfil_de_confianza: e.g. "peer-level trust", "authority figure", "everyday user"
 
 VARIANT GENERATION (${numVariants} variants, identity_distance = "high", diversity: ${diversity})
 
 For each variant:
 - Generate a COMPLETELY DIFFERENT actor (different face shape, jawline, eyes, nose, hairstyle, facial proportions)
-- Preserve same broad market plausibility
+- Preserve same broad market plausibility, creator role, and trust profile
 - Generate a natural script variant in ${lang} (do NOT translate literally)
+- Compress script to fit 15-second execution
 - Generate a rich animation_prompt_json that includes:
-  - video_metadata
+  - video_metadata with duracion_total_segundos_objetivo: "15"
   - analisis_estructura_persuasiva with framework_detectado and explicacion_breve
   - triggers_psicologicos_detectados (array of strings)
   - configuracion_escena (entorno, iluminacion, camara, angulo, movimiento, calidad)
-  - sujeto_principal (tipo_persona, edad, genero, apariencia, energia, estilo_comunicacion, contexto_de_mercado)
+  - sujeto_principal (tipo_persona, edad, genero, apariencia, energia, estilo_comunicacion, contexto_de_mercado, rol_del_creador, perfil_de_confianza)
   - guion_original_completo (full original script)
   - estructura_del_guion (hook, contexto, demostracion, beneficio, manejo_objecion, cta)
-  - guion_variante (hook, body, cta, guion_completo for THIS variant)
+  - guion_variante (hook, body, cta, guion_completo for THIS variant — compressed for 15s)
   - instrucciones_para_recrear_el_video (ritmo, estilo_entrega, energia, pace, delivery_style, facial_expression, gesture_style, notas)
-  - linea_de_tiempo (array of segments with marca_de_tiempo, duracion, accion_fisica, gestos, movimiento, expresion, interaccion_utileria, guion_hablado, objetivo_persuasivo, prompt_de_animacion)
+  - linea_de_tiempo_15s (array of 5 segments covering exactly 0-15 seconds)
   - plantilla_replicable (descripcion, patron, por_que_funciona, como_replicar)
-  - restricciones_de_generacion
+  - restricciones_de_generacion (including duracion_objetivo_fija_15s, prohibir_texto_en_pantalla, prohibir_subtitulos, prohibir_comment_bubbles, prohibir_motion_graphics)
 
 HOOK CLASSIFICATION
 Use: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook`;
@@ -106,11 +143,13 @@ INSTRUCTIONS:
 1. LOOK at the cover frame — describe scene, actor, pose, product placement, camera angle, lighting
 2. CHECK for social media overlays — set overlay_cleanup_required accordingly
 3. LOOK at the product image — describe EXACT packaging (ground truth product)
-4. Identify market_context for the original creator
+4. Identify market_context, rol_del_creador, and perfil_de_confianza for the original creator
 5. Extract winner_blueprint with all winning mechanics
 6. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance)
-7. For EACH variant, generate a complete animation_prompt_json with full timeline, persuasion structure, and script variant
-8. identity_distance MUST be "high" for ALL variants`,
+7. For EACH variant, generate a complete animation_prompt_json with 15-second compressed timeline, persuasion structure, and script variant
+8. identity_distance MUST be "high" for ALL variants
+9. All timelines MUST be compressed to exactly 15 seconds
+10. Do NOT include text overlays, subtitles, comment bubbles, or UI graphics in any generation plan`,
     });
 
     if (cover_url) {
@@ -139,7 +178,7 @@ INSTRUCTIONS:
             type: "function",
             function: {
               name: "analysis_result",
-              description: "Return the complete reverse-engineered ad analysis with winner blueprint and identity-swapped variants including animation prompt packages",
+              description: "Return the complete reverse-engineered ad analysis with winner blueprint and identity-swapped variants including 15-second animation prompt packages",
               parameters: {
                 type: "object",
                 properties: {
@@ -165,7 +204,7 @@ INSTRUCTIONS:
                       scene_type: { type: "string" },
                       camera_style: { type: "string" },
                       gesture_profile: { type: "string" },
-                      guion_original_completo: { type: "string", description: "Full original script reconstructed from the ad" },
+                      guion_original_completo: { type: "string" },
                       estructura_del_guion: {
                         type: "object",
                         properties: {
@@ -193,8 +232,10 @@ INSTRUCTIONS:
                           creator_archetype: { type: "string" },
                           presence_style: { type: "string" },
                           market_context: { type: "string" },
+                          rol_del_creador: { type: "string" },
+                          perfil_de_confianza: { type: "string" },
                         },
-                        required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style", "market_context"],
+                        required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style", "market_context", "rol_del_creador", "perfil_de_confianza"],
                       },
                       scene_geometry: {
                         type: "object",
@@ -287,12 +328,13 @@ INSTRUCTIONS:
                         negative_prompt: { type: "string" },
                         animation_prompt_json: {
                           type: "object",
-                          description: "Rich animation blueprint JSON for Sora/HeyGen/Kling/Runway/AIgen",
+                          description: "Rich 15-second animation blueprint JSON for Sora/HeyGen/Kling/Runway/AIgen. Timeline MUST cover exactly 0-15 seconds.",
                           properties: {
                             video_metadata: {
                               type: "object",
                               properties: {
-                                duracion_total_segundos: { type: "string" },
+                                duracion_total_segundos_objetivo: { type: "string", description: "Must be '15'" },
+                                duracion_original_segundos: { type: "string" },
                                 tipo_video: { type: "string" },
                                 formato: { type: "string" },
                                 estilo_contenido: { type: "string" },
@@ -304,6 +346,7 @@ INSTRUCTIONS:
                               properties: {
                                 framework_detectado: { type: "array", items: { type: "string" } },
                                 explicacion_breve: { type: "string" },
+                                elementos_esenciales_preservados: { type: "array", items: { type: "string" } },
                               },
                             },
                             triggers_psicologicos_detectados: { type: "array", items: { type: "string" } },
@@ -329,6 +372,8 @@ INSTRUCTIONS:
                                 energia: { type: "string" },
                                 estilo_comunicacion: { type: "string" },
                                 contexto_de_mercado: { type: "string" },
+                                rol_del_creador: { type: "string" },
+                                perfil_de_confianza: { type: "string" },
                               },
                             },
                             guion_original_completo: { type: "string" },
@@ -366,8 +411,9 @@ INSTRUCTIONS:
                                 notas_importantes: { type: "string" },
                               },
                             },
-                            linea_de_tiempo: {
+                            linea_de_tiempo_15s: {
                               type: "array",
+                              description: "Exactly 5 segments covering 0.0-15.0 seconds",
                               items: {
                                 type: "object",
                                 properties: {
@@ -399,13 +445,20 @@ INSTRUCTIONS:
                                 usar_producto_subido_como_verdad_absoluta: { type: "boolean" },
                                 preservar_mecanica_ganadora: { type: "boolean" },
                                 preservar_contexto_de_mercado: { type: "boolean" },
+                                preservar_rol_del_creador: { type: "boolean" },
+                                preservar_perfil_de_confianza: { type: "boolean" },
                                 no_clonar_actor_original: { type: "boolean" },
                                 mantener_estilo_ugc_natural: { type: "boolean" },
                                 no_hacer_traduccion_literal: { type: "boolean" },
+                                duracion_objetivo_fija_15s: { type: "boolean" },
+                                prohibir_texto_en_pantalla: { type: "boolean" },
+                                prohibir_subtitulos: { type: "boolean" },
+                                prohibir_comment_bubbles: { type: "boolean" },
+                                prohibir_motion_graphics: { type: "boolean" },
                               },
                             },
                           },
-                          required: ["video_metadata", "configuracion_escena", "sujeto_principal", "guion_original_completo", "estructura_del_guion", "guion_variante_para_esta_imagen", "instrucciones_para_recrear_el_video", "linea_de_tiempo", "restricciones_de_generacion"],
+                          required: ["video_metadata", "configuracion_escena", "sujeto_principal", "guion_original_completo", "estructura_del_guion", "guion_variante_para_esta_imagen", "instrucciones_para_recrear_el_video", "linea_de_tiempo_15s", "restricciones_de_generacion"],
                         },
                         similarity_check_result: {
                           type: "object",

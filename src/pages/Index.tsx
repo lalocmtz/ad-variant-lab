@@ -88,6 +88,8 @@ export interface WinnerBlueprint {
     creator_archetype: string;
     presence_style: string;
     market_context?: string;
+    rol_del_creador?: string;
+    perfil_de_confianza?: string;
   };
   scene_geometry: SceneGeometry;
   beat_timeline: Array<{
@@ -152,11 +154,12 @@ function buildAnimationPromptPackage(
   // Use the rich animation_prompt_json from Gemini if available, otherwise build a fallback
   const promptJson = variant.animation_prompt_json || {
     video_metadata: {
-      duracion_total_segundos: String(winnerBlueprint.duration_seconds),
+      duracion_total_segundos_objetivo: "15",
+      duracion_original_segundos: String(winnerBlueprint.duration_seconds),
       tipo_video: winnerBlueprint.scene_type || "",
-      formato: "vertical short form",
+      formato: "9:16 vertical",
       estilo_contenido: winnerBlueprint.performance_style || "",
-      ritmo_video: winnerBlueprint.energy_profile || "",
+      ritmo_video: "condensed_for_15_seconds",
     },
     analisis_estructura_persuasiva: winnerBlueprint.analisis_estructura_persuasiva || {
       framework_detectado: ["hook", "contexto", "demostracion", "beneficio", "cta"],
@@ -177,6 +180,8 @@ function buildAnimationPromptPackage(
       energia: variant.heygen_ready_brief?.energy || "",
       estilo_comunicacion: variant.heygen_ready_brief?.delivery_style || "",
       contexto_de_mercado: winnerBlueprint.actor_profile_observed?.market_context || "",
+      rol_del_creador: winnerBlueprint.actor_profile_observed?.rol_del_creador || "",
+      perfil_de_confianza: winnerBlueprint.actor_profile_observed?.perfil_de_confianza || "",
     },
     guion_original_completo: winnerBlueprint.guion_original_completo || "",
     estructura_del_guion: winnerBlueprint.estructura_del_guion || {},
@@ -187,39 +192,53 @@ function buildAnimationPromptPackage(
       guion_completo: variant.script_variant?.full_script || "",
     },
     instrucciones_para_recrear_el_video: {
-      objetivo: "Recreate the same ad structure using this generated image/actor while preserving the original persuasion mechanics.",
+      objetivo: "Recreate the same ad structure using this generated image/actor while preserving the original persuasion mechanics in exactly 15 seconds.",
       energia: variant.heygen_ready_brief?.energy || "",
       pace: variant.heygen_ready_brief?.pace || "",
       delivery_style: variant.heygen_ready_brief?.delivery_style || "",
       facial_expression: variant.heygen_ready_brief?.facial_expression || "",
       gesture_style: variant.heygen_ready_brief?.gesture_style || "",
     },
-    linea_de_tiempo: winnerBlueprint.beat_timeline?.map(b => ({
-      marca_de_tiempo: `${b.start_sec}s - ${b.end_sec}s`,
-      duracion_segundos: String(b.end_sec - b.start_sec),
-      beat_type: b.beat_type,
-      descripcion: b.description,
-    })) || [],
+    linea_de_tiempo_15s: [
+      { marca_de_tiempo: "0.0-2.5", duracion_segundos: "2.5", objetivo_persuasivo: "HOOK" },
+      { marca_de_tiempo: "2.5-6.0", duracion_segundos: "3.5", objetivo_persuasivo: "REFRAME / CONTEXT" },
+      { marca_de_tiempo: "6.0-10.5", duracion_segundos: "4.5", objetivo_persuasivo: "DEMO + VALUE PROOF" },
+      { marca_de_tiempo: "10.5-12.5", duracion_segundos: "2.0", objetivo_persuasivo: "OBJECTION / PRICE" },
+      { marca_de_tiempo: "12.5-15.0", duracion_segundos: "2.5", objetivo_persuasivo: "CTA" },
+    ],
     restricciones_de_generacion: {
       usar_producto_subido_como_verdad_absoluta: true,
       preservar_mecanica_ganadora: true,
       preservar_contexto_de_mercado: true,
+      preservar_rol_del_creador: true,
+      preservar_perfil_de_confianza: true,
       no_clonar_actor_original: true,
       mantener_estilo_ugc_natural: true,
       no_hacer_traduccion_literal: true,
+      duracion_objetivo_fija_15s: true,
+      prohibir_texto_en_pantalla: true,
+      prohibir_subtitulos: true,
+      prohibir_comment_bubbles: true,
+      prohibir_motion_graphics: true,
     },
   };
 
   const promptText = `Use the attached generated image as the visual identity reference for the actor.
 
-Your task is to animate or recreate a vertical short-form UGC ad that preserves the same winning persuasion structure, pacing, gestures, and conversion logic of the source ad.
+Your task is to animate or recreate a vertical short-form UGC ad that preserves the same winning persuasion structure, creator role, trust profile, pacing logic, gestures, and conversion mechanics of the source ad.
+
+This execution must be exactly 15 seconds long.
 
 Important rules:
 - use the uploaded product as absolute truth
 - preserve the same broad market and creator plausibility as the original ad
+- preserve the same creator role and trust profile unless explicitly changed by the user
 - do not clone the original actor
 - keep this generated actor identity
 - preserve hook structure, delivery energy, body language rhythm, objection handling, and CTA logic
+- compress the ad to exactly 15 seconds by keeping only the highest-conversion beats
+- do not add on-screen text, subtitles, captions, comment bubbles, social UI, or motion graphics
+- preserve the comment-reply mechanic only as spoken context if relevant, never as visible text
 - keep the result natural, believable, handheld, and UGC-style
 - use the following JSON blueprint as the execution spec
 

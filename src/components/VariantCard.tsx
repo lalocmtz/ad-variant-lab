@@ -91,7 +91,7 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
               Prompt universal para Sora / HeyGen / Kling
             </p>
             <p className="text-[10px] text-muted-foreground">
-              Copia y pega este bloque completo en tu generador de video. Ya incluye estructura, energía, delivery, timeline y guion variante.
+              Copia y pega este bloque completo en tu generador de video. Ya incluye estructura, energía, delivery, timeline comprimido a 15 segundos y guion variante.
             </p>
             <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2.5">
               <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-foreground font-mono">
@@ -158,7 +158,7 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
                 <Detail label="Hook" value={variant.script_variant.hook} />
                 <Detail label="Body" value={variant.script_variant.body} />
                 <Detail label="CTA" value={variant.script_variant.cta} />
-                <Detail label="Duración" value={`${variant.script_variant.duration_target_seconds}s`} />
+                <Detail label="Duración objetivo" value="15s" />
               </>
             )}
             {variant.heygen_ready_brief && (

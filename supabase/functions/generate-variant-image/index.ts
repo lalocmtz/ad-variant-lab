@@ -66,7 +66,7 @@ OUTPUT: 9:16 vertical, maximum resolution, photorealistic.
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: No people, no faces, no hands, no body parts, no text overlays, no logos other than on product, no watermarks, no distorted elements, no product redesign.`;
+NEGATIVE: No people, no faces, no hands, no body parts, no text overlays, no logos other than on product, no watermarks, no distorted elements, no product redesign, no on-screen text, no subtitles, no captions, no comment bubbles, no social media UI.`;
 }
 
 function buildPromptAvatar(
@@ -129,12 +129,6 @@ The reference frame contains social media overlays. You MUST:
 - Product lock remains ABSOLUTE\n`
     : "";
 
-  const marketPlausibility = `
-MARKET PLAUSIBILITY RULE:
-Keep the same broad market context and creator-market fit as the original ad.
-Do not arbitrarily shift the actor into an unrelated demographic presentation or creator vibe.
-Preserve audience plausibility, not exact identity.`;
-
   const customNegative = negativePrompt || "No same actor identity, no nearly identical faces, no sibling-like similarity, no only wardrobe changes, no unrealistic product, no studio lighting, no cinematic commercial style, no stock photo appearance.";
 
   return `REFERENCE FRAME: See the attached cover frame image below.
@@ -143,7 +137,15 @@ PRODUCT REFERENCE: See the attached product image below.
 This is VARIANT ${idx + 1} of ${total}.
 ${cleanupBlock}${regenBlock}
 GOAL: Generate a realistic UGC-style vertical image that preserves the winning ad mechanics but uses a clearly different actor.
-${marketPlausibility}
+
+CREATOR CONSISTENCY RULE (MANDATORY):
+Preserve the same creator role, same market fit, same trust profile, same gender presentation, and same broad audience plausibility as the original ad.
+Do NOT change the creator category. The variant must feel like the same ad strategy expressed by a different plausible actor from the same market context.
+
+MARKET PLAUSIBILITY:
+Keep the same broad market context and creator-market fit as the original ad.
+Do not arbitrarily shift the actor into an unrelated demographic presentation, unrelated phenotype, or unrelated creator vibe.
+Preserve audience plausibility, not exact identity.
 
 STAGE A — FRAME CLEANUP
 Use the reference frame as structural guidance ONLY.
@@ -172,6 +174,8 @@ PRESERVE:
 - natural handheld UGC realism
 - winning hook energy
 - same broad wardrobe logic if relevant
+- same creator role and trust profile
+- same creator-market fit
 
 CHANGE:
 - actor identity completely (face shape, jawline, eyebrows, eye shape, nose, lips, hairstyle, facial proportions)
@@ -180,23 +184,28 @@ FORBIDDEN:
 - same face or similar face
 - sibling-like similarity
 - unrelated demographic drift
+- arbitrary gender swap
+- different creator archetype
+- different audience context
 - stock photo look, studio lighting, cinematic commercial look
+- on-screen text, subtitles, captions, comment bubbles, social media UI, motion graphics
 
 UGC REALISM: natural indoor lighting, handheld phone camera perspective, slightly imperfect framing, authentic creator posture, casual environment.
 
 PRIORITY ORDER:
 1. Exact product lock
 2. Winning mechanics preserved
-3. New actor identity (HIGH distance)
-4. Market plausibility
-5. UGC realism
+3. Creator role and trust profile preserved
+4. New actor identity (HIGH distance)
+5. Market plausibility
+6. UGC realism
 
-OUTPUT: 9:16 vertical, hyper-realistic, full HD, maximum texture realism.
+OUTPUT: 9:16 vertical, hyper-realistic, full HD, maximum texture realism. Clean raw UGC recording look — NO text overlays, NO graphics.
 
 VARIANT CONTEXT:
 ${basePrompt}
 
-NEGATIVE: ${customNegative}, no social media overlays, no watermarks, no UI elements, no identical scene copy, no same facial features, no clone-like result, no unrelated demographic shift, no incorrect product.`;
+NEGATIVE: ${customNegative}, no social media overlays, no watermarks, no UI elements, no identical scene copy, no same facial features, no clone-like result, no unrelated demographic shift, no incorrect product, no on-screen text, no subtitles, no captions, no comment bubbles, no floating text, no animated graphics, no stickers, no motion graphics, no different creator archetype, no different gender presentation unless requested.`;
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
