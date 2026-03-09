@@ -8,38 +8,55 @@ const corsHeaders = {
 const SANITIZATION_SUFFIX = `
 
 MANDATORY VIDEO RULES:
-- This video must be EXACTLY 15 seconds long
-- Do NOT add any on-screen text, subtitles, or captions
-- Do NOT render comment bubbles or social media UI elements
-- Do NOT add watermarks, stickers, or motion graphics
-- Do NOT add floating text, price tags, or text cards
-- Keep the result looking like a clean native camera recording
-- Preserve the generated image as the actor identity and first-frame visual reference
-- Keep the actor visually consistent with the reference image throughout
-- Animate naturally from that identity with handheld UGC realism
-- Preserve the same creator role, market fit, and trust profile
-- Preserve the exact uploaded product appearance`;
+- Use the attached generated image as the actor identity and first-frame visual reference.
+- Create a natural handheld 9:16 UGC-style video exactly 15 seconds long.
+- Preserve the same winning persuasion structure, creator role, trust profile, and market fit.
+- Preserve the exact uploaded product.
+- Compress to 15 seconds by keeping only the highest-conversion beats:
+  0.0-2.5s HOOK | 2.5-6.0s REFRAME/CONTEXT | 6.0-10.5s DEMO+PROOF | 10.5-12.5s OBJECTION | 12.5-15.0s CTA
+- Do NOT add subtitles, captions, comment bubbles, on-screen text, social media UI, stickers, or motion graphics.
+- Preserve comment-reply logic only as spoken context, never as visible text.
+- Keep the final result looking like a clean native smartphone recording.
+- Animate naturally from the reference image identity with handheld UGC realism.`;
 
 function sanitizePrompt(promptText: string): string {
-  // If prompt already mentions key rules, still append to reinforce
   let sanitized = promptText.trim();
-  
-  // Truncate if excessively long (Sora has limits)
-  if (sanitized.length > 12000) {
-    // Find the JSON block and keep it, trim the prose
+
+  // Truncate if excessively long (Sora prompt max is 10000 chars)
+  const MAX_PROMPT = 9500; // leave room for suffix
+  if (sanitized.length > MAX_PROMPT) {
+    // Try to preserve JSON blueprint section
     const jsonStart = sanitized.indexOf('"video_metadata"');
     if (jsonStart > 0) {
-      const beforeJson = sanitized.substring(0, Math.min(3000, jsonStart));
-      const fromJson = sanitized.substring(jsonStart - 10); // include the opening brace
+      const beforeJson = sanitized.substring(0, Math.min(2500, jsonStart));
+      const fromJson = sanitized.substring(jsonStart - 10);
       sanitized = beforeJson + "\n...\n" + fromJson;
     } else {
-      sanitized = sanitized.substring(0, 12000);
+      sanitized = sanitized.substring(0, MAX_PROMPT);
     }
   }
-  
+
   sanitized += SANITIZATION_SUFFIX;
+
+  // Final hard cap at 10000 (Kie AI limit)
+  if (sanitized.length > 10000) {
+    sanitized = sanitized.substring(0, 10000);
+  }
+
   return sanitized;
 }
+
+const ERROR_MAP: Record<number, string> = {
+  401: "La autenticación con Kie AI falló.",
+  402: "No hay créditos suficientes para generar el video.",
+  404: "No se pudo consultar el estado del video en el proveedor.",
+  422: "La solicitud fue rechazada por parámetros inválidos.",
+  429: "Se alcanzó el límite temporal de solicitudes. Intenta de nuevo.",
+  455: "El servicio de video está temporalmente en mantenimiento.",
+  500: "La generación falló en el proveedor.",
+  501: "La generación falló en el proveedor.",
+  505: "La función de generación de video está deshabilitada.",
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -47,19 +64,24 @@ serve(async (req) => {
   try {
     const { variantId, imageUrl, promptText, mode } = await req.json();
 
-    // Validation
+    // --- Validation ---
+    if (!variantId) {
+      return new Response(JSON.stringify({ error: "variantId es requerido." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     if (!imageUrl) {
       return new Response(JSON.stringify({ error: "La imagen de la variante es requerida." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!promptText || promptText.trim().length < 50) {
-      return new Response(JSON.stringify({ error: "El prompt de animación es requerido y debe ser suficientemente detallado." }), {
+    if (imageUrl.startsWith("data:")) {
+      return new Response(JSON.stringify({ error: "La imagen de entrada no es pública y no puede ser usada por el generador. Sube la imagen primero." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!variantId) {
-      return new Response(JSON.stringify({ error: "variantId es requerido." }), {
+    if (!promptText || promptText.trim().length < 50) {
+      return new Response(JSON.stringify({ error: "El prompt de animación es requerido y debe ser suficientemente detallado." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -71,37 +93,36 @@ serve(async (req) => {
       });
     }
 
-    // Sanitize prompt
+    // --- Sanitize prompt ---
     const sanitizedPrompt = sanitizePrompt(promptText);
 
-    // Determine model
+    // --- Build request body per Kie AI spec ---
     const generationMode = mode || "standard";
     const model = generationMode === "pro" ? "sora-2-pro-image-to-video" : "sora-2-image-to-video";
 
-    // Build request body
-    const requestBody: Record<string, unknown> = {
-      model,
-      input: {
-        prompt: sanitizedPrompt,
-        image_urls: [imageUrl],
-        aspect_ratio: "portrait",
-        n_frames: "15",
-        remove_watermark: true,
-      },
+    const input: Record<string, unknown> = {
+      prompt: sanitizedPrompt,
+      image_urls: [imageUrl],
+      aspect_ratio: "portrait",
+      n_frames: "15",
+      remove_watermark: true,
     };
 
-    // Add size param for pro mode
+    // Pro mode adds size param
     if (generationMode === "pro") {
-      (requestBody.input as Record<string, unknown>).size = "standard";
+      input.size = "standard";
     }
+
+    const requestBody = { model, input };
 
     console.log("Sending to Kie AI:", {
       variantId,
       model,
-      imageUrlLength: imageUrl.length,
+      imageUrlPreview: imageUrl.substring(0, 80),
       promptLength: sanitizedPrompt.length,
     });
 
+    // --- Call Kie AI ---
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",
       headers: {
@@ -114,21 +135,8 @@ serve(async (req) => {
     const responseText = await response.text();
     console.log("Kie AI response status:", response.status, "body preview:", responseText.substring(0, 500));
 
-    if (!response.ok) {
-      const errorMap: Record<number, string> = {
-        401: "La autenticación con el proveedor de video falló.",
-        402: "No hay créditos suficientes para generar el video.",
-        422: "La solicitud de video fue rechazada por parámetros inválidos.",
-        429: "Se alcanzó el límite temporal de solicitudes. Intenta de nuevo.",
-      };
-      const friendlyError = errorMap[response.status] || `La generación de video falló en el proveedor (${response.status}).`;
-      return new Response(JSON.stringify({ error: friendlyError, provider_status: response.status }), {
-        status: response.status >= 500 ? 502 : response.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    let data;
+    // --- Parse response ---
+    let data: Record<string, unknown>;
     try {
       data = JSON.parse(responseText);
     } catch {
@@ -137,37 +145,45 @@ serve(async (req) => {
       });
     }
 
-    // Kie AI may return error codes inside a 200 HTTP response
-    if (data.code && data.code !== 200) {
-      const kieErrorMap: Record<number, string> = {
-        401: "La autenticación con el proveedor de video falló.",
-        402: "No hay créditos suficientes para generar el video.",
-        422: "La solicitud de video fue rechazada por parámetros inválidos.",
-        429: "Se alcanzó el límite temporal de solicitudes. Intenta de nuevo.",
-        455: "El servicio de video está temporalmente en mantenimiento.",
-        500: "Error interno del proveedor de video.",
-        501: "La generación de video falló en el proveedor.",
-        505: "La función de generación de video está deshabilitada.",
-      };
-      const friendlyError = kieErrorMap[data.code] || `Error del proveedor de video (código ${data.code}): ${data.msg || "desconocido"}`;
-      console.error("Kie AI application error:", data.code, data.msg, JSON.stringify(data).substring(0, 500));
-      return new Response(JSON.stringify({ error: friendlyError, provider_code: data.code, provider_msg: data.msg }), {
+    // HTTP-level failure
+    if (!response.ok) {
+      const friendlyError = ERROR_MAP[response.status] || `La generación de video falló en el proveedor (HTTP ${response.status}).`;
+      return new Response(JSON.stringify({ error: friendlyError, provider_status: response.status }), {
+        status: response.status >= 500 ? 502 : response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Application-level failure (Kie returns 200 HTTP but error code in JSON)
+    const kieCode = (data as any).code;
+    if (kieCode !== undefined && kieCode !== 200) {
+      const friendlyError = ERROR_MAP[kieCode] || `Error del proveedor de video (código ${kieCode}): ${(data as any).msg || "desconocido"}`;
+      console.error("Kie AI application error:", kieCode, (data as any).msg);
+      return new Response(JSON.stringify({ error: friendlyError, provider_code: kieCode, provider_msg: (data as any).msg }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const taskId = data.data?.taskId || data.taskId || data.data?.task_id || data.task_id;
+    // --- Extract taskId ---
+    const taskId = (data as any).data?.taskId
+      || (data as any).taskId
+      || (data as any).data?.task_id
+      || (data as any).task_id;
+
     if (!taskId) {
-      console.error("No taskId in response. Full response:", JSON.stringify(data).substring(0, 1000));
-      return new Response(JSON.stringify({ error: `El proveedor no devolvió un taskId válido. Respuesta: ${JSON.stringify(data).substring(0, 200)}` }), {
+      console.error("No taskId in response:", JSON.stringify(data).substring(0, 500));
+      return new Response(JSON.stringify({ error: "El proveedor no devolvió un taskId válido." }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // --- Success ---
     return new Response(JSON.stringify({
       taskId,
       variantId,
       status: "queued",
+      imageUrl,
+      provider: "kie_sora2",
       model,
       mode: generationMode,
     }), {
