@@ -21,80 +21,61 @@ serve(async (req) => {
 
     const systemPrompt = `You are an expert TikTok ad deconstruction engine.
 
-Your job is not to copy the video. Your job is to extract the winning mechanics of the ad and rebuild them with different actors.
-The goal is to generate new ad variants that preserve the performance structure of a winning TikTok ad.
-The analysis must separate: 1) overlay cleanup 2) scene reconstruction 3) actor identity replacement.
+Your job is to extract the winning mechanics of the ad and convert them into a copy-paste-ready prompt package for downstream video generation tools like AIgen or Sora.
 
-STEP 1 — UNDERSTAND THE ORIGINAL AD
-Analyze the full TikTok video and extract:
-- total duration, hook timing, hook type, hook label, emotional trigger
-- visual framing, creator archetype, gesture style, product interaction
-- camera style, energy curve, CTA structure, performance mechanics
-Focus on conversion mechanics, not actor identity.
+The user does not need a long explanation. The user needs:
+1. image variants with different actors
+2. a perfect execution prompt under each image
+
+Focus on: product truth, winner mechanics, natural delivery, actor replacement with market plausibility, copy-paste usability.
+
+STEP 1 — ANALYZE THE ORIGINAL AD
+Extract: total duration, hook timing, hook type, hook label, primary verbal hook, primary visual hook, energy profile, performance style, delivery style, cadence/pace, CTA logic, conversion mechanics, scene type, camera style, gesture profile, performance mechanics, creator archetype, broad market context.
 
 STEP 2 — DETECT OVERLAYS
-Inspect whether the source frame contains:
-- comments, usernames, timestamps, engagement icons
-- watermark logos, colored UI frames, captions
-If present: overlay_cleanup_required = true
+If the source frame contains comments, usernames, timestamps, engagement icons, watermark logos, colored UI frames, captions: overlay_cleanup_required = true
 
-STEP 3 — EXTRACT WINNING MECHANICS (winner_blueprint)
-Preserve: ad duration, hook timing, product placement, product orientation, camera distance, handheld UGC realism, visual hook structure, gesture rhythm, emotional intention, creator authenticity, CTA logic, storytelling sequence, scene type.
+STEP 3 — PRODUCT LOCK
+The uploaded product image is the absolute truth. Always use it over the source video if there is any mismatch.
 
-STEP 4 — PRODUCT LOCK
-The uploaded product image is the ground truth reference.
-- Match the exact shape, color, label, proportions, and packaging details
-- Do not reinterpret the product
-
-STEP 5 — IDENTITY SWAP (MANDATORY — FORCED HIGH DISTANCE)
-The actor identity MUST change completely. identity_distance must ALWAYS be "high".
+STEP 4 — IDENTITY SWAP WITH MARKET PLAUSIBILITY
+Generate a clearly different person for each variant. identity_distance MUST be "high".
 Diversity intensity: ${diversity}
 
-Generate a NEW face identity for each variant. Every variant must be clearly different from:
-- the original actor
-- each other
+Change: face shape, jawline, eyebrows, eye shape, nose structure, lips, hairstyle, facial proportions.
+Preserve: same broad market plausibility, same broad audience fit, same regional creator context, same ad logic, same creator credibility style.
 
-Forbidden outcomes:
-- same actor with minor edits
-- similar facial structure / sibling-like similarity
-- only wardrobe change / nearly identical faces
+MARKET PLAUSIBILITY RULE:
+Preserve the same broad regional/audience plausibility and creator-market fit as the original ad.
+Do not arbitrarily shift the actor into an unrelated phenotype, demographic presentation, or creator vibe.
 
-Each variant must differ in: face shape, jawline, eyebrow structure, eye shape, nose shape, lip structure, hairline, hairstyle, facial proportions, overall vibe.
-The difference must be immediately noticeable at first glance.
-Keep demographic plausibility for the target market.
+Do NOT: clone the actor, create sibling-like similarity, drift into unrelated demographic presentation, rely only on wardrobe change.
 
-STEP 6 — SCENE RECONSTRUCTION
-Preserve: camera angle, approximate framing, camera distance, lighting direction, action, gesture logic.
-Allow small variations: furniture, wall tone, background details, decoration.
-The scene should feel like the same type of room but NOT an identical copy.
+STEP 5 — MARKET CONTEXT (REQUIRED)
+In actor_profile_observed, include a market_context field that describes the original creator's market fit.
+Examples: "young Spanish-speaking Mexican fitness UGC creator", "Latina beauty creator for Spanish-speaking ecommerce audience"
+This field prevents arbitrary actor drift in downstream generation.
 
-STEP 7 — SCRIPT VARIANTS
-Each variant must include a script variant in language: ${lang}
-- Preserve hook intention, emotional trigger, duration, CTA logic, conversion mechanics
-- Change wording naturally — do NOT translate literally
-- Scripts must sound natural for avatar delivery
+STEP 6 — SCRIPT VARIANTS (language: ${lang})
+Preserve: hook intention, emotional trigger, duration, CTA logic, conversion mechanics.
+Change wording naturally. Do NOT translate literally. Make scripts natural for AI video generation.
 
-STEP 8 — VARIANT DIVERSITY STRATEGY
+STEP 7 — VARIANT DIVERSITY
 Variant A: same mechanics + different actor + same energy + different facial structure + different outfit nuance
 Variant B: same mechanics + different actor + different hairstyle + slight background variation + slightly different wording
-Variant C: same mechanics + different actor + compatible different vibe + more expressive performance + alternative hook wording preserving intent
+Variant C: same mechanics + different actor + compatible different vibe + more expressive + alternative hook wording preserving intent
 
-STEP 9 — HOOK CLASSIFICATION
-Classify the primary hook using one of these labels:
-comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook
+STEP 8 — HOOK CLASSIFICATION
+Classify using: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook
 
-STEP 10 — INTERNAL VALIDATION
-Validate:
-- Does each variant clearly look like a different individual from the original?
-- Are A, B, C sufficiently different from each other?
-- Do all variants preserve the exact uploaded product?
-- Do all variants preserve the winning mechanics?
-If one fails, mark it as "needs_regeneration".
+STEP 9 — VALIDATION
+Validate each variant looks different from original and from each other, product matches, mechanics preserved.
+If one fails, mark needs_regeneration.
 
-STEP 11 — OUTPUT
+STEP 10 — OUTPUT
 Return ONLY valid JSON via the tool call. No markdown. No commentary.
 All prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
-Scripts and summaries must be in ${lang}.
+Scripts and summaries in ${lang}.
 identity_distance MUST be "high" for ALL variants.`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
@@ -107,12 +88,12 @@ Diversity intensity: ${diversity}
 Additional metadata: ${JSON.stringify(metadata || {})}
 
 INSTRUCTIONS:
-1. LOOK at the cover frame image — describe scene, actor, pose, product placement, camera angle, lighting
-2. CHECK for social media overlays (comments, usernames, watermarks, captions) — set overlay_cleanup_required accordingly
-3. LOOK at the product image — describe EXACT packaging (this is the ground truth product)
-4. Extract winner_blueprint with all winning mechanics including primary_hook_label
-5. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance) but SAME winning mechanics
-6. Each variant needs: identity-swapped image prompt, identity_replacement_rules, image_generation_strategy, script variant in ${lang}, HeyGen-ready brief, validation checks
+1. LOOK at the cover frame — describe scene, actor, pose, product placement, camera angle, lighting
+2. CHECK for social media overlays — set overlay_cleanup_required accordingly
+3. LOOK at the product image — describe EXACT packaging (ground truth product)
+4. Identify market_context for the original creator
+5. Extract winner_blueprint with all winning mechanics including primary_hook_label and market_context
+6. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance) but SAME winning mechanics and SAME market plausibility
 7. identity_distance MUST be "high" for ALL variants`,
     });
 
@@ -149,8 +130,8 @@ INSTRUCTIONS:
                   input_mode: { type: "string", enum: ["URL", "VIDEO", "IMAGE_ONLY", "VIDEO_PLUS_IMAGE"] },
                   has_voice: { type: "boolean" },
                   content_type: { type: "string", enum: ["HUMAN_TALKING", "HANDS_DEMO", "PRODUCT_ONLY", "TEXT_ONLY"] },
-                  overlay_cleanup_required: { type: "boolean", description: "Whether the source frame contains social media overlays that need removal" },
-                  clean_frame_strategy: { type: "string", description: "Strategy for cleaning the frame, e.g. remove_ui_and_reconstruct_raw_scene" },
+                  overlay_cleanup_required: { type: "boolean" },
+                  clean_frame_strategy: { type: "string" },
                   winner_blueprint: {
                     type: "object",
                     properties: {
@@ -175,8 +156,9 @@ INSTRUCTIONS:
                           approx_age_band: { type: "string" },
                           creator_archetype: { type: "string" },
                           presence_style: { type: "string" },
+                          market_context: { type: "string", description: "Broad market/audience fit of the original creator, e.g. 'young Spanish-speaking Mexican fitness UGC creator'" },
                         },
-                        required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style"],
+                        required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style", "market_context"],
                       },
                       scene_geometry: {
                         type: "object",
@@ -211,11 +193,11 @@ INSTRUCTIONS:
                       type: "object",
                       properties: {
                         variant_id: { type: "string" },
-                        identity_distance: { type: "string", enum: ["high"], description: "MUST always be high" },
+                        identity_distance: { type: "string", enum: ["high"] },
                         variant_summary: { type: "string" },
                         actor_archetype: { type: "string" },
-                        identity_replacement_rules: { type: "array", items: { type: "string" }, description: "Explicit rules for replacing actor identity" },
-                        image_generation_strategy: { type: "array", items: { type: "string", enum: ["cleanup","reconstruct","replace_actor"] }, description: "Multi-stage pipeline steps" },
+                        identity_replacement_rules: { type: "array", items: { type: "string" } },
+                        image_generation_strategy: { type: "array", items: { type: "string", enum: ["cleanup","reconstruct","replace_actor"] } },
                         actor_visual_direction: {
                           type: "object",
                           properties: {
@@ -246,10 +228,7 @@ INSTRUCTIONS:
                           type: "array",
                           items: {
                             type: "object",
-                            properties: {
-                              timestamp: { type: "string" },
-                              text: { type: "string" },
-                            },
+                            properties: { timestamp: { type: "string" }, text: { type: "string" } },
                             required: ["timestamp", "text"],
                           },
                         },
@@ -257,11 +236,7 @@ INSTRUCTIONS:
                           type: "array",
                           items: {
                             type: "object",
-                            properties: {
-                              shot: { type: "number" },
-                              duration: { type: "string" },
-                              description: { type: "string" },
-                            },
+                            properties: { shot: { type: "number" }, duration: { type: "string" }, description: { type: "string" } },
                             required: ["shot", "duration", "description"],
                           },
                         },

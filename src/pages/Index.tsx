@@ -56,6 +56,13 @@ export interface SimilarityCheckResult {
   notes: string[];
 }
 
+export interface PromptPackage {
+  variant_id: string;
+  platform_target: string;
+  prompt_text: string;
+  prompt_json: Record<string, unknown>;
+}
+
 export interface WinnerBlueprint {
   duration_seconds: number;
   primary_hook_type: string;
@@ -76,6 +83,7 @@ export interface WinnerBlueprint {
     approx_age_band: string;
     creator_archetype: string;
     presence_style: string;
+    market_context?: string;
   };
   scene_geometry: SceneGeometry;
   beat_timeline: Array<{
@@ -107,8 +115,7 @@ export interface VariantResult {
   status: VariantStatus;
   generation_attempt: number;
   generated_image_url: string;
-  // Legacy compat
-  hisfield_master_motion_prompt?: string;
+  prompt_package?: PromptPackage;
 }
 
 export interface AnalysisResult {
@@ -131,6 +138,89 @@ interface DownloadedData {
   videoMode: VideoMode;
   language: string;
   diversity_intensity: string;
+}
+
+function buildPromptPackage(
+  variant: VariantResult,
+  winnerBlueprint: WinnerBlueprint,
+): PromptPackage {
+  const promptJson = {
+    language: variant.script_variant?.language || "es-MX",
+    product_lock: { use_uploaded_product_as_absolute_truth: true },
+    winner_blueprint: {
+      duration_seconds: winnerBlueprint.duration_seconds,
+      primary_hook_type: winnerBlueprint.primary_hook_type,
+      primary_hook_label: winnerBlueprint.primary_hook_label || "",
+      primary_hook_visual: winnerBlueprint.primary_hook_visual || "",
+      primary_hook_verbal: winnerBlueprint.primary_hook_verbal || "",
+      core_emotion: winnerBlueprint.core_emotion,
+      energy_profile: winnerBlueprint.energy_profile,
+      performance_style: winnerBlueprint.performance_style,
+      cta_style: winnerBlueprint.cta_style,
+      conversion_mechanics: winnerBlueprint.conversion_mechanics,
+      scene_type: winnerBlueprint.scene_type,
+      camera_style: winnerBlueprint.camera_style,
+      gesture_profile: winnerBlueprint.gesture_profile || "",
+      performance_mechanics: winnerBlueprint.performance_mechanics || [],
+      actor_profile_observed: winnerBlueprint.actor_profile_observed,
+      scene_geometry: winnerBlueprint.scene_geometry,
+      beat_timeline: winnerBlueprint.beat_timeline,
+    },
+    variant_actor_direction: {
+      identity_distance: "high",
+      market_plausibility_mode: "preserve_original_context",
+      keep_same_broad_audience_fit: true,
+      avoid_unrelated_demographic_shift: true,
+      ...variant.actor_visual_direction,
+    },
+    delivery: {
+      energy: variant.heygen_ready_brief?.energy || "",
+      pace: variant.heygen_ready_brief?.pace || "",
+      facial_expression: variant.heygen_ready_brief?.facial_expression || "",
+      gesture_style: variant.heygen_ready_brief?.gesture_style || "",
+      delivery_style: variant.heygen_ready_brief?.delivery_style || "",
+    },
+    script_variant: {
+      hook: variant.script_variant?.hook || "",
+      body: variant.script_variant?.body || "",
+      cta: variant.script_variant?.cta || "",
+      full_script: variant.script_variant?.full_script || "",
+    },
+    constraints: [
+      "preserve exact uploaded product",
+      "preserve ad mechanics",
+      "preserve same broad market plausibility",
+      "do not clone original actor",
+      "do not translate literally",
+      "keep natural spoken wording",
+      "keep target duration",
+    ],
+  };
+
+  const promptText = `Generate a realistic vertical UGC video/image variation based on the attached reference image and product reference.
+
+Goal:
+Preserve the winning ad mechanics of the source TikTok ad while using a clearly different actor who still fits the same broad market context as the original creator.
+
+Instructions:
+- use the uploaded product as absolute truth
+- preserve the winner's hook intention, energy, action, framing logic, and CTA structure
+- use a clearly different actor identity
+- keep the same broad regional / market plausibility as the original creator
+- do not introduce an unrelated demographic shift
+- do not clone the original actor
+- keep the result natural, handheld, UGC-style, and believable
+- use the following JSON as the execution spec
+
+JSON:
+${JSON.stringify(promptJson, null, 2)}`;
+
+  return {
+    variant_id: variant.variant_id,
+    platform_target: "aigen_or_sora",
+    prompt_text: promptText,
+    prompt_json: promptJson,
+  };
 }
 
 const Index = () => {
@@ -230,6 +320,7 @@ const Index = () => {
       setPipelineStep(5);
 
       const overlayCleanup = analysisData.overlay_cleanup_required || false;
+      const winnerBp: WinnerBlueprint = analysisData.winner_blueprint;
 
       setPipelineStep(6);
       const variants: VariantResult[] = [];
@@ -251,14 +342,18 @@ const Index = () => {
               overlay_cleanup_required: overlayCleanup,
             },
           });
-          variants.push({
+          const builtVariant: VariantResult = {
             ...variant,
             status: variant.status || "ready",
             generation_attempt: variant.generation_attempt || 1,
             generated_image_url: imageError || imageData?.error ? "" : imageData.image_url,
-          });
+          };
+          builtVariant.prompt_package = buildPromptPackage(builtVariant, winnerBp);
+          variants.push(builtVariant);
         } catch {
-          variants.push({ ...variant, generated_image_url: "", status: "needs_regeneration", generation_attempt: 1 });
+          const failedVariant: VariantResult = { ...variant, generated_image_url: "", status: "needs_regeneration", generation_attempt: 1 };
+          failedVariant.prompt_package = buildPromptPackage(failedVariant, winnerBp);
+          variants.push(failedVariant);
         }
       }
       setPipelineStep(7);
@@ -269,7 +364,7 @@ const Index = () => {
         content_type: analysisData.content_type,
         overlay_cleanup_required: overlayCleanup,
         clean_frame_strategy: analysisData.clean_frame_strategy,
-        winner_blueprint: analysisData.winner_blueprint,
+        winner_blueprint: winnerBp,
         variants,
       };
 
@@ -316,23 +411,15 @@ const Index = () => {
       });
 
       if (imageError || imageData?.error) {
-        updatedVariants[variantIndex] = {
-          ...updatedVariants[variantIndex],
-          status: "needs_regeneration",
-        };
+        updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], status: "needs_regeneration" };
       } else {
-        updatedVariants[variantIndex] = {
-          ...updatedVariants[variantIndex],
-          generated_image_url: imageData.image_url,
-          status: "ready",
-        };
+        const rebuilt = { ...updatedVariants[variantIndex], generated_image_url: imageData.image_url, status: "ready" as VariantStatus };
+        rebuilt.prompt_package = buildPromptPackage(rebuilt, results.winner_blueprint);
+        updatedVariants[variantIndex] = rebuilt;
       }
       setResults({ ...results, variants: [...updatedVariants] });
     } catch {
-      updatedVariants[variantIndex] = {
-        ...updatedVariants[variantIndex],
-        status: "needs_regeneration",
-      };
+      updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], status: "needs_regeneration" };
       setResults({ ...results, variants: [...updatedVariants] });
     }
   }, [results, downloadedData]);
