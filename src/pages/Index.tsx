@@ -40,7 +40,7 @@ export interface ScriptVariant {
 }
 
 export interface HeygenReadyBrief {
-  avatar_instruction: string;
+  avatar_instruction?: string;
   delivery_style: string;
   pace: string;
   energy: string;
@@ -56,7 +56,7 @@ export interface SimilarityCheckResult {
   notes: string[];
 }
 
-export interface PromptPackage {
+export interface AnimationPromptPackage {
   variant_id: string;
   platform_target: string;
   prompt_text: string;
@@ -78,6 +78,10 @@ export interface WinnerBlueprint {
   scene_type: string;
   camera_style: string;
   gesture_profile: string;
+  guion_original_completo?: string;
+  estructura_del_guion?: Record<string, string>;
+  analisis_estructura_persuasiva?: { framework_detectado: string[]; explicacion_breve: string };
+  triggers_psicologicos_detectados?: string[];
   actor_profile_observed: {
     gender_presentation: string;
     approx_age_band: string;
@@ -105,8 +109,8 @@ export interface VariantResult {
   image_generation_strategy?: string[];
   actor_visual_direction: ActorVisualDirection;
   script_variant: ScriptVariant;
-  on_screen_text_plan: Array<{ timestamp: string; text: string }>;
-  shotlist: Array<{ shot: number; duration: string; description: string }>;
+  on_screen_text_plan?: Array<{ timestamp: string; text: string }>;
+  shotlist?: Array<{ shot: number; duration: string; description: string }>;
   scene_geometry: SceneGeometry;
   base_image_prompt_9x16: string;
   heygen_ready_brief: HeygenReadyBrief;
@@ -115,7 +119,8 @@ export interface VariantResult {
   status: VariantStatus;
   generation_attempt: number;
   generated_image_url: string;
-  prompt_package?: PromptPackage;
+  animation_prompt_json?: Record<string, unknown>;
+  prompt_package?: AnimationPromptPackage;
 }
 
 export interface AnalysisResult {
@@ -140,84 +145,90 @@ interface DownloadedData {
   diversity_intensity: string;
 }
 
-function buildPromptPackage(
+function buildAnimationPromptPackage(
   variant: VariantResult,
   winnerBlueprint: WinnerBlueprint,
-): PromptPackage {
-  const promptJson = {
-    language: variant.script_variant?.language || "es-MX",
-    product_lock: { use_uploaded_product_as_absolute_truth: true },
-    winner_blueprint: {
-      duration_seconds: winnerBlueprint.duration_seconds,
-      primary_hook_type: winnerBlueprint.primary_hook_type,
-      primary_hook_label: winnerBlueprint.primary_hook_label || "",
-      primary_hook_visual: winnerBlueprint.primary_hook_visual || "",
-      primary_hook_verbal: winnerBlueprint.primary_hook_verbal || "",
-      core_emotion: winnerBlueprint.core_emotion,
-      energy_profile: winnerBlueprint.energy_profile,
-      performance_style: winnerBlueprint.performance_style,
-      cta_style: winnerBlueprint.cta_style,
-      conversion_mechanics: winnerBlueprint.conversion_mechanics,
-      scene_type: winnerBlueprint.scene_type,
-      camera_style: winnerBlueprint.camera_style,
-      gesture_profile: winnerBlueprint.gesture_profile || "",
-      performance_mechanics: winnerBlueprint.performance_mechanics || [],
-      actor_profile_observed: winnerBlueprint.actor_profile_observed,
-      scene_geometry: winnerBlueprint.scene_geometry,
-      beat_timeline: winnerBlueprint.beat_timeline,
+): AnimationPromptPackage {
+  // Use the rich animation_prompt_json from Gemini if available, otherwise build a fallback
+  const promptJson = variant.animation_prompt_json || {
+    video_metadata: {
+      duracion_total_segundos: String(winnerBlueprint.duration_seconds),
+      tipo_video: winnerBlueprint.scene_type || "",
+      formato: "vertical short form",
+      estilo_contenido: winnerBlueprint.performance_style || "",
+      ritmo_video: winnerBlueprint.energy_profile || "",
     },
-    variant_actor_direction: {
-      identity_distance: "high",
-      market_plausibility_mode: "preserve_original_context",
-      keep_same_broad_audience_fit: true,
-      avoid_unrelated_demographic_shift: true,
-      ...variant.actor_visual_direction,
+    analisis_estructura_persuasiva: winnerBlueprint.analisis_estructura_persuasiva || {
+      framework_detectado: ["hook", "contexto", "demostracion", "beneficio", "cta"],
+      explicacion_breve: "",
     },
-    delivery: {
-      energy: variant.heygen_ready_brief?.energy || "",
-      pace: variant.heygen_ready_brief?.pace || "",
-      facial_expression: variant.heygen_ready_brief?.facial_expression || "",
-      gesture_style: variant.heygen_ready_brief?.gesture_style || "",
-      delivery_style: variant.heygen_ready_brief?.delivery_style || "",
+    triggers_psicologicos_detectados: winnerBlueprint.triggers_psicologicos_detectados || [],
+    configuracion_escena: {
+      entorno_y_fondo: winnerBlueprint.scene_type || "",
+      iluminacion: winnerBlueprint.scene_geometry?.lighting_direction || "",
+      camara: winnerBlueprint.camera_style || "",
+      angulo_camara: winnerBlueprint.scene_geometry?.camera_angle || "",
     },
-    script_variant: {
+    sujeto_principal: {
+      tipo_persona: variant.actor_archetype || "",
+      edad_aproximada: variant.actor_visual_direction?.approx_age_band || "",
+      genero: variant.actor_visual_direction?.gender_presentation || "",
+      apariencia_general: variant.actor_visual_direction?.overall_vibe || "",
+      energia: variant.heygen_ready_brief?.energy || "",
+      estilo_comunicacion: variant.heygen_ready_brief?.delivery_style || "",
+      contexto_de_mercado: winnerBlueprint.actor_profile_observed?.market_context || "",
+    },
+    guion_original_completo: winnerBlueprint.guion_original_completo || "",
+    estructura_del_guion: winnerBlueprint.estructura_del_guion || {},
+    guion_variante_para_esta_imagen: {
       hook: variant.script_variant?.hook || "",
       body: variant.script_variant?.body || "",
       cta: variant.script_variant?.cta || "",
-      full_script: variant.script_variant?.full_script || "",
+      guion_completo: variant.script_variant?.full_script || "",
     },
-    constraints: [
-      "preserve exact uploaded product",
-      "preserve ad mechanics",
-      "preserve same broad market plausibility",
-      "do not clone original actor",
-      "do not translate literally",
-      "keep natural spoken wording",
-      "keep target duration",
-    ],
+    instrucciones_para_recrear_el_video: {
+      objetivo: "Recreate the same ad structure using this generated image/actor while preserving the original persuasion mechanics.",
+      energia: variant.heygen_ready_brief?.energy || "",
+      pace: variant.heygen_ready_brief?.pace || "",
+      delivery_style: variant.heygen_ready_brief?.delivery_style || "",
+      facial_expression: variant.heygen_ready_brief?.facial_expression || "",
+      gesture_style: variant.heygen_ready_brief?.gesture_style || "",
+    },
+    linea_de_tiempo: winnerBlueprint.beat_timeline?.map(b => ({
+      marca_de_tiempo: `${b.start_sec}s - ${b.end_sec}s`,
+      duracion_segundos: String(b.end_sec - b.start_sec),
+      beat_type: b.beat_type,
+      descripcion: b.description,
+    })) || [],
+    restricciones_de_generacion: {
+      usar_producto_subido_como_verdad_absoluta: true,
+      preservar_mecanica_ganadora: true,
+      preservar_contexto_de_mercado: true,
+      no_clonar_actor_original: true,
+      mantener_estilo_ugc_natural: true,
+      no_hacer_traduccion_literal: true,
+    },
   };
 
-  const promptText = `Generate a realistic vertical UGC video/image variation based on the attached reference image and product reference.
+  const promptText = `Use the attached generated image as the visual identity reference for the actor.
 
-Goal:
-Preserve the winning ad mechanics of the source TikTok ad while using a clearly different actor who still fits the same broad market context as the original creator.
+Your task is to animate or recreate a vertical short-form UGC ad that preserves the same winning persuasion structure, pacing, gestures, and conversion logic of the source ad.
 
-Instructions:
+Important rules:
 - use the uploaded product as absolute truth
-- preserve the winner's hook intention, energy, action, framing logic, and CTA structure
-- use a clearly different actor identity
-- keep the same broad regional / market plausibility as the original creator
-- do not introduce an unrelated demographic shift
+- preserve the same broad market and creator plausibility as the original ad
 - do not clone the original actor
-- keep the result natural, handheld, UGC-style, and believable
-- use the following JSON as the execution spec
+- keep this generated actor identity
+- preserve hook structure, delivery energy, body language rhythm, objection handling, and CTA logic
+- keep the result natural, believable, handheld, and UGC-style
+- use the following JSON blueprint as the execution spec
 
 JSON:
 ${JSON.stringify(promptJson, null, 2)}`;
 
   return {
     variant_id: variant.variant_id,
-    platform_target: "aigen_or_sora",
+    platform_target: "universal_video_generation",
     prompt_text: promptText,
     prompt_json: promptJson,
   };
@@ -348,11 +359,11 @@ const Index = () => {
             generation_attempt: variant.generation_attempt || 1,
             generated_image_url: imageError || imageData?.error ? "" : imageData.image_url,
           };
-          builtVariant.prompt_package = buildPromptPackage(builtVariant, winnerBp);
+          builtVariant.prompt_package = buildAnimationPromptPackage(builtVariant, winnerBp);
           variants.push(builtVariant);
         } catch {
           const failedVariant: VariantResult = { ...variant, generated_image_url: "", status: "needs_regeneration", generation_attempt: 1 };
-          failedVariant.prompt_package = buildPromptPackage(failedVariant, winnerBp);
+          failedVariant.prompt_package = buildAnimationPromptPackage(failedVariant, winnerBp);
           variants.push(failedVariant);
         }
       }
@@ -414,7 +425,7 @@ const Index = () => {
         updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], status: "needs_regeneration" };
       } else {
         const rebuilt = { ...updatedVariants[variantIndex], generated_image_url: imageData.image_url, status: "ready" as VariantStatus };
-        rebuilt.prompt_package = buildPromptPackage(rebuilt, results.winner_blueprint);
+        rebuilt.prompt_package = buildAnimationPromptPackage(rebuilt, results.winner_blueprint);
         updatedVariants[variantIndex] = rebuilt;
       }
       setResults({ ...results, variants: [...updatedVariants] });

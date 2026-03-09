@@ -36,7 +36,7 @@ const ResultsView = ({
           Variantes Generadas ({results.variants.length})
         </h2>
         <p className="text-xs text-muted-foreground">
-          Copia el prompt universal y pégalo directamente en AIgen o Sora.
+          Copia el prompt universal y pégalo directamente en Sora, HeyGen, Kling, Runway o AIgen.
         </p>
       </div>
 

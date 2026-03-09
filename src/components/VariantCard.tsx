@@ -82,16 +82,16 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject }: VariantCard
         )}
       </div>
 
-      {/* Prompt block + actions */}
+      {/* Universal prompt block + actions */}
       <div className="space-y-3 p-4">
-        {/* Universal prompt */}
+        {/* Universal animation prompt */}
         {promptText && (
           <div className="space-y-1.5">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Prompt universal para AIgen / Sora
+              Prompt universal para Sora / HeyGen / Kling
             </p>
             <p className="text-[10px] text-muted-foreground">
-              Copia y pega este bloque completo en tu generador. Ya incluye contexto, energía, delivery y guion variante.
+              Copia y pega este bloque completo en tu generador de video. Ya incluye estructura, energía, delivery, timeline y guion variante.
             </p>
             <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2.5">
               <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-foreground font-mono">
