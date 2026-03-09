@@ -277,7 +277,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
         video_mode: videoMode,
       };
       if (isNoAvatar) {
-        retryBody.motion_prompt = variant.hisfield_master_motion_prompt || "";
+        retryBody.motion_prompt = (variant as any).hisfield_master_motion_prompt || "";
       } else {
         retryBody.video_url = trimmedVideoUrl || videoUrl;
         retryBody.video_duration = trimmedDuration || videoDuration;
