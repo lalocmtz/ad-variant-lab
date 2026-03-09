@@ -194,6 +194,49 @@ ${basePrompt}
 NEGATIVE: ${customNegative}, no social media overlays, no comment bubbles, no watermarks, no UI elements, no identical scene copy, no same facial features as original, no clone-like result.`;
 }
 
+async function urlToBase64DataUri(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+  const buffer = new Uint8Array(await res.arrayBuffer());
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < buffer.length; i += chunkSize) {
+    binary += String.fromCharCode(...buffer.subarray(i, i + chunkSize));
+  }
+  const base64 = btoa(binary);
+  const contentType = res.headers.get("content-type") || "image/png";
+  return `data:${contentType};base64,${base64}`;
+}
+
+async function callImageGeneration(
+  content: Array<{ type: string; text?: string; image_url?: { url: string } }>,
+  apiKey: string,
+): Promise<string | null> {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-image",
+      messages: [{ role: "user", content }],
+      modalities: ["image", "text"],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("Image generation error:", response.status, errText);
+    if (response.status === 429) throw { status: 429, message: "Demasiadas solicitudes. Intenta de nuevo." };
+    if (response.status === 402) throw { status: 402, message: "Créditos insuficientes." };
+    throw new Error(`Image generation error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -223,7 +266,6 @@ serve(async (req) => {
     if (mode === "no_avatar") {
       fullPrompt = buildPromptNoAvatar(prompt, scene_geometry, variant_index, total_variants);
     } else {
-      // For regeneration, add extra identity pressure
       let enhancedPrompt = prompt;
       if (is_regeneration) {
         enhancedPrompt = `${prompt}\n\nREGENERATION ATTEMPT — STRONGER IDENTITY SWAP REQUIRED:\n- The previous generation was too similar to the original actor\n- Generate a COMPLETELY NEW face identity — do NOT reuse any facial features from previous attempts\n- Increase diversity pressure: different face shape, different jawline, different eye structure\n- Slightly loosen scene exactness to prioritize actor uniqueness\n- Product lock remains ABSOLUTE`;
@@ -240,15 +282,32 @@ serve(async (req) => {
       );
     }
 
+    // Convert external image URLs to base64 data URIs for reliable AI gateway access
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       { type: "text", text: fullPrompt },
     ];
 
     if (cover_url) {
-      content.push({ type: "image_url", image_url: { url: cover_url } });
+      try {
+        console.log("Converting cover image to base64...");
+        const coverDataUri = await urlToBase64DataUri(cover_url);
+        console.log("Cover image converted, length:", coverDataUri.length);
+        content.push({ type: "image_url", image_url: { url: coverDataUri } });
+      } catch (e) {
+        console.warn("Failed to convert cover URL to base64, using raw URL:", e);
+        content.push({ type: "image_url", image_url: { url: cover_url } });
+      }
     }
     if (product_image_url) {
-      content.push({ type: "image_url", image_url: { url: product_image_url } });
+      try {
+        console.log("Converting product image to base64...");
+        const productDataUri = await urlToBase64DataUri(product_image_url);
+        console.log("Product image converted, length:", productDataUri.length);
+        content.push({ type: "image_url", image_url: { url: productDataUri } });
+      } catch (e) {
+        console.warn("Failed to convert product URL to base64, using raw URL:", e);
+        content.push({ type: "image_url", image_url: { url: product_image_url } });
+      }
     }
 
     console.log("Generating variant image:", {
@@ -263,50 +322,27 @@ serve(async (req) => {
       isRegeneration: !!is_regeneration,
     });
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content }],
-        modalities: ["image", "text"],
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Image generation error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`Image generation error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    // Attempt generation with 1 automatic retry on empty response
+    let imageUrl = await callImageGeneration(content, LOVABLE_API_KEY);
 
     if (!imageUrl) {
-      console.error("No image in response:", JSON.stringify(data).substring(0, 500));
-      throw new Error("No se generó imagen");
+      console.warn("First attempt returned no image, retrying...");
+      imageUrl = await callImageGeneration(content, LOVABLE_API_KEY);
+    }
+
+    if (!imageUrl) {
+      throw new Error("No se generó imagen después de 2 intentos");
     }
 
     return new Response(JSON.stringify({ image_url: imageUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("generate-variant-image error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const status = e?.status || 500;
+    const message = e?.message || (e instanceof Error ? e.message : "Unknown error");
+    return new Response(JSON.stringify({ error: message }), {
+      status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
