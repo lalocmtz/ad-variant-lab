@@ -19,64 +19,79 @@ serve(async (req) => {
     const lang = language || "es-MX";
     const diversity = diversity_intensity || "high";
 
-    const systemPrompt = `You are an expert TikTok ad deconstruction engine.
+    const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine.
 
-Your job is to extract the winning mechanics of the ad and convert them into a copy-paste-ready prompt package for downstream video generation tools like AIgen or Sora.
+Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different character.
 
-The user does not need a long explanation. The user needs:
-1. image variants with different actors
-2. a perfect execution prompt under each image
+The analysis must capture BOTH:
+1. the visual actions happening in the video
+2. the underlying persuasion structure that makes the ad effective
 
-Focus on: product truth, winner mechanics, natural delivery, actor replacement with market plausibility, copy-paste usability.
+The result must function as a perfect blueprint to regenerate the ad structure with AI.
 
-STEP 1 — ANALYZE THE ORIGINAL AD
-Extract: total duration, hook timing, hook type, hook label, primary verbal hook, primary visual hook, energy profile, performance style, delivery style, cadence/pace, CTA logic, conversion mechanics, scene type, camera style, gesture profile, performance mechanics, creator archetype, broad market context.
+Return ONLY JSON via the tool call. No explanations outside the JSON.
 
-STEP 2 — DETECT OVERLAYS
-If the source frame contains comments, usernames, timestamps, engagement icons, watermark logos, colored UI frames, captions: overlay_cleanup_required = true
+OBJECTIVE
+Analyze the uploaded video cover frame and extract:
+- environment and scene setup
+- camera style and lighting conditions
+- subject description (appearance, energy, body language)
+- props used and product interaction
+- spoken script (reconstruct from visual cues and metadata)
+- persuasion mechanics and psychological triggers
+- second-by-second actions (1-3 second segments)
 
-STEP 3 — PRODUCT LOCK
-The uploaded product image is the absolute truth. Always use it over the source video if there is any mismatch.
+Your output must allow another AI system to recreate the video without watching the original.
 
-STEP 4 — IDENTITY SWAP WITH MARKET PLAUSIBILITY
-Generate a clearly different person for each variant. identity_distance MUST be "high".
-Diversity intensity: ${diversity}
+CRITICAL RULES
+1. Observe only what is visible.
+2. Break the video into segments of 1–3 seconds maximum for the beat_timeline.
+3. Identify why each moment exists from a persuasion perspective.
+4. Generate script variations that maintain the same persuasion structure.
+5. Write descriptions short, clear, and generative-AI friendly.
+6. Preserve same broad market plausibility as the original ad context.
+7. Do not generate unrelated demographic shifts in variants.
+8. All image prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
+9. Scripts, summaries, and guion fields in ${lang}.
 
-Change: face shape, jawline, eyebrows, eye shape, nose structure, lips, hairstyle, facial proportions.
-Preserve: same broad market plausibility, same broad audience fit, same regional creator context, same ad logic, same creator credibility style.
+ANALYSIS FOCUS
 
-MARKET PLAUSIBILITY RULE:
-Preserve the same broad regional/audience plausibility and creator-market fit as the original ad.
-Do not arbitrarily shift the actor into an unrelated phenotype, demographic presentation, or creator vibe.
+Hook Mechanics: Identify exactly what happens in the first 2 seconds.
 
-Do NOT: clone the actor, create sibling-like similarity, drift into unrelated demographic presentation, rely only on wardrobe change.
+Body Language: Describe exactly what the subject does — pointing, holding product, leaning, gesturing, showing item, nodding, lifting, emphasizing.
 
-STEP 5 — MARKET CONTEXT (REQUIRED)
-In actor_profile_observed, include a market_context field that describes the original creator's market fit.
+Persuasion Mechanics: Identify objection handling, price justification, value stacking, social proof, demonstration, CTA.
+
+Psychological Triggers: Detect curiosity, relatability, urgency, reassurance, authority, humor, savings logic, bundle logic, price anchoring, personal identification.
+
+MARKET PLAUSIBILITY RULE
+Preserve the same broad regional, linguistic, cultural, and audience plausibility as the original creator and ad context. Generate a clearly different individual, but do not introduce an unrelated demographic or creator-vibe shift unless explicitly requested.
+
+In actor_profile_observed.market_context, describe the original creator's market fit.
 Examples: "young Spanish-speaking Mexican fitness UGC creator", "Latina beauty creator for Spanish-speaking ecommerce audience"
-This field prevents arbitrary actor drift in downstream generation.
 
-STEP 6 — SCRIPT VARIANTS (language: ${lang})
-Preserve: hook intention, emotional trigger, duration, CTA logic, conversion mechanics.
-Change wording naturally. Do NOT translate literally. Make scripts natural for AI video generation.
+VARIANT GENERATION (${numVariants} variants, identity_distance = "high", diversity: ${diversity})
 
-STEP 7 — VARIANT DIVERSITY
-Variant A: same mechanics + different actor + same energy + different facial structure + different outfit nuance
-Variant B: same mechanics + different actor + different hairstyle + slight background variation + slightly different wording
-Variant C: same mechanics + different actor + compatible different vibe + more expressive + alternative hook wording preserving intent
+For each variant:
+- Generate a COMPLETELY DIFFERENT actor (different face shape, jawline, eyes, nose, hairstyle, facial proportions)
+- Preserve same broad market plausibility
+- Generate a natural script variant in ${lang} (do NOT translate literally)
+- Generate a rich animation_prompt_json that includes:
+  - video_metadata
+  - analisis_estructura_persuasiva with framework_detectado and explicacion_breve
+  - triggers_psicologicos_detectados (array of strings)
+  - configuracion_escena (entorno, iluminacion, camara, angulo, movimiento, calidad)
+  - sujeto_principal (tipo_persona, edad, genero, apariencia, energia, estilo_comunicacion, contexto_de_mercado)
+  - guion_original_completo (full original script)
+  - estructura_del_guion (hook, contexto, demostracion, beneficio, manejo_objecion, cta)
+  - guion_variante (hook, body, cta, guion_completo for THIS variant)
+  - instrucciones_para_recrear_el_video (ritmo, estilo_entrega, energia, pace, delivery_style, facial_expression, gesture_style, notas)
+  - linea_de_tiempo (array of segments with marca_de_tiempo, duracion, accion_fisica, gestos, movimiento, expresion, interaccion_utileria, guion_hablado, objetivo_persuasivo, prompt_de_animacion)
+  - plantilla_replicable (descripcion, patron, por_que_funciona, como_replicar)
+  - restricciones_de_generacion
 
-STEP 8 — HOOK CLASSIFICATION
-Classify using: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook
-
-STEP 9 — VALIDATION
-Validate each variant looks different from original and from each other, product matches, mechanics preserved.
-If one fails, mark needs_regeneration.
-
-STEP 10 — OUTPUT
-Return ONLY valid JSON via the tool call. No markdown. No commentary.
-All prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
-Scripts and summaries in ${lang}.
-identity_distance MUST be "high" for ALL variants.`;
+HOOK CLASSIFICATION
+Use: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
@@ -92,9 +107,10 @@ INSTRUCTIONS:
 2. CHECK for social media overlays — set overlay_cleanup_required accordingly
 3. LOOK at the product image — describe EXACT packaging (ground truth product)
 4. Identify market_context for the original creator
-5. Extract winner_blueprint with all winning mechanics including primary_hook_label and market_context
-6. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance) but SAME winning mechanics and SAME market plausibility
-7. identity_distance MUST be "high" for ALL variants`,
+5. Extract winner_blueprint with all winning mechanics
+6. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance)
+7. For EACH variant, generate a complete animation_prompt_json with full timeline, persuasion structure, and script variant
+8. identity_distance MUST be "high" for ALL variants`,
     });
 
     if (cover_url) {
@@ -123,7 +139,7 @@ INSTRUCTIONS:
             type: "function",
             function: {
               name: "analysis_result",
-              description: "Return the complete analysis with winner blueprint and identity-swapped variants",
+              description: "Return the complete reverse-engineered ad analysis with winner blueprint and identity-swapped variants including animation prompt packages",
               parameters: {
                 type: "object",
                 properties: {
@@ -149,6 +165,26 @@ INSTRUCTIONS:
                       scene_type: { type: "string" },
                       camera_style: { type: "string" },
                       gesture_profile: { type: "string" },
+                      guion_original_completo: { type: "string", description: "Full original script reconstructed from the ad" },
+                      estructura_del_guion: {
+                        type: "object",
+                        properties: {
+                          hook: { type: "string" },
+                          contexto: { type: "string" },
+                          demostracion: { type: "string" },
+                          beneficio: { type: "string" },
+                          manejo_objecion: { type: "string" },
+                          cta: { type: "string" },
+                        },
+                      },
+                      analisis_estructura_persuasiva: {
+                        type: "object",
+                        properties: {
+                          framework_detectado: { type: "array", items: { type: "string" } },
+                          explicacion_breve: { type: "string" },
+                        },
+                      },
+                      triggers_psicologicos_detectados: { type: "array", items: { type: "string" } },
                       actor_profile_observed: {
                         type: "object",
                         properties: {
@@ -156,7 +192,7 @@ INSTRUCTIONS:
                           approx_age_band: { type: "string" },
                           creator_archetype: { type: "string" },
                           presence_style: { type: "string" },
-                          market_context: { type: "string", description: "Broad market/audience fit of the original creator, e.g. 'young Spanish-speaking Mexican fitness UGC creator'" },
+                          market_context: { type: "string" },
                         },
                         required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style", "market_context"],
                       },
@@ -185,7 +221,7 @@ INSTRUCTIONS:
                         },
                       },
                     },
-                    required: ["duration_seconds", "primary_hook_type", "primary_hook_label", "core_emotion", "energy_profile", "cta_style", "conversion_mechanics", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline"],
+                    required: ["duration_seconds", "primary_hook_type", "primary_hook_label", "core_emotion", "energy_profile", "cta_style", "conversion_mechanics", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline", "guion_original_completo", "estructura_del_guion", "analisis_estructura_persuasiva", "triggers_psicologicos_detectados"],
                   },
                   variants: {
                     type: "array",
@@ -224,22 +260,6 @@ INSTRUCTIONS:
                           },
                           required: ["language", "duration_target_seconds", "hook", "body", "cta", "full_script"],
                         },
-                        on_screen_text_plan: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: { timestamp: { type: "string" }, text: { type: "string" } },
-                            required: ["timestamp", "text"],
-                          },
-                        },
-                        shotlist: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: { shot: { type: "number" }, duration: { type: "string" }, description: { type: "string" } },
-                            required: ["shot", "duration", "description"],
-                          },
-                        },
                         scene_geometry: {
                           type: "object",
                           properties: {
@@ -262,9 +282,131 @@ INSTRUCTIONS:
                             facial_expression: { type: "string" },
                             gesture_style: { type: "string" },
                           },
-                          required: ["avatar_instruction", "delivery_style", "pace", "energy", "facial_expression", "gesture_style"],
+                          required: ["delivery_style", "pace", "energy", "facial_expression", "gesture_style"],
                         },
                         negative_prompt: { type: "string" },
+                        animation_prompt_json: {
+                          type: "object",
+                          description: "Rich animation blueprint JSON for Sora/HeyGen/Kling/Runway/AIgen",
+                          properties: {
+                            video_metadata: {
+                              type: "object",
+                              properties: {
+                                duracion_total_segundos: { type: "string" },
+                                tipo_video: { type: "string" },
+                                formato: { type: "string" },
+                                estilo_contenido: { type: "string" },
+                                ritmo_video: { type: "string" },
+                              },
+                            },
+                            analisis_estructura_persuasiva: {
+                              type: "object",
+                              properties: {
+                                framework_detectado: { type: "array", items: { type: "string" } },
+                                explicacion_breve: { type: "string" },
+                              },
+                            },
+                            triggers_psicologicos_detectados: { type: "array", items: { type: "string" } },
+                            configuracion_escena: {
+                              type: "object",
+                              properties: {
+                                entorno_y_fondo: { type: "string" },
+                                estilo_entorno: { type: "string" },
+                                iluminacion: { type: "string" },
+                                camara: { type: "string" },
+                                angulo_camara: { type: "string" },
+                                movimiento_camara: { type: "string" },
+                                calidad_imagen: { type: "string" },
+                              },
+                            },
+                            sujeto_principal: {
+                              type: "object",
+                              properties: {
+                                tipo_persona: { type: "string" },
+                                edad_aproximada: { type: "string" },
+                                genero: { type: "string" },
+                                apariencia_general: { type: "string" },
+                                energia: { type: "string" },
+                                estilo_comunicacion: { type: "string" },
+                                contexto_de_mercado: { type: "string" },
+                              },
+                            },
+                            guion_original_completo: { type: "string" },
+                            estructura_del_guion: {
+                              type: "object",
+                              properties: {
+                                hook: { type: "string" },
+                                contexto: { type: "string" },
+                                demostracion: { type: "string" },
+                                beneficio: { type: "string" },
+                                manejo_objecion: { type: "string" },
+                                cta: { type: "string" },
+                              },
+                            },
+                            guion_variante_para_esta_imagen: {
+                              type: "object",
+                              properties: {
+                                hook: { type: "string" },
+                                body: { type: "string" },
+                                cta: { type: "string" },
+                                guion_completo: { type: "string" },
+                              },
+                            },
+                            instrucciones_para_recrear_el_video: {
+                              type: "object",
+                              properties: {
+                                objetivo: { type: "string" },
+                                ritmo_actuacion: { type: "string" },
+                                estilo_entrega: { type: "string" },
+                                energia: { type: "string" },
+                                pace: { type: "string" },
+                                delivery_style: { type: "string" },
+                                facial_expression: { type: "string" },
+                                gesture_style: { type: "string" },
+                                notas_importantes: { type: "string" },
+                              },
+                            },
+                            linea_de_tiempo: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  marca_de_tiempo: { type: "string" },
+                                  duracion_segundos: { type: "string" },
+                                  accion_fisica_sujeto: { type: "string" },
+                                  gestos_manos: { type: "string" },
+                                  movimiento_cuerpo: { type: "string" },
+                                  expresion_facial: { type: "string" },
+                                  interaccion_utileria: { type: "string" },
+                                  guion_hablado_en_este_lapso: { type: "string" },
+                                  objetivo_persuasivo: { type: "string" },
+                                  prompt_de_animacion_especifico: { type: "string" },
+                                },
+                              },
+                            },
+                            plantilla_replicable_del_anuncio: {
+                              type: "object",
+                              properties: {
+                                descripcion_estructura: { type: "string" },
+                                patron_creativo: { type: "string" },
+                                por_que_funciona: { type: "string" },
+                                como_replicarlo_con_otro_producto: { type: "string" },
+                              },
+                            },
+                            restricciones_de_generacion: {
+                              type: "object",
+                              properties: {
+                                usar_producto_subido_como_verdad_absoluta: { type: "boolean" },
+                                preservar_mecanica_ganadora: { type: "boolean" },
+                                preservar_contexto_de_mercado: { type: "boolean" },
+                                no_clonar_actor_original: { type: "boolean" },
+                                mantener_estilo_ugc_natural: { type: "boolean" },
+                                no_hacer_traduccion_literal: { type: "boolean" },
+                              },
+                            },
+                          },
+                          required: ["video_metadata", "configuracion_escena", "sujeto_principal", "guion_original_completo", "estructura_del_guion", "guion_variante_para_esta_imagen", "instrucciones_para_recrear_el_video", "linea_de_tiempo", "restricciones_de_generacion"],
+                        },
                         similarity_check_result: {
                           type: "object",
                           properties: {
@@ -282,10 +424,9 @@ INSTRUCTIONS:
                       required: [
                         "variant_id", "identity_distance", "variant_summary", "actor_archetype",
                         "identity_replacement_rules", "image_generation_strategy",
-                        "actor_visual_direction", "script_variant", "on_screen_text_plan",
-                        "shotlist", "scene_geometry", "base_image_prompt_9x16",
-                        "heygen_ready_brief", "negative_prompt",
-                        "similarity_check_result", "status", "generation_attempt",
+                        "actor_visual_direction", "script_variant", "scene_geometry",
+                        "base_image_prompt_9x16", "heygen_ready_brief", "negative_prompt",
+                        "animation_prompt_json", "similarity_check_result", "status", "generation_attempt",
                       ],
                     },
                   },
