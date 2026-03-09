@@ -219,7 +219,7 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
           video_mode: videoMode,
         };
         if (isNoAvatar) {
-          body.motion_prompt = variant.hisfield_master_motion_prompt || "";
+          body.motion_prompt = (variant as any).hisfield_master_motion_prompt || "";
         } else {
           body.video_url = activeVideoUrl;
           body.video_duration = activeDuration;
