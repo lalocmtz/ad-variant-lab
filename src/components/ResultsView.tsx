@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import VariantCard from "@/components/VariantCard";
 import KlingAnimationPanel from "@/components/KlingAnimationPanel";
-import type { AnalysisResult, VariantStatus } from "@/pages/Index";
+import type { AnalysisResult, VariantStatus, VideoGenerationStatus } from "@/pages/Index";
 
 interface ResultsViewProps {
   results: AnalysisResult;
@@ -11,6 +11,7 @@ interface ResultsViewProps {
   onReset: () => void;
   onRegenerateVariant: (variantIndex: number) => void;
   onUpdateVariantStatus: (variantIndex: number, status: VariantStatus) => void;
+  onUpdateVariantVideoState?: (variantIndex: number, videoState: { video_task_id?: string; video_status?: VideoGenerationStatus; video_url?: string; video_error?: string; video_mode?: string }) => void;
 }
 
 const ResultsView = ({
@@ -21,6 +22,7 @@ const ResultsView = ({
   onReset,
   onRegenerateVariant,
   onUpdateVariantStatus,
+  onUpdateVariantVideoState,
 }: ResultsViewProps) => {
   return (
     <div className="space-y-6">
@@ -36,7 +38,7 @@ const ResultsView = ({
           Variantes Generadas ({results.variants.length})
         </h2>
         <p className="text-xs text-muted-foreground">
-          Copia el prompt universal y pégalo directamente en Sora, HeyGen, Kling, Runway o AIgen. Blueprint comprimido a 15 segundos.
+          Copia el prompt universal y pégalo directamente en Sora, HeyGen, Kling, Runway o AIgen. Blueprint comprimido a 15 segundos. También puedes generar el video directamente.
         </p>
       </div>
 
@@ -48,6 +50,7 @@ const ResultsView = ({
             onRegenerate={() => onRegenerateVariant(index)}
             onApprove={() => onUpdateVariantStatus(index, "approved")}
             onReject={() => onUpdateVariantStatus(index, "rejected")}
+            onVideoStateChange={(videoState) => onUpdateVariantVideoState?.(index, videoState)}
           />
         ))}
       </div>
