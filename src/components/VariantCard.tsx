@@ -57,7 +57,6 @@ function handleDownloadVideo(url: string, variantId: string) {
 
 const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
   const [copied, setCopied] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
   const [videoTaskId, setVideoTaskId] = useState<string | undefined>(variant.video_task_id);
   const [videoUrl, setVideoUrl] = useState<string | undefined>(variant.video_url);
