@@ -5,7 +5,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SANITIZATION_SUFFIX = `
+function buildSanitizationSuffix(language: string, accent: string): string {
+  const langLabel = language === "es-MX" ? "español mexicano" : language === "es-CO" ? "español colombiano" : language === "es-ES" ? "español de España" : language === "es-US" ? "español estadounidense" : language === "en-US" ? "English (US)" : language;
+  const isSpanish = language.startsWith("es");
+
+  return `
 
 MANDATORY VIDEO RULES:
 - Use the attached generated image as the actor identity and first-frame visual reference.
@@ -17,7 +21,18 @@ MANDATORY VIDEO RULES:
 - Do NOT add subtitles, captions, comment bubbles, on-screen text, social media UI, stickers, or motion graphics.
 - Preserve comment-reply logic only as spoken context, never as visible text.
 - Keep the final result looking like a clean native smartphone recording.
-- Animate naturally from the reference image identity with handheld UGC realism.`;
+- Animate naturally from the reference image identity with handheld UGC realism.
+
+LANGUAGE & VOICE RULES (MANDATORY):
+- All spoken dialogue, scripts, and voice delivery MUST be in ${langLabel}.
+- The accent must be ${accent}.${isSpanish ? `
+- Use natural ${langLabel} vocabulary, tone, and phrasing as a real UGC creator would speak.
+- Avoid Spain Spanish phrasing${language !== "es-ES" ? "" : ""}.
+- Avoid unnatural "neutral corporate Spanish" — keep it conversational and authentic.
+- If the user provided a script in Spanish, preserve it in Spanish, adapt to ${langLabel} if needed, and NEVER translate to English.` : ""}
+- Visual/technical instructions may remain in English for model quality, but ALL spoken words must be in ${langLabel}.`;
+}
+
 
 function sanitizePrompt(promptText: string): string {
   let sanitized = promptText.trim();
