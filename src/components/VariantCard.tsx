@@ -382,77 +382,23 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
         {/* Video generation with engine selector */}
         {variant.generated_image_url && promptText && !isPending && (
           <div className="space-y-2">
-            {/* Engine selector — shown when idle */}
+            {/* Single Sora 2 button — shown when idle */}
             {videoStatus === "idle" && !videoUrl && (
               <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Generar video
-                </p>
-                {/* Recommended engine — prominent */}
-                {VIDEO_ENGINES.filter(e => e.recommended).map((engine) => (
-                  <Button
-                    key={engine.key}
-                    variant="default"
-                    size="sm"
-                    className="w-full flex flex-col items-start gap-0 h-auto py-2.5 px-3 text-left"
-                    onClick={() => handleGenerateVideo(engine.key)}
-                    disabled={isSubmitting}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <Video className="h-3 w-3" />
-                      <span className="text-[11px] font-medium">{engine.label}</span>
-                      <span className="rounded bg-background/20 px-1 py-0.5 text-[8px] font-bold">RECOMENDADO</span>
-                    </div>
-                    <span className="text-[9px] opacity-80">{engine.description}</span>
-                  </Button>
-                ))}
-                {/* Other stable engines */}
-                <div className="grid grid-cols-2 gap-1">
-                  {VIDEO_ENGINES.filter(e => e.stable && !e.recommended).map((engine) => (
-                    <Button
-                      key={engine.key}
-                      variant="outline"
-                      size="sm"
-                      className="flex flex-col items-start gap-0 h-auto py-2 px-2.5 text-left"
-                      onClick={() => handleGenerateVideo(engine.key)}
-                      disabled={isSubmitting}
-                    >
-                      <span className="text-[10px] font-medium">{engine.label}</span>
-                      <span className="text-[9px] text-muted-foreground">{engine.duration} · 9:16</span>
-                    </Button>
-                  ))}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="w-full gap-1 text-[10px] text-muted-foreground" disabled={isSubmitting}>
-                      <ChevronDown className="h-3 w-3" />
-                      Más opciones
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="center" className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => handleGenerateVideo("auto")}
-                      className="flex flex-col items-start gap-0.5"
-                    >
-                      <span className="text-xs font-medium">{AUTO_ENGINE.label}</span>
-                      <span className="text-[10px] text-muted-foreground">{AUTO_ENGINE.description}</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {VIDEO_ENGINES.filter(e => !e.stable).map((engine) => (
-                      <DropdownMenuItem
-                        key={engine.key}
-                        onClick={() => handleGenerateVideo(engine.key)}
-                        className="flex flex-col items-start gap-0.5"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium">{engine.label}</span>
-                          <span className="rounded bg-yellow-500/10 px-1 py-0.5 text-[9px] font-medium text-yellow-600">experimental</span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">{engine.description}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="w-full flex flex-col items-start gap-0 h-auto py-2.5 px-3 text-left"
+                  onClick={() => handleGenerateVideo("sora2")}
+                  disabled={isSubmitting}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Video className="h-3 w-3" />
+                    <span className="text-[11px] font-medium">{SORA_ENGINE.label}</span>
+                    <span className="rounded bg-background/20 px-1 py-0.5 text-[8px] font-bold">{SORA_ENGINE.duration}</span>
+                  </div>
+                  <span className="text-[9px] opacity-80">{SORA_ENGINE.description}</span>
+                </Button>
               </div>
             )}
 
