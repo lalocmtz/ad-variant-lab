@@ -249,7 +249,17 @@ Important rules:
 - do not add on-screen text, subtitles, captions, comment bubbles, social UI, or motion graphics
 - preserve the comment-reply mechanic only as spoken context if relevant, never as visible text
 - keep the result natural, believable, handheld, and UGC-style
-- use the following JSON blueprint as the execution spec
+
+LANGUAGE RULES:
+- All spoken dialogue and scripts MUST be in Spanish (Mexican Spanish by default).
+- Use natural Mexican Spanish vocabulary, tone, and phrasing.
+- The accent must be Mexican.
+- Avoid Spain Spanish phrasing.
+- Avoid unnatural "neutral corporate Spanish".
+- If a script is provided in Spanish, preserve it — do NOT translate to English.
+- Visual/technical instructions may remain in English for model quality.
+
+Use the following JSON blueprint as the execution spec:
 
 JSON:
 ${JSON.stringify(promptJson, null, 2)}`;
