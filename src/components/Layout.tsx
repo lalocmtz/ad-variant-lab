@@ -51,22 +51,6 @@ function AppSidebar() {
           </div>
         </SidebarGroup>
 
-        {/* Dashboard */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location.pathname === "/dashboard"}>
-                  <NavLink to="/dashboard" end className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-foreground font-medium">
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    {!collapsed && <span>Dashboard</span>}
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
         {/* Create */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-section-label px-3">Create</SidebarGroupLabel>
