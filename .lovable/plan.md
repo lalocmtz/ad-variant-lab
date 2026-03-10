@@ -1,55 +1,35 @@
 
 
-## Plan: Eliminar timeout + Garantizar audio en videos generados
+## Problem
 
-### Problema 1: Timeout de 10 minutos mata tareas validas
-La tarea de Kling sigue procesandose en el servidor pero el frontend la marca como "fallida" a los 10 minutos y deja de hacer polling.
+Veo 3.1 tasks are created successfully at `/api/v1/veo/generate`, but the polling function (`get-video-task`) tries to check status at `/api/v1/jobs/recordInfo` — which is for legacy engines (Kling, Hailuo, Wan, Sora). Veo has its own dedicated polling endpoint: **`/api/v1/veo/record-info`**, with different status codes (0=generating, 1=success, 2=failed, 3=generation failed).
 
-**Solucion:** Eliminar el timeout completamente. El polling continua indefinidamente hasta que KIE devuelva `success` o `fail`. La UI muestra solo el tiempo transcurrido sin limite maximo.
+Result: `"recordInfo is null"` — the legacy endpoint doesn't know about Veo tasks.
 
-**Archivo:** `src/components/KlingAnimationPanel.tsx`
-- Eliminar la constante `TIMEOUT_MS` y toda la logica de timeout en `pollTask` (lineas 82-94)
-- Cambiar la barra de progreso para que sea una animacion pulsante (indeterminada) en vez de basada en tiempo
-- Cambiar el timer de `"2:30 / 10:00"` a solo `"2:30"` (tiempo transcurrido sin limite)
+## Fix
 
-### Problema 2: Videos entregados sin audio
-Kling Motion Control genera video **sin audio** por diseno — solo anima la imagen con el movimiento del video de referencia. El audio del TikTok original se pierde.
+### 1. `get-video-task/index.ts` — Route to correct polling endpoint
 
-**Solucion:** Crear una edge function `merge-audio` que use ffmpeg-wasm para combinar el video de Kling (sin audio) con el audio extraido del video original de TikTok. Cuando el polling detecta que un video esta listo, automaticamente llama a `merge-audio` antes de mostrarlo al usuario.
-
-**Archivos nuevos/modificados:**
-
-| Archivo | Cambio |
-|---|---|
-| `src/components/KlingAnimationPanel.tsx` | Eliminar timeout, cambiar progreso a indeterminado, agregar paso de merge post-completado |
-| `supabase/functions/merge-audio/index.ts` | **Nuevo** — Descarga video Kling + video original, extrae audio del original, los combina con ffmpeg-wasm, sube resultado a storage |
-| `supabase/config.toml` | Agregar entrada para `merge-audio` |
-
-### Flujo actualizado post-Kling
-```text
-Kling completa video (sin audio)
-        │
-        ▼
-Estado UI: "Agregando audio del video original..."
-        │
-        ▼
-Edge function merge-audio:
-  1. Descarga video Kling (solo video)
-  2. Descarga video TikTok original (tiene audio)
-  3. ffmpeg: combina video de Kling + audio de TikTok
-  4. Sube MP4 final a storage
-  5. Devuelve URL publica
-        │
-        ▼
-UI muestra video final CON audio
+Accept an `engine` parameter from the frontend. If engine starts with `veo3`, poll at:
+```
+GET https://api.kie.ai/api/v1/veo/record-info?taskId=...
+```
+Otherwise use the existing legacy endpoint:
+```
+GET https://api.kie.ai/api/v1/jobs/recordInfo?taskId=...
 ```
 
-### Detalle tecnico de merge-audio
-- Usa `@ffmpeg/ffmpeg` (version WASM que corre en Deno edge functions)
-- Comando equivalente: `ffmpeg -i kling.mp4 -i tiktok.mp4 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output.mp4`
-- Solo remuxea (no re-encoda video), por lo que es rapido
-- Si el audio es mas largo que el video, se corta al largo del video (`-shortest`)
+Handle Veo's different response shape:
+- Status codes: `0` = generating, `1` = success, `2`/`3` = failed
+- Video URL in `data.resultUrls` or `data.info.resultUrls`
 
-### Estado de la UI durante merge
-Se agrega un nuevo `detailState`: `"merging_audio"` con label `"Agregando audio..."` para que el usuario sepa que falta un paso despues de que Kling termine.
+### 2. `VariantCard.tsx` — Pass engine to polling
+
+When calling `get-video-task`, include `{ taskId, engine: activeEngine }` so the backend knows which endpoint to use.
+
+### Files to modify
+| File | Change |
+|---|---|
+| `supabase/functions/get-video-task/index.ts` | Add Veo-specific polling endpoint and response parsing |
+| `src/components/VariantCard.tsx` | Pass `engine` parameter in poll requests |
 
