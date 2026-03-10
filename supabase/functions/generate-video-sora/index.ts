@@ -77,7 +77,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { variantId, imageUrl, promptText, mode } = await req.json();
+    const { variantId, imageUrl, promptText, mode, language, accent } = await req.json();
 
     // --- Validation ---
     if (!variantId) {
