@@ -53,3 +53,28 @@ export interface BofBatchResult {
   status: BofBatchStatus;
   variants: BofVariantResult[];
 }
+
+export interface BofAutofillConfidence {
+  product_name: number;
+  current_price: number;
+  old_price: number;
+  main_benefit: number;
+  offer: number;
+  pain_point: number;
+  audience: number;
+}
+
+export interface BofAutofillResult {
+  product_name: string;
+  current_price: string;
+  old_price: string;
+  main_benefit: string;
+  offer: string;
+  pain_point: string;
+  audience: string;
+  suggested_formats: string[];
+  language: string;
+  accent: string;
+  confidence: Partial<BofAutofillConfidence>;
+  product_image_file?: File;
+}

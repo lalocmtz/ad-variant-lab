@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.merge-broll-audio]
 verify_jwt = false
+
+[functions.analyze-bof-source]
+verify_jwt = false
