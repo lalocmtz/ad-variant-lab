@@ -109,7 +109,9 @@ serve(async (req) => {
     }
 
     // --- Sanitize prompt ---
-    const sanitizedPrompt = sanitizePrompt(promptText);
+    const videoLanguage = language || "es-MX";
+    const videoAccent = accent || "mexicano";
+    const sanitizedPrompt = sanitizePrompt(promptText, videoLanguage, videoAccent);
 
     // --- Build request body per Kie AI spec ---
     const generationMode = mode || "standard";

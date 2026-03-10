@@ -151,6 +151,27 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
           </p>
         </div>
 
+        {/* Accent */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Globe className="h-4 w-4 text-primary" />
+            Acento del Video
+          </Label>
+          <Select value={accent} onValueChange={setAccent}>
+            <SelectTrigger className="h-10 border-border bg-card">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(ACCENTS[language] || []).map((a) => (
+                <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">
+            El acento y tono del diálogo hablado en los videos generados.
+          </p>
+        </div>
+
         {/* Diversity Intensity */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
