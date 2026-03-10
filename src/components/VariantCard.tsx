@@ -395,10 +395,29 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
             {videoStatus === "idle" && !videoUrl && (
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Generar video (sin audio)
+                  Generar video
                 </p>
+                {/* Recommended engine — prominent */}
+                {VIDEO_ENGINES.filter(e => e.recommended).map((engine) => (
+                  <Button
+                    key={engine.key}
+                    variant="default"
+                    size="sm"
+                    className="w-full flex flex-col items-start gap-0 h-auto py-2.5 px-3 text-left"
+                    onClick={() => handleGenerateVideo(engine.key)}
+                    disabled={isSubmitting}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Video className="h-3 w-3" />
+                      <span className="text-[11px] font-medium">{engine.label}</span>
+                      <span className="rounded bg-background/20 px-1 py-0.5 text-[8px] font-bold">RECOMENDADO</span>
+                    </div>
+                    <span className="text-[9px] opacity-80">{engine.description}</span>
+                  </Button>
+                ))}
+                {/* Other stable engines */}
                 <div className="grid grid-cols-2 gap-1">
-                  {VIDEO_ENGINES.filter(e => e.stable).map((engine) => (
+                  {VIDEO_ENGINES.filter(e => e.stable && !e.recommended).map((engine) => (
                     <Button
                       key={engine.key}
                       variant="outline"

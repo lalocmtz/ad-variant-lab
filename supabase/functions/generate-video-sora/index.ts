@@ -5,82 +5,141 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Canonical Video Spec ──
-// Every video generated must target these constraints.
-// Individual engines may have different max durations — that's documented per engine.
+// ── Engine Registry ──
 
 interface EngineSpec {
   label: string;
-  kieModelId: string;
   maxDurationSeconds: number;
   aspectRatio: "9:16";
-  audioSupported: false; // No engine reliably produces speech audio
-  stable: boolean; // Whether this engine is production-ready
-  buildInput: (prompt: string, imageUrl: string) => Record<string, unknown>;
+  audioSupported: boolean;
+  stable: boolean;
+  // Each engine builds its own full request and returns endpoint + body
+  buildRequest: (prompt: string, imageUrl: string) => { endpoint: string; body: Record<string, unknown> };
 }
 
 const ENGINES: Record<string, EngineSpec> = {
+  // ── Veo 3.1 engines (dedicated /veo/generate endpoint) ──
+  veo3_fast: {
+    label: "Veo 3.1 Fast",
+    maxDurationSeconds: 8,
+    aspectRatio: "9:16",
+    audioSupported: true, // Veo includes background audio by default
+    stable: true,
+    buildRequest: (prompt, imageUrl) => ({
+      endpoint: "https://api.kie.ai/api/v1/veo/generate",
+      body: {
+        prompt,
+        imageUrls: [imageUrl],
+        model: "veo3_fast",
+        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
+        aspect_ratio: "9:16",
+        enableTranslation: false, // We send prompts in the target language already
+        enableFallback: false,
+      },
+    }),
+  },
+  veo3: {
+    label: "Veo 3.1 Quality",
+    maxDurationSeconds: 8,
+    aspectRatio: "9:16",
+    audioSupported: true,
+    stable: true,
+    buildRequest: (prompt, imageUrl) => ({
+      endpoint: "https://api.kie.ai/api/v1/veo/generate",
+      body: {
+        prompt,
+        imageUrls: [imageUrl],
+        model: "veo3",
+        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
+        aspect_ratio: "9:16",
+        enableTranslation: false,
+        enableFallback: false,
+      },
+    }),
+  },
+
+  // ── Legacy engines (generic /jobs/createTask endpoint) ──
   kling: {
     label: "Kling 2.6",
-    kieModelId: "kling-2.6/image-to-video",
     maxDurationSeconds: 5,
     aspectRatio: "9:16",
     audioSupported: false,
     stable: true,
-    buildInput: (prompt, imageUrl) => ({
-      prompt,
-      image_urls: [imageUrl],
-      duration: "5",
-      sound: false,
+    buildRequest: (prompt, imageUrl) => ({
+      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
+      body: {
+        model: "kling-2.6/image-to-video",
+        input: {
+          prompt,
+          image_urls: [imageUrl],
+          duration: "5",
+          sound: false,
+        },
+      },
     }),
   },
   hailuo: {
     label: "Hailuo 2.3 Pro",
-    kieModelId: "hailuo/2-3-image-to-video-pro",
     maxDurationSeconds: 6,
     aspectRatio: "9:16",
     audioSupported: false,
     stable: true,
-    buildInput: (prompt, imageUrl) => ({
-      prompt,
-      image_url: imageUrl,
-      duration: "6",
-      resolution: "768P",
+    buildRequest: (prompt, imageUrl) => ({
+      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
+      body: {
+        model: "hailuo/2-3-image-to-video-pro",
+        input: {
+          prompt,
+          image_url: imageUrl,
+          duration: "6",
+          resolution: "768P",
+        },
+      },
     }),
   },
   wan: {
     label: "Wan 2.6",
-    kieModelId: "wan/2-6-image-to-video",
     maxDurationSeconds: 5,
     aspectRatio: "9:16",
     audioSupported: false,
     stable: true,
-    buildInput: (prompt, imageUrl) => ({
-      prompt,
-      image_urls: [imageUrl],
-      duration: "5",
-      resolution: "1080p",
+    buildRequest: (prompt, imageUrl) => ({
+      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
+      body: {
+        model: "wan/2-6-image-to-video",
+        input: {
+          prompt,
+          image_urls: [imageUrl],
+          duration: "5",
+          resolution: "1080p",
+        },
+      },
     }),
   },
   sora2: {
     label: "Sora 2",
-    kieModelId: "sora-2-image-to-video",
     maxDurationSeconds: 10,
     aspectRatio: "9:16",
     audioSupported: false,
-    stable: false, // Frequently returns internal errors
-    buildInput: (prompt, imageUrl) => ({
-      prompt,
-      image_urls: [imageUrl],
-      aspect_ratio: "portrait",
-      n_frames: "10",
-      remove_watermark: true,
+    stable: false,
+    buildRequest: (prompt, imageUrl) => ({
+      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
+      body: {
+        model: "sora-2-image-to-video",
+        input: {
+          prompt,
+          image_urls: [imageUrl],
+          aspect_ratio: "portrait",
+          n_frames: "10",
+          remove_watermark: true,
+        },
+      },
     }),
   },
 };
 
-// Auto fallback chain — only used when user explicitly selects "auto"
-const AUTO_CHAIN: string[] = ["kling", "hailuo", "wan"];
+// Auto fallback: Veo Fast first (cheapest + best), then Kling, then Hailuo
+const AUTO_CHAIN: string[] = ["veo3_fast", "kling", "hailuo"];
 
 // ── Helpers ──
 
@@ -108,7 +167,7 @@ function extractTaskId(data: Record<string, unknown>): string | null {
   return d?.data?.taskId || d?.taskId || d?.data?.task_id || d?.task_id || null;
 }
 
-// ── Prompt builder — duration-aware, no false audio promises ──
+// ── Prompt builder ──
 
 const MAX_PROMPT_CHARS = 2000;
 
@@ -116,19 +175,22 @@ function buildVideoPrompt(rawPrompt: string, engine: EngineSpec, language: strin
   const langLabel = language === "es-MX" ? "español mexicano" : language === "es-CO" ? "español colombiano" : language === "es-ES" ? "español de España" : language === "en-US" ? "English (US)" : language;
   const isSpanish = language.startsWith("es");
 
+  const audioNote = engine.audioSupported
+    ? "- Background audio will be included automatically by the engine."
+    : "- No spoken audio — this is a SILENT video clip.\n- Audio/voiceover will be added separately in post-production.";
+
   const suffix = `
 
 MANDATORY VIDEO RULES:
 - Use the attached image as the actor identity and first-frame reference.
 - Create a natural handheld 9:16 vertical UGC-style video.
-- Duration: exactly ${engine.maxDurationSeconds} seconds.
+- Duration: approximately ${engine.maxDurationSeconds} seconds.
 - No subtitles, captions, text overlays, stickers, or motion graphics.
-- No spoken audio — this is a SILENT video clip.
+${audioNote}
 - Clean native smartphone recording style.
 - Smooth natural motion, slight handheld movement.
 
-LANGUAGE CONTEXT: Visual text/signs should be in ${langLabel}${isSpanish ? `, accent context: ${accent}` : ""}.
-NOTE: Audio/voiceover will be added separately in post-production.`;
+LANGUAGE CONTEXT: Visual text/signs should be in ${langLabel}${isSpanish ? `, accent context: ${accent}` : ""}.`;
 
   const maxBase = MAX_PROMPT_CHARS - suffix.length;
   let sanitized = rawPrompt.trim();
@@ -161,7 +223,6 @@ function successResponse(taskId: string, engineKey: string, engine: EngineSpec, 
     status: "queued",
     engine: engineKey,
     modelLabel: engine.label,
-    model: engine.kieModelId,
     fallbackUsed,
     spec: {
       aspect_ratio: engine.aspectRatio,
@@ -169,16 +230,6 @@ function successResponse(taskId: string, engineKey: string, engine: EngineSpec, 
       audio_expected: engine.audioSupported,
     },
   });
-}
-
-// ── Validation ──
-
-function validateRequest(engineKey: string): { engine: EngineSpec } | { error: string } {
-  const engine = ENGINES[engineKey];
-  if (!engine) {
-    return { error: `Motor desconocido: "${engineKey}". Motores disponibles: ${Object.keys(ENGINES).join(", ")}` };
-  }
-  return { engine };
 }
 
 // ── Attempt a single engine ──
@@ -190,16 +241,15 @@ async function attemptCreateTask(
   imageUrl: string,
   apiKey: string,
 ): Promise<{ taskId: string } | { error: string; retryable: boolean }> {
-  const input = engine.buildInput(prompt, imageUrl);
-  const requestBody = { model: engine.kieModelId, input };
+  const { endpoint, body: requestBody } = engine.buildRequest(prompt, imageUrl);
 
-  console.log(`[generate-video] → ${engine.label} (${engine.kieModelId}), prompt: ${prompt.length} chars, duration: ${engine.maxDurationSeconds}s`);
+  console.log(`[generate-video] → ${engine.label} (${engineKey}), endpoint: ${endpoint}, prompt: ${prompt.length} chars, duration: ${engine.maxDurationSeconds}s`);
   console.log(`[generate-video] Payload preview:`, JSON.stringify(requestBody).substring(0, 600));
 
   let response: Response;
   try {
     response = await fetchWithTimeout(
-      "https://api.kie.ai/api/v1/jobs/createTask",
+      endpoint,
       {
         method: "POST",
         headers: {
@@ -294,9 +344,8 @@ serve(async (req) => {
 
     // Validate all engines before attempting
     for (const key of enginesToTry) {
-      const validation = validateRequest(key);
-      if ("error" in validation) {
-        return errorResponse("validation", key, validation.error, false, 400);
+      if (!ENGINES[key]) {
+        return errorResponse("validation", key, `Motor desconocido: "${key}". Disponibles: ${Object.keys(ENGINES).join(", ")}`, false, 400);
       }
     }
 
@@ -306,7 +355,6 @@ serve(async (req) => {
       const engineKey = enginesToTry[i];
       const engine = ENGINES[engineKey];
 
-      // Build duration-accurate prompt for THIS engine
       const finalPrompt = buildVideoPrompt(promptText, engine, videoLanguage, videoAccent);
       console.log(`[generate-video] Final prompt for ${engine.label}: ${finalPrompt.length} chars`);
 
