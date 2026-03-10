@@ -136,7 +136,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
             <Globe className="h-4 w-4 text-primary" />
             Idioma del Guión
           </Label>
-          <Select value={language} onValueChange={setLanguage}>
+          <Select value={language} onValueChange={handleLanguageChange}>
             <SelectTrigger className="h-10 border-border bg-card">
               <SelectValue />
             </SelectTrigger>
