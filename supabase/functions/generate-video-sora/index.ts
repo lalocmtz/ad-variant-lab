@@ -34,13 +34,14 @@ LANGUAGE & VOICE RULES (MANDATORY):
 }
 
 
-function sanitizePrompt(promptText: string): string {
+function sanitizePrompt(promptText: string, language: string, accent: string): string {
   let sanitized = promptText.trim();
 
+  const suffix = buildSanitizationSuffix(language, accent);
+
   // Truncate if excessively long (Sora prompt max is 10000 chars)
-  const MAX_PROMPT = 9500; // leave room for suffix
+  const MAX_PROMPT = 9000; // leave room for suffix
   if (sanitized.length > MAX_PROMPT) {
-    // Try to preserve JSON blueprint section
     const jsonStart = sanitized.indexOf('"video_metadata"');
     if (jsonStart > 0) {
       const beforeJson = sanitized.substring(0, Math.min(2500, jsonStart));
@@ -51,9 +52,8 @@ function sanitizePrompt(promptText: string): string {
     }
   }
 
-  sanitized += SANITIZATION_SUFFIX;
+  sanitized += suffix;
 
-  // Final hard cap at 10000 (Kie AI limit)
   if (sanitized.length > 10000) {
     sanitized = sanitized.substring(0, 10000);
   }
