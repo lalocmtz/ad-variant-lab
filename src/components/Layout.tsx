@@ -108,7 +108,7 @@ function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
           {!collapsed && (
-            <Button onClick={() => navigate("/dashboard")} className="w-full gradient-cta text-white border-0 mt-2" size="sm">
+            <Button onClick={() => navigate("/create/video")} className="w-full gradient-cta text-white border-0 mt-2" size="sm">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Project
             </Button>

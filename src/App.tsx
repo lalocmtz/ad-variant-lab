@@ -31,8 +31,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 const AppRoutes = () => (
   <Routes>
     <Route path="/auth" element={<Auth />} />
-    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-    <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+    <Route path="/" element={<Navigate to="/create/video" replace />} />
+    <Route path="/dashboard" element={<Navigate to="/create/video" replace />} />
     <Route path="/create/video" element={<AppLayout><Index /></AppLayout>} />
     <Route path="/create/static" element={<AppLayout><StaticVariants /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
