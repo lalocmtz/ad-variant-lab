@@ -268,17 +268,30 @@ const Index = () => {
   const [pipelineStep, setPipelineStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [downloadedData, setDownloadedData] = useState<DownloadedData | null>(null);
+  const [historyEntryId, setHistoryEntryId] = useState<string | null>(null);
 
   const saveToHistory = async (url: string, variantCount: number, analysisResults: AnalysisResult) => {
     try {
-      await supabase.from("analysis_history").insert([{
+      const { data } = await supabase.from("analysis_history").insert([{
         tiktok_url: url,
         variant_count: variantCount,
         results: JSON.parse(JSON.stringify(analysisResults)),
         user_id: user?.id,
-      }]);
+      }]).select("id").single();
+      if (data?.id) setHistoryEntryId(data.id);
     } catch (e) {
       console.error("Failed to save to history:", e);
+    }
+  };
+
+  const persistResultsToHistory = async (updatedResults: AnalysisResult) => {
+    if (!historyEntryId) return;
+    try {
+      await supabase.from("analysis_history").update({
+        results: JSON.parse(JSON.stringify(updatedResults)),
+      }).eq("id", historyEntryId);
+    } catch (e) {
+      console.error("Failed to persist results to history:", e);
     }
   };
 
@@ -473,14 +486,20 @@ const Index = () => {
     if (!results) return;
     const updatedVariants = [...results.variants];
     updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], ...videoState };
-    setResults({ ...results, variants: updatedVariants });
-  }, [results]);
+    const updatedResults = { ...results, variants: updatedVariants };
+    setResults(updatedResults);
+    // Persist to DB when video completes or fails
+    if (videoState.video_url || videoState.video_status === "completed" || videoState.video_status === "failed") {
+      persistResultsToHistory(updatedResults);
+    }
+  }, [results, historyEntryId]);
 
   const handleReset = useCallback(() => {
     setStep("input");
     setResults(null);
     setError(null);
     setDownloadedData(null);
+    setHistoryEntryId(null);
   }, []);
 
   return (
