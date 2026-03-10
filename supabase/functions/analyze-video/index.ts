@@ -313,14 +313,30 @@ INSTRUCTIONS:
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    const aiData = await response.json();
+    const rawAiText = await response.text();
+    console.log("[analyze-video] AI response length:", rawAiText.length, "chars, preview:", rawAiText.substring(0, 300));
+
+    let aiData: any;
+    try {
+      aiData = JSON.parse(rawAiText);
+    } catch (parseErr) {
+      console.error("[analyze-video] Failed to parse AI gateway response. Length:", rawAiText.length, "Last 200 chars:", rawAiText.substring(rawAiText.length - 200));
+      throw new Error(`La respuesta del modelo AI fue demasiado grande o llegó incompleta (${rawAiText.length} chars). Intenta reducir el número de variantes a 2.`);
+    }
+
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
       console.error("No tool call in response:", JSON.stringify(aiData).substring(0, 1000));
       throw new Error("AI did not return structured data");
     }
 
-    const result = JSON.parse(toolCall.function.arguments);
+    let result: any;
+    try {
+      result = JSON.parse(toolCall.function.arguments);
+    } catch (parseErr2) {
+      console.error("[analyze-video] Failed to parse tool_call arguments. Length:", toolCall.function.arguments?.length, "Last 200 chars:", toolCall.function.arguments?.substring(toolCall.function.arguments.length - 200));
+      throw new Error(`El análisis del modelo llegó truncado (${toolCall.function.arguments?.length || 0} chars en arguments). Intenta con 2 variantes o reinténtalo.`);
+    }
 
     // Force identity_distance to high for all variants
     if (result.variants) {
