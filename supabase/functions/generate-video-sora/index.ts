@@ -5,142 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Engine Registry ──
-
-interface EngineSpec {
-  label: string;
-  maxDurationSeconds: number;
-  aspectRatio: "9:16";
-  audioSupported: boolean;
-  stable: boolean;
-  // Each engine builds its own full request and returns endpoint + body
-  buildRequest: (prompt: string, imageUrl: string) => { endpoint: string; body: Record<string, unknown> };
-}
-
-const ENGINES: Record<string, EngineSpec> = {
-  // ── Veo 3.1 engines (dedicated /veo/generate endpoint) ──
-  veo3_fast: {
-    label: "Veo 3.1 Fast",
-    maxDurationSeconds: 8,
-    aspectRatio: "9:16",
-    audioSupported: true, // Veo includes background audio by default
-    stable: true,
-    buildRequest: (prompt, imageUrl) => ({
-      endpoint: "https://api.kie.ai/api/v1/veo/generate",
-      body: {
-        prompt,
-        imageUrls: [imageUrl],
-        model: "veo3_fast",
-        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
-        aspect_ratio: "9:16",
-        enableTranslation: false, // We send prompts in the target language already
-        enableFallback: false,
-      },
-    }),
-  },
-  veo3: {
-    label: "Veo 3.1 Quality",
-    maxDurationSeconds: 8,
-    aspectRatio: "9:16",
-    audioSupported: true,
-    stable: true,
-    buildRequest: (prompt, imageUrl) => ({
-      endpoint: "https://api.kie.ai/api/v1/veo/generate",
-      body: {
-        prompt,
-        imageUrls: [imageUrl],
-        model: "veo3",
-        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
-        aspect_ratio: "9:16",
-        enableTranslation: false,
-        enableFallback: false,
-      },
-    }),
-  },
-
-  // ── Legacy engines (generic /jobs/createTask endpoint) ──
-  kling: {
-    label: "Kling 2.6",
-    maxDurationSeconds: 5,
-    aspectRatio: "9:16",
-    audioSupported: false,
-    stable: true,
-    buildRequest: (prompt, imageUrl) => ({
-      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
-      body: {
-        model: "kling-2.6/image-to-video",
-        input: {
-          prompt,
-          image_urls: [imageUrl],
-          duration: "5",
-          sound: false,
-        },
-      },
-    }),
-  },
-  hailuo: {
-    label: "Hailuo 2.3 Pro",
-    maxDurationSeconds: 6,
-    aspectRatio: "9:16",
-    audioSupported: false,
-    stable: true,
-    buildRequest: (prompt, imageUrl) => ({
-      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
-      body: {
-        model: "hailuo/2-3-image-to-video-pro",
-        input: {
-          prompt,
-          image_url: imageUrl,
-          duration: "6",
-          resolution: "768P",
-        },
-      },
-    }),
-  },
-  wan: {
-    label: "Wan 2.6",
-    maxDurationSeconds: 5,
-    aspectRatio: "9:16",
-    audioSupported: false,
-    stable: true,
-    buildRequest: (prompt, imageUrl) => ({
-      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
-      body: {
-        model: "wan/2-6-image-to-video",
-        input: {
-          prompt,
-          image_urls: [imageUrl],
-          duration: "5",
-          resolution: "1080p",
-        },
-      },
-    }),
-  },
-  sora2: {
-    label: "Sora 2",
-    maxDurationSeconds: 10,
-    aspectRatio: "9:16",
-    audioSupported: false,
-    stable: false,
-    buildRequest: (prompt, imageUrl) => ({
-      endpoint: "https://api.kie.ai/api/v1/jobs/createTask",
-      body: {
-        model: "sora-2-image-to-video",
-        input: {
-          prompt,
-          image_urls: [imageUrl],
-          aspect_ratio: "portrait",
-          n_frames: "10",
-          remove_watermark: true,
-        },
-      },
-    }),
-  },
-};
-
-// Auto fallback: Veo Fast first (cheapest + best), then Kling, then Hailuo
-const AUTO_CHAIN: string[] = ["veo3_fast", "kling", "hailuo"];
-
 // ── Helpers ──
 
 function isValidHttpUrl(url: string): boolean {
@@ -171,26 +35,24 @@ function extractTaskId(data: Record<string, unknown>): string | null {
 
 const MAX_PROMPT_CHARS = 2000;
 
-function buildVideoPrompt(rawPrompt: string, engine: EngineSpec, language: string, accent: string): string {
+function buildVideoPrompt(rawPrompt: string, language: string, accent: string): string {
   const langLabel = language === "es-MX" ? "español mexicano" : language === "es-CO" ? "español colombiano" : language === "es-ES" ? "español de España" : language === "en-US" ? "English (US)" : language;
   const isSpanish = language.startsWith("es");
-
-  const audioNote = engine.audioSupported
-    ? "- Background audio will be included automatically by the engine."
-    : "- No spoken audio — this is a SILENT video clip.\n- Audio/voiceover will be added separately in post-production.";
 
   const suffix = `
 
 MANDATORY VIDEO RULES:
 - Use the attached image as the actor identity and first-frame reference.
 - Create a natural handheld 9:16 vertical UGC-style video.
-- Duration: approximately ${engine.maxDurationSeconds} seconds.
+- Duration: approximately 9 seconds. Fill the entire duration with fluid motion.
 - No subtitles, captions, text overlays, stickers, or motion graphics.
-${audioNote}
+- No spoken audio — this is a SILENT video clip.
+- Audio/voiceover will be added separately in post-production.
 - Clean native smartphone recording style.
 - Smooth natural motion, slight handheld movement.
 
-LANGUAGE CONTEXT: Visual text/signs should be in ${langLabel}${isSpanish ? `, accent context: ${accent}` : ""}.`;
+LANGUAGE CONTEXT: Visual text/signs should be in ${langLabel}${isSpanish ? `, accent context: ${accent}` : ""}.
+${isSpanish ? `MANDATORY: Use Mexican Spanish (es-MX) context. Natural Mexican vocabulary. No Argentine, Spanish, or neutral corporate tone.` : ""}`;
 
   const maxBase = MAX_PROMPT_CHARS - suffix.length;
   let sanitized = rawPrompt.trim();
@@ -211,98 +73,8 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-function errorResponse(stage: string, engine: string, error: string, retryable: boolean, httpStatus = 400) {
-  return jsonResponse({ ok: false, stage, engine, error, retryable }, httpStatus);
-}
-
-function successResponse(taskId: string, engineKey: string, engine: EngineSpec, variantId: string, fallbackUsed: boolean) {
-  return jsonResponse({
-    ok: true,
-    taskId,
-    variantId,
-    status: "queued",
-    engine: engineKey,
-    modelLabel: engine.label,
-    fallbackUsed,
-    spec: {
-      aspect_ratio: engine.aspectRatio,
-      duration_seconds: engine.maxDurationSeconds,
-      audio_expected: engine.audioSupported,
-    },
-  });
-}
-
-// ── Attempt a single engine ──
-
-async function attemptCreateTask(
-  engineKey: string,
-  engine: EngineSpec,
-  prompt: string,
-  imageUrl: string,
-  apiKey: string,
-): Promise<{ taskId: string } | { error: string; retryable: boolean }> {
-  const { endpoint, body: requestBody } = engine.buildRequest(prompt, imageUrl);
-
-  console.log(`[generate-video] → ${engine.label} (${engineKey}), endpoint: ${endpoint}, prompt: ${prompt.length} chars, duration: ${engine.maxDurationSeconds}s`);
-  console.log(`[generate-video] Payload preview:`, JSON.stringify(requestBody).substring(0, 600));
-
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(
-      endpoint,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      },
-      30000,
-    );
-  } catch (e: any) {
-    const msg = e?.name === "AbortError"
-      ? `Timeout (30s) conectando con ${engine.label}`
-      : `Error de red (${engine.label}): ${e?.message}`;
-    console.error(`[generate-video] ${msg}`);
-    return { error: msg, retryable: true };
-  }
-
-  const responseText = await response.text();
-  console.log(`[generate-video] ${engine.label} HTTP ${response.status}, body: ${responseText.substring(0, 500)}`);
-
-  let data: Record<string, unknown>;
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    return { error: `Respuesta no-JSON de ${engine.label}`, retryable: false };
-  }
-
-  if (!response.ok) {
-    const statusErrors: Record<number, string> = {
-      401: "Autenticación con el proveedor falló.",
-      402: "Sin créditos suficientes.",
-      422: "Parámetros inválidos para este motor.",
-      429: "Límite de solicitudes. Intenta en unos minutos.",
-    };
-    const friendly = statusErrors[response.status] || `${engine.label} rechazó la solicitud (HTTP ${response.status})`;
-    return { error: `${engine.label}: ${friendly}`, retryable: response.status === 429 || response.status >= 500 };
-  }
-
-  const kieCode = (data as any).code;
-  if (kieCode !== undefined && kieCode !== 200) {
-    const msg = (data as any).msg || `código ${kieCode}`;
-    console.error(`[generate-video] ${engine.label} app error: ${kieCode} ${msg}`);
-    return { error: `${engine.label}: ${msg}`, retryable: false };
-  }
-
-  const taskId = extractTaskId(data);
-  if (!taskId) {
-    console.error(`[generate-video] No taskId from ${engine.label}:`, JSON.stringify(data).substring(0, 500));
-    return { error: `${engine.label} no devolvió taskId.`, retryable: false };
-  }
-
-  return { taskId };
+function errorResponse(stage: string, error: string, httpStatus = 400) {
+  return jsonResponse({ ok: false, stage, engine: "sora2", error, retryable: false }, httpStatus);
 }
 
 // ── Main handler ──
@@ -311,7 +83,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { variantId, imageUrl, promptText, language, accent, model } = await req.json();
+    const { variantId, imageUrl, promptText, language, accent } = await req.json();
 
     console.log("[generate-video] Request:", JSON.stringify({
       variantId,
@@ -319,69 +91,114 @@ serve(async (req) => {
       promptLength: promptText?.length,
       language,
       accent,
-      model,
     }));
 
     // ── Input validation ──
-    if (!variantId) return errorResponse("validation", "", "variantId es requerido.", false, 400);
-    if (!imageUrl) return errorResponse("validation", "", "La imagen de la variante es requerida.", false, 400);
+    if (!variantId) return errorResponse("validation", "variantId es requerido.", 400);
+    if (!imageUrl) return errorResponse("validation", "La imagen de la variante es requerida.", 400);
     if (imageUrl.startsWith("data:") || imageUrl.startsWith("blob:"))
-      return errorResponse("validation", "", "La imagen debe ser una URL pública (no base64/blob).", false, 400);
+      return errorResponse("validation", "La imagen debe ser una URL pública (no base64/blob).", 400);
     if (!isValidHttpUrl(imageUrl))
-      return errorResponse("validation", "", "imageUrl no es una URL HTTP/HTTPS válida.", false, 400);
+      return errorResponse("validation", "imageUrl no es una URL HTTP/HTTPS válida.", 400);
     if (!promptText || promptText.trim().length < 20)
-      return errorResponse("validation", "", "El prompt es requerido (mínimo 20 caracteres).", false, 400);
+      return errorResponse("validation", "El prompt es requerido (mínimo 20 caracteres).", 400);
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
-    if (!KIE_API_KEY) return errorResponse("config", "", "KIE_API_KEY no está configurada.", false, 500);
+    if (!KIE_API_KEY) return errorResponse("config", "KIE_API_KEY no está configurada.", 500);
 
     const videoLanguage = language || "es-MX";
     const videoAccent = accent || "mexicano";
 
-    // ── Determine engine(s) to try ──
-    const isAutoMode = !model || model === "auto";
-    const enginesToTry: string[] = isAutoMode ? [...AUTO_CHAIN] : [model];
+    const finalPrompt = buildVideoPrompt(promptText, videoLanguage, videoAccent);
+    console.log(`[generate-video] Final prompt for Sora 2: ${finalPrompt.length} chars`);
 
-    // Validate all engines before attempting
-    for (const key of enginesToTry) {
-      if (!ENGINES[key]) {
-        return errorResponse("validation", key, `Motor desconocido: "${key}". Disponibles: ${Object.keys(ENGINES).join(", ")}`, false, 400);
-      }
+    // Sora 2 — single engine
+    const requestBody = {
+      model: "sora-2-image-to-video",
+      input: {
+        prompt: finalPrompt,
+        image_urls: [imageUrl],
+        aspect_ratio: "portrait",
+        n_frames: "10",
+        remove_watermark: true,
+      },
+    };
+
+    console.log(`[generate-video] → Sora 2, endpoint: /jobs/createTask, prompt: ${finalPrompt.length} chars, duration: 9s`);
+
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(
+        "https://api.kie.ai/api/v1/jobs/createTask",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${KIE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        },
+        30000,
+      );
+    } catch (e: any) {
+      const msg = e?.name === "AbortError"
+        ? "Timeout (30s) conectando con Sora 2"
+        : `Error de red (Sora 2): ${e?.message}`;
+      console.error(`[generate-video] ${msg}`);
+      return errorResponse("create_task", msg, 502);
     }
 
-    const errors: string[] = [];
+    const responseText = await response.text();
+    console.log(`[generate-video] Sora 2 HTTP ${response.status}, body: ${responseText.substring(0, 500)}`);
 
-    for (let i = 0; i < enginesToTry.length; i++) {
-      const engineKey = enginesToTry[i];
-      const engine = ENGINES[engineKey];
-
-      const finalPrompt = buildVideoPrompt(promptText, engine, videoLanguage, videoAccent);
-      console.log(`[generate-video] Final prompt for ${engine.label}: ${finalPrompt.length} chars`);
-
-      const result = await attemptCreateTask(engineKey, engine, finalPrompt, imageUrl, KIE_API_KEY);
-
-      if ("taskId" in result) {
-        if (i > 0) {
-          console.log(`[generate-video] ⚠ Fallback used: original ${enginesToTry[0]} → ${engineKey}`);
-        }
-        return successResponse(result.taskId, engineKey, engine, variantId, i > 0);
-      }
-
-      errors.push(result.error);
-      console.warn(`[generate-video] ${engineKey} failed: ${result.error}. ${i < enginesToTry.length - 1 ? "Trying next in chain..." : "No more engines."}`);
-
-      // In explicit mode (not auto), do NOT try other engines
-      if (!isAutoMode) break;
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return errorResponse("create_task", "Respuesta no-JSON de Sora 2", 502);
     }
 
-    const combinedError = errors.length > 1
-      ? `Todos los motores fallaron: ${errors.join(" | ")}`
-      : errors[0] || "Error desconocido del proveedor.";
+    if (!response.ok) {
+      const statusErrors: Record<number, string> = {
+        401: "Autenticación con el proveedor falló.",
+        402: "Sin créditos suficientes.",
+        422: "Parámetros inválidos.",
+        429: "Límite de solicitudes. Intenta en unos minutos.",
+      };
+      const friendly = statusErrors[response.status] || `Sora 2 rechazó la solicitud (HTTP ${response.status})`;
+      return errorResponse("create_task", `Sora 2: ${friendly}`, 502);
+    }
 
-    return errorResponse("create_task", enginesToTry[0], combinedError, true, 502);
+    const kieCode = (data as any).code;
+    if (kieCode !== undefined && kieCode !== 200) {
+      const msg = (data as any).msg || `código ${kieCode}`;
+      console.error(`[generate-video] Sora 2 app error: ${kieCode} ${msg}`);
+      return errorResponse("create_task", `Sora 2: ${msg}`, 502);
+    }
+
+    const taskId = extractTaskId(data);
+    if (!taskId) {
+      console.error(`[generate-video] No taskId from Sora 2:`, JSON.stringify(data).substring(0, 500));
+      return errorResponse("create_task", "Sora 2 no devolvió taskId.", 502);
+    }
+
+    return jsonResponse({
+      ok: true,
+      taskId,
+      variantId,
+      status: "queued",
+      engine: "sora2",
+      modelLabel: "Sora 2",
+      fallbackUsed: false,
+      spec: {
+        aspect_ratio: "9:16",
+        duration_seconds: 9,
+        audio_expected: false,
+      },
+    });
 
   } catch (e: any) {
     console.error("[generate-video] Unhandled error:", e);
-    return errorResponse("unhandled", "", e?.message || "Error desconocido.", false, 500);
+    return errorResponse("unhandled", e?.message || "Error desconocido.", 500);
   }
 });
