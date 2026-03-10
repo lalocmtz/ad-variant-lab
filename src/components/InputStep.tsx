@@ -27,6 +27,14 @@ const LANGUAGES = [
   { value: "en-US", label: "English (US)" },
 ];
 
+const ACCENTS: Record<string, { value: string; label: string }[]> = {
+  "es-MX": [{ value: "mexicano", label: "Mexicano" }],
+  "es-US": [{ value: "mexicano", label: "Mexicano" }, { value: "centroamericano", label: "Centroamericano" }],
+  "es-CO": [{ value: "colombiano", label: "Colombiano" }],
+  "es-ES": [{ value: "castellano", label: "Castellano" }],
+  "en-US": [{ value: "american", label: "American" }],
+};
+
 const DIVERSITY_OPTIONS = [
   { value: "low", label: "Baja", desc: "Actores similares al original" },
   { value: "medium", label: "Media", desc: "Actores distintos, mismo mercado" },
