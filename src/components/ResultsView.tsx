@@ -53,15 +53,6 @@ const ResultsView = ({
           />
         ))}
       </div>
-
-      {videoUrl && (
-        <KlingAnimationPanel
-          variants={results.variants}
-          videoUrl={videoUrl}
-          videoDuration={videoDuration}
-          videoMode={videoMode}
-        />
-      )}
     </div>
   );
 };
