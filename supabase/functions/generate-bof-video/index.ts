@@ -24,11 +24,12 @@ serve(async (req) => {
       const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase config for storage upload");
 
-      const matches = image_url.match(/^data:(image\/\w+);base64,(.+)$/);
-      if (!matches) throw new Error("Invalid base64 image format");
-      const mimeType = matches[1];
-      const base64Data = matches[2];
-      const ext = mimeType.split("/")[1] || "png";
+      const commaIdx = image_url.indexOf(",");
+      if (commaIdx === -1) throw new Error("Invalid base64 image format");
+      const header = image_url.substring(5, commaIdx); // e.g. "image/png;base64"
+      const mimeType = header.split(";")[0] || "image/png";
+      const base64Data = image_url.substring(commaIdx + 1);
+      const ext = mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "png";
       const fileName = `bof_video_input_${Date.now()}.${ext}`;
 
       const binaryStr = atob(base64Data);
