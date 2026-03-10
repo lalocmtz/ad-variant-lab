@@ -65,6 +65,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
       variantCount: 3,
       videoMode: "avatar",
       language,
+      accent,
       diversity_intensity: diversityIntensity,
     });
   };
