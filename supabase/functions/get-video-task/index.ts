@@ -24,6 +24,7 @@ async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = 1500
 }
 
 function extractVideoUrl(taskData: Record<string, any>): string | null {
+  // Try resultJson first (may be a JSON string)
   if (typeof taskData?.resultJson === "string" && taskData.resultJson.trim()) {
     try {
       const parsed = JSON.parse(taskData.resultJson);
@@ -40,6 +41,15 @@ function extractVideoUrl(taskData: Record<string, any>): string | null {
     }
   }
 
+  // Try info.resultUrls (Veo 3.1 format)
+  if (taskData?.info?.resultUrls) {
+    const urls = typeof taskData.info.resultUrls === "string"
+      ? JSON.parse(taskData.info.resultUrls)
+      : taskData.info.resultUrls;
+    if (Array.isArray(urls) && urls[0]) return urls[0];
+  }
+
+  // Try direct fields
   return (
     taskData?.resultUrls?.[0] ||
     taskData?.videoUrl ||
@@ -149,6 +159,19 @@ serve(async (req) => {
 
     const kieCode = data?.code;
     if (kieCode !== undefined && kieCode !== 200) {
+      // Veo 3.1 may return code 400 for "1080P is processing" — keep polling
+      if (kieCode === 400 && typeof data?.msg === "string" && data.msg.includes("1080P is processing")) {
+        console.log("[get-video-task] Veo 1080P still processing, keep polling");
+        return jsonOk({
+          ok: true,
+          taskId,
+          status: "processing",
+          videoUrl: null,
+          error: null,
+          shouldStopPolling: false,
+        });
+      }
+
       return jsonOk({
         ok: false,
         taskId,
@@ -178,10 +201,12 @@ serve(async (req) => {
         break;
 
       case "generating":
+      case "processing":
         normalizedStatus = "processing";
         break;
 
-      case "success": {
+      case "success":
+      case "completed": {
         videoUrl = extractVideoUrl(taskData);
         if (videoUrl) {
           normalizedStatus = "completed";

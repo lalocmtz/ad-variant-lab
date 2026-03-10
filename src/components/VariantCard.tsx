@@ -32,13 +32,15 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
 
 // Engine registry — must match backend ENGINES keys
 const VIDEO_ENGINES = [
-  { key: "kling", label: "Kling 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true },
-  { key: "hailuo", label: "Hailuo 2.3 Pro", duration: "6s", description: "Estable · 6s · Sin audio", stable: true },
-  { key: "wan", label: "Wan 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true },
-  { key: "sora2", label: "Sora 2", duration: "10s", description: "Experimental · 10s · Sin audio", stable: false },
+  { key: "veo3_fast", label: "Veo 3.1 Fast", duration: "8s", description: "Recomendado · 8s · Con audio · $0.025", stable: true, recommended: true },
+  { key: "veo3", label: "Veo 3.1 Quality", duration: "8s", description: "Alta calidad · 8s · Con audio · $1.25", stable: true, recommended: false },
+  { key: "kling", label: "Kling 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true, recommended: false },
+  { key: "hailuo", label: "Hailuo 2.3 Pro", duration: "6s", description: "Estable · 6s · Sin audio", stable: true, recommended: false },
+  { key: "wan", label: "Wan 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true, recommended: false },
+  { key: "sora2", label: "Sora 2", duration: "10s", description: "Experimental · 10s · Sin audio", stable: false, recommended: false },
 ];
 
-const AUTO_ENGINE = { key: "auto", label: "Auto (fallback)", description: "Kling → Hailuo → Wan" };
+const AUTO_ENGINE = { key: "auto", label: "Auto (fallback)", description: "Veo Fast → Kling → Hailuo" };
 
 interface VideoSpec {
   aspect_ratio: string;
@@ -393,10 +395,29 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
             {videoStatus === "idle" && !videoUrl && (
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Generar video (sin audio)
+                  Generar video
                 </p>
+                {/* Recommended engine — prominent */}
+                {VIDEO_ENGINES.filter(e => e.recommended).map((engine) => (
+                  <Button
+                    key={engine.key}
+                    variant="default"
+                    size="sm"
+                    className="w-full flex flex-col items-start gap-0 h-auto py-2.5 px-3 text-left"
+                    onClick={() => handleGenerateVideo(engine.key)}
+                    disabled={isSubmitting}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Video className="h-3 w-3" />
+                      <span className="text-[11px] font-medium">{engine.label}</span>
+                      <span className="rounded bg-background/20 px-1 py-0.5 text-[8px] font-bold">RECOMENDADO</span>
+                    </div>
+                    <span className="text-[9px] opacity-80">{engine.description}</span>
+                  </Button>
+                ))}
+                {/* Other stable engines */}
                 <div className="grid grid-cols-2 gap-1">
-                  {VIDEO_ENGINES.filter(e => e.stable).map((engine) => (
+                  {VIDEO_ENGINES.filter(e => e.stable && !e.recommended).map((engine) => (
                     <Button
                       key={engine.key}
                       variant="outline"
@@ -474,8 +495,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                         {videoSpec.duration_seconds}s
                       </span>
                       <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        <VolumeX className="h-2.5 w-2.5" />
-                        Sin audio
+                        {videoSpec.audio_expected ? <Volume2 className="h-2.5 w-2.5" /> : <VolumeX className="h-2.5 w-2.5" />}
+                        {videoSpec.audio_expected ? "Con audio" : "Sin audio"}
                       </span>
                     </>
                   )}
@@ -530,8 +551,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                         {videoSpec.aspect_ratio} · {videoSpec.duration_seconds}s
                       </span>
                       <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        <VolumeX className="h-2.5 w-2.5" />
-                        Sin audio
+                        {videoSpec.audio_expected ? <Volume2 className="h-2.5 w-2.5" /> : <VolumeX className="h-2.5 w-2.5" />}
+                        {videoSpec.audio_expected ? "Con audio" : "Sin audio"}
                       </span>
                     </>
                   )}
