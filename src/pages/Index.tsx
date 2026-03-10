@@ -934,8 +934,6 @@ const Index = () => {
                 results={results}
                 language={downloadedData?.language || "es-MX"}
                 accent={downloadedData?.accent || "mexicano"}
-                language={downloadedData?.language || "es-MX"}
-                accent={downloadedData?.accent || "mexicano"}
                 onReset={handleReset}
                 onRegenerateVariant={handleRegenerateVariant}
                 onUpdateVariantStatus={handleUpdateVariantStatus}
