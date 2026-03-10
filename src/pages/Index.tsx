@@ -499,6 +499,7 @@ const Index = () => {
     setResults(null);
     setError(null);
     setDownloadedData(null);
+    setHistoryEntryId(null);
   }, []);
 
   return (
