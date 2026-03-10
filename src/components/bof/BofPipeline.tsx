@@ -1,26 +1,32 @@
 import { motion } from "framer-motion";
-import { Loader2, FileText, Image, Video, Mic, Merge } from "lucide-react";
+import { Loader2, FileText, Image, Film, Scissors, Mic, Merge, Sparkles } from "lucide-react";
 
 const PIPELINE_STEPS = [
   { label: "Generando scripts", icon: FileText },
+  { label: "Generando escenas visuales", icon: Sparkles },
   { label: "Generando imágenes", icon: Image },
-  { label: "Generando videos", icon: Video },
+  { label: "Animando escenas", icon: Film },
   { label: "Generando voz", icon: Mic },
-  { label: "Fusionando audio + video", icon: Merge },
+  { label: "Completando variantes", icon: Merge },
 ];
 
 interface BofPipelineProps {
   currentStep: number;
   totalVariants: number;
+  statusMessage?: string;
 }
 
-export default function BofPipeline({ currentStep, totalVariants }: BofPipelineProps) {
+export default function BofPipeline({ currentStep, totalVariants, statusMessage }: BofPipelineProps) {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center justify-center py-16 space-y-8">
       <div className="flex items-center gap-2">
         <Loader2 className="h-6 w-6 animate-spin text-foreground" />
         <h2 className="text-lg font-semibold text-foreground">Procesando {totalVariants} variantes BOF</h2>
       </div>
+
+      {statusMessage && (
+        <p className="text-sm text-muted-foreground text-center max-w-md">{statusMessage}</p>
+      )}
 
       <div className="w-full max-w-md space-y-3">
         {PIPELINE_STEPS.map((step, idx) => {
