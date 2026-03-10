@@ -8,6 +8,8 @@ interface ResultsViewProps {
   videoUrl: string;
   videoDuration?: number;
   videoMode?: "avatar" | "no_avatar";
+  language?: string;
+  accent?: string;
   onReset: () => void;
   onRegenerateVariant: (variantIndex: number) => void;
   onUpdateVariantStatus: (variantIndex: number, status: VariantStatus) => void;
@@ -19,6 +21,8 @@ const ResultsView = ({
   videoUrl,
   videoDuration,
   videoMode,
+  language,
+  accent,
   onReset,
   onRegenerateVariant,
   onUpdateVariantStatus,
@@ -47,6 +51,8 @@ const ResultsView = ({
           <VariantCard
             key={variant.variant_id}
             variant={variant}
+            language={language}
+            accent={accent}
             onRegenerate={() => onRegenerateVariant(index)}
             onApprove={() => onUpdateVariantStatus(index, "approved")}
             onReject={() => onUpdateVariantStatus(index, "rejected")}

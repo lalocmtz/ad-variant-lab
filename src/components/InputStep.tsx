@@ -14,6 +14,7 @@ interface InputStepProps {
     variantCount: number;
     videoMode: VideoMode;
     language: string;
+    accent: string;
     diversity_intensity: string;
   }) => void;
 }
@@ -26,6 +27,14 @@ const LANGUAGES = [
   { value: "en-US", label: "English (US)" },
 ];
 
+const ACCENTS: Record<string, { value: string; label: string }[]> = {
+  "es-MX": [{ value: "mexicano", label: "Mexicano" }],
+  "es-US": [{ value: "mexicano", label: "Mexicano" }, { value: "centroamericano", label: "Centroamericano" }],
+  "es-CO": [{ value: "colombiano", label: "Colombiano" }],
+  "es-ES": [{ value: "castellano", label: "Castellano" }],
+  "en-US": [{ value: "american", label: "American" }],
+};
+
 const DIVERSITY_OPTIONS = [
   { value: "low", label: "Baja", desc: "Actores similares al original" },
   { value: "medium", label: "Media", desc: "Actores distintos, mismo mercado" },
@@ -36,8 +45,15 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
   const [url, setUrl] = useState("");
   const [productImage, setProductImage] = useState<File | null>(null);
   const [language, setLanguage] = useState("es-MX");
+  const [accent, setAccent] = useState("mexicano");
   const [diversityIntensity, setDiversityIntensity] = useState("high");
   const productInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLanguageChange = (newLang: string) => {
+    setLanguage(newLang);
+    const accents = ACCENTS[newLang] || [];
+    setAccent(accents[0]?.value || "");
+  };
 
   const isValid = url.trim().length > 0 && url.includes("tiktok") && productImage !== null;
 
@@ -49,6 +65,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
       variantCount: 3,
       videoMode: "avatar",
       language,
+      accent,
       diversity_intensity: diversityIntensity,
     });
   };
@@ -119,7 +136,7 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
             <Globe className="h-4 w-4 text-primary" />
             Idioma del Guión
           </Label>
-          <Select value={language} onValueChange={setLanguage}>
+          <Select value={language} onValueChange={handleLanguageChange}>
             <SelectTrigger className="h-10 border-border bg-card">
               <SelectValue />
             </SelectTrigger>
@@ -131,6 +148,27 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
           </Select>
           <p className="text-[10px] text-muted-foreground">
             Los guiones generados estarán en este idioma, adaptados al mercado seleccionado.
+          </p>
+        </div>
+
+        {/* Accent */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Globe className="h-4 w-4 text-primary" />
+            Acento del Video
+          </Label>
+          <Select value={accent} onValueChange={setAccent}>
+            <SelectTrigger className="h-10 border-border bg-card">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(ACCENTS[language] || []).map((a) => (
+                <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">
+            El acento y tono del diálogo hablado en los videos generados.
           </p>
         </div>
 

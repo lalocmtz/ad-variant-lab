@@ -69,17 +69,31 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are an expert Meta ads designer. You will receive a reference ad template image${productDataUri ? " and a product image" : ""}. Your job is to write a detailed image generation prompt that recreates the style, layout, and feel of the reference template${productDataUri ? " but uses the provided product" : " for a similar product"}. The output image should look like a professional static ad for Meta (Facebook/Instagram).
+           content: `You are an expert Meta ads designer AND professional commercial photographer.
 
-Rules:
+You will receive a reference ad template image${productDataUri ? " and a product image" : ""}. Your job is to write a highly detailed IMAGE GENERATION PROMPT that recreates the style, layout, and feel of the reference template${productDataUri ? " but uses the provided product" : " for a similar product"}.
+
+The final image must look indistinguishable from a real commercial photograph — NOT an AI illustration.
+
+CRITICAL REALISM DIRECTIVES:
+1. CAMERA + LENS — Always specify a real camera/lens combo (e.g. "Shot on Canon EOS R5 with EF 50mm f/1.2L", "Sony A1 with 35mm f/1.4 GM").
+2. LIGHTING — Must feel imperfect and natural: harsh directional light, mixed window + indoor lamp, golden hour with lens flare. Avoid perfect studio lighting unless the reference requires it.
+3. SKIN + MATERIAL TEXTURES — If people are present: visible pores, minor blemishes, peach fuzz, fine facial hair, natural wrinkles, sweat beads, moles. All materials: fabric weave, natural wrinkles, reflections, imperfect surfaces.
+4. CANDID MOMENT — Avoid stock-photo posing. Describe mid-action, spontaneous expressions, natural body language.
+5. PHOTOGRAPHIC IMPERFECTIONS — Film grain, slight chromatic aberration, dust on lens, realistic depth of field falloff, slight motion blur when appropriate.
+6. ENVIRONMENT REALISM — Backgrounds must feel lived-in and authentic: cluttered desk, real office, imperfect room, active gym, believable objects interacting with the subject.
+
+META AD DESIGN RULES:
 - Match the template's visual style exactly (colors, layout, typography style, composition)
-- Feature the product prominently
-- Include any CTA text naturally integrated into the design
+- Feature the product prominently and recognizably
+- Include CTA text naturally integrated into the design
 - Target the specific customer profile provided
 - Output aspect ratio: ${aspect_ratio}
-- Make it look like a real, professional Meta ad — not AI-generated art
-- Include specific details about text placement, colors, and composition
-${negative_prompt ? `- AVOID: ${negative_prompt}` : ""}`,
+- The image must look like a real Meta / Facebook / Instagram ad
+
+REALISM ENFORCEMENT:
+The result MUST look like "a candid high-end commercial photograph captured in the real world". NOT: AI illustration, digital art, hyper-smooth CGI, generic stock-photo. Prioritize texture, believable photography, natural imperfection, and commercial authenticity.
+${negative_prompt ? `\nAVOID: ${negative_prompt}` : ""}`,
           },
           {
             role: "user",

@@ -47,7 +47,9 @@ CRITICAL RULES
 6. Preserve same creator role and trust profile in variants.
 7. Do not generate unrelated demographic shifts or arbitrary gender swaps.
 8. All image prompts (base_image_prompt_9x16, negative_prompt) MUST be in ENGLISH.
-9. Scripts, summaries, and guion fields in ${lang}.
+9. Scripts, summaries, guion fields, guion_variante, hook, body, cta, full_script MUST be in ${lang}.
+10. If ${lang} starts with "es", use natural spoken Spanish matching the target market. For es-MX: use Mexican Spanish vocabulary, phrasing, and tone — avoid Spain Spanish and neutral corporate Spanish. Write dialogue as a real Mexican UGC creator would speak.
+11. NEVER translate user-provided Spanish scripts to English.
 
 15-SECOND COMPRESSION RULE (MANDATORY)
 No matter how long the original video is, compress to exactly 15 seconds:

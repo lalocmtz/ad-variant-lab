@@ -7,6 +7,8 @@ import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
 
 interface VariantCardProps {
   variant: VariantResult;
+  language?: string;
+  accent?: string;
   onRegenerate: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -53,7 +55,7 @@ function handleDownloadVideo(url: string, variantId: string) {
   document.body.removeChild(a);
 }
 
-const VariantCard = ({ variant, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
+const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
@@ -236,6 +238,8 @@ const VariantCard = ({ variant, onRegenerate, onApprove, onReject, onVideoStateC
           imageUrl: publicImageUrl,
           promptText,
           mode: "standard",
+          language: language || "es-MX",
+          accent: accent || "mexicano",
         },
       });
 
