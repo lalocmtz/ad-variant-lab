@@ -32,3 +32,12 @@ verify_jwt = false
 
 [functions.generate-bof-voice]
 verify_jwt = false
+
+[functions.classify-content]
+verify_jwt = false
+
+[functions.generate-broll-scripts]
+verify_jwt = false
+
+[functions.merge-broll-audio]
+verify_jwt = false
