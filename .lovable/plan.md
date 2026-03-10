@@ -1,74 +1,55 @@
 
 
-## Root Cause Analysis
+## Plan: Eliminar timeout + Garantizar audio en videos generados
 
-The logs show the exact failure sequence:
-1. Task `87cde78dec2ba012200d7d04e660171c` is created with model `sora-2-image-to-video`
-2. Provider stays in `waiting` state for ~30 seconds
-3. Provider transitions directly to `fail` — never enters `generating`
-4. The `failMsg` field from the provider is not being surfaced to the UI
+### Problema 1: Timeout de 10 minutos mata tareas validas
+La tarea de Kling sigue procesandose en el servidor pero el frontend la marca como "fallida" a los 10 minutos y deja de hacer polling.
 
-The most likely cause: **the prompt sent to Sora 2 is too long/complex** (the raw response shows a massive escaped prompt string), and Kie AI silently rejects it. The `failMsg` in the `taskData` is either empty or contains the generic "internal error" message, which gets passed through without enrichment.
+**Solucion:** Eliminar el timeout completamente. El polling continua indefinidamente hasta que KIE devuelva `success` o `fail`. La UI muestra solo el tiempo transcurrido sin limite maximo.
 
-There are also **no fallback models** — when Sora 2 fails, the entire flow fails.
+**Archivo:** `src/components/KlingAnimationPanel.tsx`
+- Eliminar la constante `TIMEOUT_MS` y toda la logica de timeout en `pollTask` (lineas 82-94)
+- Cambiar la barra de progreso para que sea una animacion pulsante (indeterminada) en vez de basada en tiempo
+- Cambiar el timer de `"2:30 / 10:00"` a solo `"2:30"` (tiempo transcurrido sin limite)
 
-## Plan
+### Problema 2: Videos entregados sin audio
+Kling Motion Control genera video **sin audio** por diseno — solo anima la imagen con el movimiento del video de referencia. El audio del TikTok original se pierde.
 
-### 1. Harden `animate-kling/index.ts` — Add fallback model chain for no_avatar mode
+**Solucion:** Crear una edge function `merge-audio` que use ffmpeg-wasm para combinar el video de Kling (sin audio) con el audio extraido del video original de TikTok. Cuando el polling detecta que un video esta listo, automaticamente llama a `merge-audio` antes de mostrarlo al usuario.
 
-**Current**: Sends to `sora-2-image-to-video` only. If it fails, game over.
+**Archivos nuevos/modificados:**
 
-**Change**:
-- Add input validation (reject blob URLs, validate URL format, validate prompt)
-- Implement a model fallback chain: try `sora-2-image-to-video` first, if task creation fails try `kling-2.6/motion-control` with image-only mode (no video_urls)
-- Shorten the no_avatar prompt drastically (current default is fine but the prompt from `generate-video-sora` is ~10K chars)
-- Add structured logging for each attempt
-- Add 30-second fetch timeout with AbortController
-- Return `{ taskId, model }` so the UI knows which model was used
-
-### 2. Harden `generate-video-sora/index.ts` — Add fallback + better prompt truncation
-
-**Current**: Sends to one model only. Prompt can reach 10K chars which triggers provider rejection.
-
-**Change**:
-- Cap prompt at 2000 characters max (Sora 2 doesn't need verbose prompts for image-to-video)
-- Add model fallback: if `sora-2-image-to-video` fails at task creation, retry with `sora-2-pro-image-to-video` (or vice versa)
-- Add 30-second fetch timeout
-- Return which model was actually used
-- Log the full error chain
-
-### 3. Harden `get-video-task/index.ts` — Better failMsg extraction + unknown states
-
-**Current**: Extracts `failMsg` from `taskData` but doesn't handle all edge cases.
-
-**Change**:
-- Extract `failMsg` more aggressively: check `taskData.failMsg`, `taskData.errorMessage`, `taskData.error`, `data.msg`, and inside `resultJson`
-- Handle `error` and `unknown` provider states explicitly
-- Add 15-second fetch timeout
-- Log extracted failMsg explicitly
-
-### 4. Frontend — Show model fallback status + better error messages
-
-**Files**: `VariantCard.tsx`, `KlingAnimationPanel.tsx`
-
-**Change**:
-- When `generate-video-sora` or `animate-kling` returns a `fallbackUsed` flag, show a toast: "Reintentando con modelo alternativo..."
-- Surface the specific `failMsg` from polling instead of generic errors
-- No structural changes to the UI
-
-### Files to modify
-
-| File | Change |
+| Archivo | Cambio |
 |---|---|
-| `supabase/functions/animate-kling/index.ts` | Add validation, fallback model chain, fetch timeout, structured logging |
-| `supabase/functions/generate-video-sora/index.ts` | Cap prompt at 2000 chars, add fallback model, fetch timeout |
-| `supabase/functions/get-video-task/index.ts` | Better failMsg extraction, handle unknown states, fetch timeout |
-| `src/components/VariantCard.tsx` | Show fallback toast, surface specific provider error |
-| `src/components/KlingAnimationPanel.tsx` | Show fallback toast, surface specific provider error |
+| `src/components/KlingAnimationPanel.tsx` | Eliminar timeout, cambiar progreso a indeterminado, agregar paso de merge post-completado |
+| `supabase/functions/merge-audio/index.ts` | **Nuevo** — Descarga video Kling + video original, extrae audio del original, los combina con ffmpeg-wasm, sube resultado a storage |
+| `supabase/config.toml` | Agregar entrada para `merge-audio` |
 
-### What stays untouched
-- Avatar/Kling motion-control flow (only adding a fallback path for no_avatar)
-- All other edge functions
-- All other UI components
-- Database, storage, auth
+### Flujo actualizado post-Kling
+```text
+Kling completa video (sin audio)
+        │
+        ▼
+Estado UI: "Agregando audio del video original..."
+        │
+        ▼
+Edge function merge-audio:
+  1. Descarga video Kling (solo video)
+  2. Descarga video TikTok original (tiene audio)
+  3. ffmpeg: combina video de Kling + audio de TikTok
+  4. Sube MP4 final a storage
+  5. Devuelve URL publica
+        │
+        ▼
+UI muestra video final CON audio
+```
+
+### Detalle tecnico de merge-audio
+- Usa `@ffmpeg/ffmpeg` (version WASM que corre en Deno edge functions)
+- Comando equivalente: `ffmpeg -i kling.mp4 -i tiktok.mp4 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output.mp4`
+- Solo remuxea (no re-encoda video), por lo que es rapido
+- Si el audio es mas largo que el video, se corta al largo del video (`-shortest`)
+
+### Estado de la UI durante merge
+Se agrega un nuevo `detailState`: `"merging_audio"` con label `"Agregando audio..."` para que el usuario sepa que falta un paso despues de que Kling termine.
 
