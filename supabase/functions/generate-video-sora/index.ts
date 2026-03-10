@@ -31,8 +31,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_url: imageUrl,
-      aspect_ratio: "9:16",
-      duration: 5,
+      duration: "6",
+      resolution: "768P",
     }),
   },
   wan: {
@@ -40,8 +40,9 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     kieModelId: "wan/2-6-image-to-video",
     buildInput: (prompt, imageUrl) => ({
       prompt,
-      image_url: imageUrl,
-      aspect_ratio: "9:16",
+      image_urls: [imageUrl],
+      duration: "5",
+      resolution: "1080p",
     }),
   },
   kling: {
@@ -49,8 +50,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     kieModelId: "kling-2.6/image-to-video",
     buildInput: (prompt, imageUrl) => ({
       prompt,
-      image_url: imageUrl,
-      aspect_ratio: "9:16",
+      image_urls: [imageUrl],
+      sound: false,
       duration: "5",
     }),
   },
