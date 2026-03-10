@@ -233,7 +233,7 @@ serve(async (req) => {
       }
     } else {
       // Legacy engines (Kling, Hailuo, Wan, Sora)
-      const providerState = String(taskData?.state || "").toLowerCase();
+      providerState = String(taskData?.state || "").toLowerCase();
       console.log(`[get-video-task] Legacy state: ${providerState}, model: ${engineModel}`);
 
       switch (providerState) {
