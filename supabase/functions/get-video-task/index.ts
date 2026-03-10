@@ -194,6 +194,7 @@ serve(async (req) => {
     let shouldStopPolling = false;
     let videoUrl: string | null = null;
     let errorMessage: string | null = null;
+    let providerState: string = "";
 
     if (isVeo) {
       // Veo uses numeric status: 0=generating, 1=success, 2=failed, 3=generation_failed
