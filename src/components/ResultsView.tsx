@@ -4,9 +4,6 @@ import type { AnalysisResult, VariantStatus, VideoGenerationStatus } from "@/pag
 
 interface ResultsViewProps {
   results: AnalysisResult;
-  videoUrl: string;
-  videoDuration?: number;
-  videoMode?: "avatar" | "no_avatar";
   language?: string;
   accent?: string;
   onReset: () => void;
