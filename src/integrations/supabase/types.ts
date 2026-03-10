@@ -79,6 +79,95 @@ export type Database = {
         }
         Relationships: []
       }
+      bof_video_batches: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata_json: Json | null
+          product_image_url: string
+          product_name: string
+          selected_formats: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata_json?: Json | null
+          product_image_url: string
+          product_name: string
+          selected_formats?: Json | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata_json?: Json | null
+          product_image_url?: string
+          product_name?: string
+          selected_formats?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bof_video_variants: {
+        Row: {
+          batch_id: string
+          created_at: string | null
+          error_message: string | null
+          final_video_url: string | null
+          format_id: string
+          generated_image_url: string | null
+          id: string
+          raw_video_url: string | null
+          script_text: string | null
+          status: string
+          user_id: string
+          visual_prompt: string | null
+          voice_audio_url: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string | null
+          error_message?: string | null
+          final_video_url?: string | null
+          format_id: string
+          generated_image_url?: string | null
+          id?: string
+          raw_video_url?: string | null
+          script_text?: string | null
+          status?: string
+          user_id: string
+          visual_prompt?: string | null
+          voice_audio_url?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          final_video_url?: string | null
+          format_id?: string
+          generated_image_url?: string | null
+          id?: string
+          raw_video_url?: string | null
+          script_text?: string | null
+          status?: string
+          user_id?: string
+          visual_prompt?: string | null
+          voice_audio_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bof_video_variants_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "bof_video_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_assets: {
         Row: {
           brand_id: string

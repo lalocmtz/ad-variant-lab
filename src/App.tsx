@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import Index from "./pages/Index";
 import StaticVariants from "./pages/StaticVariants";
+import BofVideosPage from "./pages/BofVideosPage";
 import BrandSystemPage from "./pages/BrandSystemPage";
 import AssetsPage from "./pages/AssetsPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -35,6 +36,7 @@ const AppRoutes = () => (
     <Route path="/dashboard" element={<Navigate to="/create/video" replace />} />
     <Route path="/create/video" element={<AppLayout><Index /></AppLayout>} />
     <Route path="/create/static" element={<AppLayout><StaticVariants /></AppLayout>} />
+    <Route path="/create/bof" element={<AppLayout><BofVideosPage /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
     <Route path="/library/assets" element={<AppLayout><AssetsPage /></AppLayout>} />
     <Route path="/library/history" element={<AppLayout><HistoryPage /></AppLayout>} />

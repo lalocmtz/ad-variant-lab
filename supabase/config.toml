@@ -20,3 +20,15 @@ verify_jwt = false
 
 [functions.get-video-task]
 verify_jwt = false
+
+[functions.generate-bof-scripts]
+verify_jwt = false
+
+[functions.generate-bof-images]
+verify_jwt = false
+
+[functions.generate-bof-video]
+verify_jwt = false
+
+[functions.generate-bof-voice]
+verify_jwt = false

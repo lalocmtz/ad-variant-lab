@@ -1,0 +1,71 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { image_url, prompt_text, format_id } = await req.json();
+
+    if (!image_url) throw new Error("image_url is required");
+
+    const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
+    if (!KIE_API_KEY) throw new Error("KIE_API_KEY not configured");
+
+    // Base64 images can't be sent to Kie — only public URLs
+    if (image_url.startsWith("data:")) {
+      throw new Error("Image must be a public URL, not base64. Upload the image first.");
+    }
+
+    const sanitizedPrompt = (prompt_text || `Animate this product image with subtle handheld camera motion. Slow zoom in, gentle pan, and natural lighting shifts. Keep it looking like a real TikTok creator recording. 9:16 vertical. No text, no overlays, no graphics. Clean video only. Duration: 7-10 seconds.`).substring(0, 9500);
+
+    const requestBody = {
+      model: "sora-2-image-to-video",
+      input: {
+        prompt: sanitizedPrompt,
+        image_urls: [image_url],
+        aspect_ratio: "portrait",
+        n_frames: "10",
+        remove_watermark: true,
+      },
+    };
+
+    console.log("BOF video generation:", { format_id, imageUrlPreview: image_url.substring(0, 80) });
+
+    const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${KIE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const responseText = await response.text();
+    let data: Record<string, unknown>;
+    try { data = JSON.parse(responseText); } catch { throw new Error("Invalid response from video provider"); }
+
+    if (!response.ok) throw new Error(`Video generation failed: HTTP ${response.status}`);
+
+    const kieCode = (data as any).code;
+    if (kieCode !== undefined && kieCode !== 200) {
+      throw new Error(`Video provider error (code ${kieCode}): ${(data as any).msg || "unknown"}`);
+    }
+
+    const taskId = (data as any).data?.taskId || (data as any).taskId || (data as any).data?.task_id || (data as any).task_id;
+    if (!taskId) throw new Error("No taskId returned from video provider");
+
+    return new Response(JSON.stringify({ taskId, status: "queued" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e: any) {
+    console.error("generate-bof-video error:", e);
+    return new Response(JSON.stringify({ error: e?.message || "Error generating BOF video" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
