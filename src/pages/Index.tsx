@@ -268,6 +268,7 @@ const Index = () => {
   const [pipelineStep, setPipelineStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [downloadedData, setDownloadedData] = useState<DownloadedData | null>(null);
+  const [historyEntryId, setHistoryEntryId] = useState<string | null>(null);
 
   const saveToHistory = async (url: string, variantCount: number, analysisResults: AnalysisResult) => {
     try {
