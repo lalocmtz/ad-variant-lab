@@ -240,6 +240,10 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
           continue;
         }
 
+        if (data?.fallbackUsed) {
+          toast.info(`Variante ${i + 1}: Modelo principal no disponible, usando modelo alternativo.`);
+        }
+
         setTasks(prev =>
           prev.map(t =>
             t.variantIndex === i
