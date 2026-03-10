@@ -21,6 +21,8 @@ const ResultsView = ({
   videoUrl,
   videoDuration,
   videoMode,
+  language,
+  accent,
   onReset,
   onRegenerateVariant,
   onUpdateVariantStatus,
