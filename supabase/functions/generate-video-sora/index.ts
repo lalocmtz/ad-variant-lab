@@ -149,6 +149,7 @@ async function attemptCreateTask(
   const requestBody = { model: config.kieModelId, input };
 
   console.log(`[generate-video-sora] Trying ${config.label} (${config.kieModelId}), prompt length: ${sanitizedPrompt.length}`);
+  console.log(`[generate-video-sora] Request body:`, JSON.stringify(requestBody).substring(0, 500));
 
   let response: Response;
   try {
