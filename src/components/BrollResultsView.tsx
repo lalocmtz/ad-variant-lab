@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Copy, Check, Download, Play, Pause, RefreshCw, ChevronDown, ChevronUp, Volume2 } from "lucide-react";
+import { ArrowLeft, Copy, Check, Download, Play, Pause, RefreshCw, ChevronDown, ChevronUp, Volume2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -28,6 +28,13 @@ export interface BrollResults {
   };
   variants: BrollVariant[];
   master_video_url: string;
+  is_ai_generated_master?: boolean;
+  scene_description?: string;
+  synthesis_summary?: {
+    common_shot_types?: string[];
+    common_actions?: string[];
+    viral_structure?: string;
+  };
 }
 
 interface BrollResultsViewProps {
@@ -44,8 +51,6 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
   const [copied, setCopied] = useState(false);
   const [showScript, setShowScript] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const videoRef = useState<HTMLVideoElement | null>(null);
-  const audioRef = useState<HTMLAudioElement | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(variant.script_text);
@@ -55,7 +60,6 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
   };
 
   const handlePlayDual = () => {
-    // For dual-track playback: play video (muted) + audio simultaneously
     const videoEl = document.getElementById(`broll-video-${variant.variant_id}`) as HTMLVideoElement;
     const audioEl = document.getElementById(`broll-audio-${variant.variant_id}`) as HTMLAudioElement;
 
@@ -68,7 +72,7 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
     } else {
       videoEl.currentTime = 0;
       if (audioEl) audioEl.currentTime = 0;
-      videoEl.muted = !!variant.audio_url; // mute video if we have separate audio
+      videoEl.muted = !!variant.audio_url;
       videoEl.play();
       audioEl?.play();
       setIsPlaying(true);
@@ -84,7 +88,6 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      {/* Video preview */}
       <div className="relative aspect-[9/16] w-full overflow-hidden bg-muted">
         <video
           id={`broll-video-${variant.variant_id}`}
@@ -106,7 +109,6 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
           </Badge>
         </div>
 
-        {/* Play overlay */}
         {variant.status === "ready" && (
           <button
             onClick={handlePlayDual}
@@ -132,19 +134,16 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
         )}
       </div>
 
-      {/* Content */}
       <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">~{variant.estimated_duration_seconds}s</span>
           <span className="text-[10px] text-muted-foreground">{variant.delivery_notes}</span>
         </div>
 
-        {/* Hook preview */}
         <div className="rounded-md border border-border bg-muted/30 p-2">
           <p className="text-xs font-medium text-foreground">"{variant.hook}"</p>
         </div>
 
-        {/* Actions */}
         <div className="flex gap-2">
           <Button variant="default" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleCopy}>
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -173,7 +172,6 @@ function BrollVariantCard({ variant, masterVideoUrl, onRegenerate }: {
           </Button>
         </div>
 
-        {/* Expandable script */}
         <button
           onClick={() => setShowScript(!showScript)}
           className="flex w-full items-center justify-center gap-1 rounded-md border border-border/30 py-1 text-[10px] text-muted-foreground hover:bg-muted"
@@ -224,13 +222,26 @@ const BrollResultsView = ({ results, onReset, onRegenerateVariant }: BrollResult
           Voice-Over Variants ({results.variants.length})
         </h2>
         <p className="text-xs text-muted-foreground">
-          Mismo video de producto · {results.variants.length} guiones diferentes · {results.product_detected}
+          {results.is_ai_generated_master ? (
+            <>
+              <Sparkles className="mr-1 inline h-3 w-3 text-primary" />
+              Video master generado por IA · {results.variants.length} guiones diferentes · {results.product_detected}
+            </>
+          ) : (
+            <>Mismo video de producto · {results.variants.length} guiones diferentes · {results.product_detected}</>
+          )}
         </p>
-        <div className="flex gap-2 mt-2">
+        {results.scene_description && (
+          <p className="mt-1 text-[11px] italic text-muted-foreground">{results.scene_description}</p>
+        )}
+        <div className="flex flex-wrap gap-2 mt-2">
           {results.scene_analysis.shot_types.map(st => (
             <Badge key={st} variant="outline" className="text-[10px]">{st}</Badge>
           ))}
           <Badge variant="outline" className="text-[10px]">{results.scene_analysis.pacing}</Badge>
+          {results.is_ai_generated_master && (
+            <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">IA Original</Badge>
+          )}
         </div>
       </div>
 
