@@ -581,52 +581,53 @@ const Index = () => {
       const masterImageUrl = imageData?.image_url;
       if (!masterImageUrl) throw new Error("No se obtuvo imagen master");
 
-      // Step 3: Generate master video from the AI image
+      // Step 3: Animate master image using Wan 2.6 Flash (via animate-bof-scene)
       setBrollPipelineStep(3);
       const videoPrompt = synthesisData.master_video_prompt || 
-        "Animate this product image with subtle handheld camera motion. Slow zoom in, gentle pan. TikTok Shop UGC style. 9:16 vertical. No text, no overlays. Clean video only.";
+        "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural lighting. Keep product clearly visible. Smooth cinematic movement. No text, no overlays.";
 
-      const { data: videoTaskData, error: videoTaskError } = await supabase.functions.invoke("generate-bof-video", {
+      const { data: videoTaskData, error: videoTaskError } = await supabase.functions.invoke("animate-bof-scene", {
         body: {
           image_url: masterImageUrl,
-          prompt_text: videoPrompt,
-          format_id: "broll_master",
+          motion_prompt: videoPrompt,
+          scene_index: 0,
+          engine: "wan", // Wan 2.6 Flash — fast and cheap
         },
       });
 
       if (videoTaskError || videoTaskData?.error) {
-        throw new Error(videoTaskData?.error || videoTaskError?.message || "Error generando video master");
+        throw new Error(videoTaskData?.error || videoTaskError?.message || "Error animando imagen master");
       }
 
       const masterTaskId = videoTaskData?.taskId;
-      if (!masterTaskId) throw new Error("No se obtuvo taskId para video master");
+      if (!masterTaskId) throw new Error("No se obtuvo taskId para animación master");
 
       // Poll for video completion
       let masterVideoUrl = "";
       let pollAttempts = 0;
       const maxPolls = 60;
       while (pollAttempts < maxPolls) {
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 8000));
         pollAttempts++;
 
         try {
           const { data: pollData } = await supabase.functions.invoke("get-video-task", {
-            body: { taskId: masterTaskId },
+            body: { taskId: masterTaskId, engine: "wan" },
           });
 
-          if (pollData?.status === "completed" && pollData?.video_url) {
-            masterVideoUrl = pollData.video_url;
+          if (pollData?.status === "completed" && pollData?.videoUrl) {
+            masterVideoUrl = pollData.videoUrl;
             break;
           }
-          if (pollData?.status === "failed") {
-            throw new Error("Video generation failed: " + (pollData?.error || "unknown"));
+          if (pollData?.shouldStopPolling) {
+            throw new Error("Animación falló: " + (pollData?.error || "unknown"));
           }
         } catch (e) {
           if (pollAttempts >= maxPolls) throw e;
         }
       }
 
-      if (!masterVideoUrl) throw new Error("Timeout esperando video master");
+      if (!masterVideoUrl) throw new Error("Timeout esperando animación master");
 
       // Step 4: Generate scripts
       setBrollPipelineStep(4);
