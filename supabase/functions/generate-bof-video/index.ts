@@ -62,7 +62,7 @@ serve(async (req) => {
       },
     };
 
-    console.log("BOF video generation:", { format_id, imageUrlPreview: image_url.substring(0, 80) });
+    console.log("BOF video generation:", { format_id, imageUrlPreview: publicImageUrl.substring(0, 80) });
 
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",
