@@ -338,6 +338,7 @@ const Index = () => {
         originalUrl: formData.url,
         videoMode: formData.videoMode,
         language: formData.language,
+        accent: formData.accent,
         diversity_intensity: formData.diversity_intensity,
       });
       setStep("preview");
