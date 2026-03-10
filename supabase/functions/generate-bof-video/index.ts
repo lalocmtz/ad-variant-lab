@@ -55,7 +55,7 @@ serve(async (req) => {
       model: "sora-2-image-to-video",
       input: {
         prompt: sanitizedPrompt,
-        image_urls: [image_url],
+        image_urls: [publicImageUrl],
         aspect_ratio: "portrait",
         n_frames: "10",
         remove_watermark: true,
