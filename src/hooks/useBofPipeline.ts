@@ -11,6 +11,15 @@ const SCENES_PER_VARIANT = 3;
 const POLL_INTERVAL = 8000;
 const MAX_POLLS = 60; // ~8 min max
 
+// Pipeline step indices (matches BofPipeline.tsx order)
+const STEP_SCRIPTS = 0;
+const STEP_SCENES = 1;
+const STEP_IMAGES = 2;
+const STEP_ANIMATE = 3;
+const STEP_STITCH = 4;
+const STEP_VOICE = 5;
+const STEP_MERGE = 6;
+
 function emptyVariant(id: string, batchId: string, formatId: string, scriptText: string): BofVariantResult {
   return {
     id, batch_id: batchId, format_id: formatId,
@@ -40,7 +49,7 @@ export function useBofPipeline() {
       await sleep(POLL_INTERVAL);
       try {
         const { data, error } = await supabase.functions.invoke("get-video-task", {
-          body: { taskId, engine: "kling" },
+          body: { taskId, engine: "wan" },
         });
         if (error) { console.error("Poll error:", error); continue; }
         if (data?.status === "completed" && data?.videoUrl) return data.videoUrl;
@@ -53,11 +62,41 @@ export function useBofPipeline() {
     return null;
   }, []);
 
+  // Generate voice for a single variant (returns audio URL or null)
+  const generateVoice = useCallback(async (scriptText: string, language: string, accent: string, variantIndex: number): Promise<string | null> => {
+    try {
+      const voiceResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bof-voice`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text: scriptText, language, accent }),
+        }
+      );
+      if (!voiceResponse.ok) throw new Error(`TTS failed: ${voiceResponse.status}`);
+      const audioBlob = await voiceResponse.blob();
+      const audioFileName = `bof_voice_${Date.now()}_${variantIndex}.mp3`;
+      const { error: audioUploadErr } = await supabase.storage
+        .from("videos")
+        .upload(audioFileName, audioBlob, { contentType: "audio/mpeg" });
+      if (audioUploadErr) throw new Error("Error uploading voice audio");
+      const { data: audioUrl } = supabase.storage.from("videos").getPublicUrl(audioFileName);
+      return audioUrl.publicUrl;
+    } catch (e: any) {
+      console.error("Voice error for variant", variantIndex, e);
+      return null;
+    }
+  }, []);
+
   const handleSubmit = useCallback(async (formData: BofFormData) => {
     if (!user) { toast.error("Inicia sesión primero"); return; }
     setIsLoading(true);
     setStep("processing");
-    setPipelineStep(0);
+    setPipelineStep(STEP_SCRIPTS);
     setStatusMessage("Preparando pipeline…");
     setProductName(formData.product_name);
 
@@ -90,7 +129,7 @@ export function useBofPipeline() {
       setBatchId(batchData.id);
 
       // === STEP 1: Generate scripts ===
-      setPipelineStep(0);
+      setPipelineStep(STEP_SCRIPTS);
       setStatusMessage("Generando scripts creativos…");
       const { data: scriptsData, error: scriptsErr } = await supabase.functions.invoke("generate-bof-scripts", {
         body: {
@@ -120,7 +159,7 @@ export function useBofPipeline() {
       setVariants([...currentVariants]);
 
       // === STEP 2: Generate scene images (3 per variant) ===
-      setPipelineStep(2);
+      setPipelineStep(STEP_IMAGES);
       setStatusMessage("Generando imágenes de escenas…");
 
       for (let vi = 0; vi < currentVariants.length; vi++) {
@@ -138,7 +177,7 @@ export function useBofPipeline() {
                 product_name: formData.product_name,
                 script_text: v.script_text,
                 format_id: v.format_id,
-                scene_plan: [scenePlan[si]], // Single scene focus
+                scene_plan: [scenePlan[si]],
                 camera_rules: format?.camera_rules,
                 background_rules: format?.background_rules,
               },
@@ -154,7 +193,7 @@ export function useBofPipeline() {
               sceneImages.push({
                 scene_index: si, scene_label: scenePlan[si],
                 image_url: imgData.image_url || "",
-                public_url: "", // Will be set during animation
+                public_url: "",
                 clip_task_id: "", clip_url: "",
                 clip_status: "pending",
               });
@@ -178,7 +217,6 @@ export function useBofPipeline() {
         };
         setVariants([...currentVariants]);
 
-        // Update DB
         await supabase.from("bof_video_variants").update({
           generated_image_url: currentVariants[vi].generated_image_url,
           status: currentVariants[vi].status,
@@ -186,11 +224,11 @@ export function useBofPipeline() {
         }).eq("id", currentVariants[vi].id);
       }
 
-      // === STEP 3: Animate each scene image ===
-      setPipelineStep(3);
-      setStatusMessage("Animando escenas con movimiento de cámara…");
+      // === STEP 3+5: Animate scenes + Generate voice IN PARALLEL ===
+      setPipelineStep(STEP_ANIMATE);
+      setStatusMessage("Animando escenas y generando voz en paralelo…");
 
-      // Start all animations in parallel
+      // --- Start all animation tasks ---
       const animationTasks: { vi: number; si: number; taskId: string }[] = [];
 
       for (let vi = 0; vi < currentVariants.length; vi++) {
@@ -212,6 +250,7 @@ export function useBofPipeline() {
                 image_url: scenes[si].image_url,
                 motion_prompt: motionPrompts[si % motionPrompts.length],
                 scene_index: si,
+                engine: "wan", // Wan 2.6 Flash as default
               },
             });
             if (animErr || animData?.error) {
@@ -233,79 +272,65 @@ export function useBofPipeline() {
         setVariants([...currentVariants]);
       }
 
-      // Poll all animation tasks
-      if (animationTasks.length > 0) {
-        setStatusMessage(`Esperando ${animationTasks.length} clips de animación…`);
+      // --- Launch voice generation for all variants (parallel with animation polling) ---
+      const voicePromises = currentVariants.map((v, i) => {
+        if (v.status === "failed") return Promise.resolve(null);
+        return generateVoice(v.script_text, formData.language, formData.accent, i);
+      });
 
-        // Poll in parallel batches
+      // --- Poll all animation tasks (parallel with voice) ---
+      const animationPromise = (async () => {
+        if (animationTasks.length === 0) return [];
+        setStatusMessage(`Esperando ${animationTasks.length} clips de animación…`);
         const pollPromises = animationTasks.map(async (task) => {
           const clipUrl = await pollClipTask(task.taskId);
           return { ...task, clipUrl };
         });
+        return Promise.all(pollPromises);
+      })();
 
-        const pollResults = await Promise.all(pollPromises);
+      // Wait for BOTH animation polling and voice generation to finish
+      const [pollResults, voiceResults] = await Promise.all([animationPromise, Promise.all(voicePromises)]);
 
-        for (const result of pollResults) {
-          const scene = currentVariants[result.vi].scene_images[result.si];
-          if (result.clipUrl) {
-            scene.clip_url = result.clipUrl;
-            scene.clip_status = "completed";
-          } else {
-            scene.clip_status = "failed";
-          }
+      // --- Apply animation results ---
+      for (const result of pollResults) {
+        const scene = currentVariants[result.vi].scene_images[result.si];
+        if (result.clipUrl) {
+          scene.clip_url = result.clipUrl;
+          scene.clip_status = "completed";
+        } else {
+          scene.clip_status = "failed";
         }
-
-        // Update variants with clip results
-        for (let vi = 0; vi < currentVariants.length; vi++) {
-          const scenes = currentVariants[vi].scene_images;
-          const completedClips = scenes.filter(s => s.clip_status === "completed").map(s => s.clip_url);
-          currentVariants[vi].clip_urls = completedClips;
-
-          if (completedClips.length > 0) {
-            currentVariants[vi].raw_video_url = completedClips[0]; // First clip as thumbnail/preview
-            currentVariants[vi].status = "clips_ready";
-          } else if (currentVariants[vi].status === "animating") {
-            // No clips succeeded but we have images — mark as image_ready so voice can still work
-            currentVariants[vi].status = "image_ready";
-          }
-        }
-        setVariants([...currentVariants]);
       }
 
-      // === STEP 4: Generate voice ===
-      setPipelineStep(4);
-      setStatusMessage("Generando locuciones de voz…");
+      // === STEP 4: Stitch clips ===
+      setPipelineStep(STEP_STITCH);
+      setStatusMessage("Organizando clips…");
+
+      for (let vi = 0; vi < currentVariants.length; vi++) {
+        const scenes = currentVariants[vi].scene_images;
+        const completedClips = scenes.filter(s => s.clip_status === "completed").map(s => s.clip_url);
+        currentVariants[vi].clip_urls = completedClips;
+
+        if (completedClips.length > 0) {
+          currentVariants[vi].raw_video_url = completedClips[0]; // First clip as preview
+          currentVariants[vi].status = "clips_ready";
+        } else if (currentVariants[vi].status === "animating") {
+          currentVariants[vi].status = "image_ready";
+        }
+      }
+      setVariants([...currentVariants]);
+
+      // --- Apply voice results ---
+      setPipelineStep(STEP_VOICE);
+      setStatusMessage("Aplicando locuciones…");
 
       for (let i = 0; i < currentVariants.length; i++) {
         if (currentVariants[i].status === "failed") continue;
-        try {
-          const voiceResponse = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bof-voice`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              },
-              body: JSON.stringify({
-                text: currentVariants[i].script_text,
-                language: formData.language,
-                accent: formData.accent,
-              }),
-            }
-          );
-          if (!voiceResponse.ok) throw new Error(`TTS failed: ${voiceResponse.status}`);
-          const audioBlob = await voiceResponse.blob();
-          const audioFileName = `bof_voice_${Date.now()}_${i}.mp3`;
-          const { error: audioUploadErr } = await supabase.storage
-            .from("videos")
-            .upload(audioFileName, audioBlob, { contentType: "audio/mpeg" });
-          if (audioUploadErr) throw new Error("Error uploading voice audio");
-          const { data: audioUrl } = supabase.storage.from("videos").getPublicUrl(audioFileName);
-          currentVariants[i] = { ...currentVariants[i], voice_audio_url: audioUrl.publicUrl, status: "voice_ready" };
-        } catch (e: any) {
-          console.error("Voice error for variant", i, e);
+        const voiceUrl = voiceResults[i];
+        if (voiceUrl) {
+          currentVariants[i] = { ...currentVariants[i], voice_audio_url: voiceUrl, status: "voice_ready" };
+        } else {
           currentVariants[i] = { ...currentVariants[i], status: "voice_ready" }; // Voice optional
         }
         setVariants([...currentVariants]);
@@ -316,8 +341,8 @@ export function useBofPipeline() {
         }).eq("id", currentVariants[i].id);
       }
 
-      // === STEP 5: Mark completed ===
-      setPipelineStep(5);
+      // === STEP 6: Merge / Finalize ===
+      setPipelineStep(STEP_MERGE);
       setStatusMessage("Finalizando…");
 
       for (let i = 0; i < currentVariants.length; i++) {
@@ -344,7 +369,7 @@ export function useBofPipeline() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, pollClipTask]);
+  }, [user, pollClipTask, generateVoice]);
 
   const handleRegenerateVariant = useCallback(async (index: number) => {
     toast.info("La regeneración individual estará disponible pronto.");

@@ -1,13 +1,14 @@
 import { motion } from "framer-motion";
-import { Loader2, FileText, Image, Film, Scissors, Mic, Merge, Sparkles } from "lucide-react";
+import { Loader2, FileText, Image, Film, Scissors, Mic, Merge, Sparkles, LinkIcon } from "lucide-react";
 
 const PIPELINE_STEPS = [
   { label: "Generando scripts", icon: FileText },
   { label: "Generando escenas visuales", icon: Sparkles },
   { label: "Generando imágenes", icon: Image },
   { label: "Animando escenas", icon: Film },
+  { label: "Uniendo clips", icon: LinkIcon },
   { label: "Generando voz", icon: Mic },
-  { label: "Completando variantes", icon: Merge },
+  { label: "Fusionando audio + video", icon: Merge },
 ];
 
 interface BofPipelineProps {
