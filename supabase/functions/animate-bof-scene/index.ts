@@ -61,7 +61,7 @@ serve(async (req) => {
     if (selectedEngine === "kling") {
       // Kling 2.6 — fallback engine
       requestBody = {
-        model: "kling-v2-6",
+        model: "kling-2.6/image-to-video",
         input: {
           image_urls: [publicImageUrl],
           prompt: sanitizedPrompt,
@@ -79,7 +79,7 @@ serve(async (req) => {
           image_urls: [publicImageUrl],
           prompt: sanitizedPrompt,
           duration: "5",
-          resolution: "480p",
+          resolution: "1080p",
           aspect_ratio: "9:16",
         },
       };
