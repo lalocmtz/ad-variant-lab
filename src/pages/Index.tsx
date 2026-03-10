@@ -581,17 +581,16 @@ const Index = () => {
       const masterImageUrl = imageData?.image_url;
       if (!masterImageUrl) throw new Error("No se obtuvo imagen master");
 
-      // Step 3: Animate master image using Wan 2.6 Flash (via animate-bof-scene)
+      // Step 3: Animate master image using Sora 2 (via animate-bof-scene)
       setBrollPipelineStep(3);
       const videoPrompt = synthesisData.master_video_prompt || 
-        "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural lighting. Keep product clearly visible. Smooth cinematic movement. No text, no overlays.";
+        "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural lighting. Keep product clearly visible. Smooth cinematic movement. Duration: approximately 9 seconds. No text, no overlays.";
 
       const { data: videoTaskData, error: videoTaskError } = await supabase.functions.invoke("animate-bof-scene", {
         body: {
           image_url: masterImageUrl,
           motion_prompt: videoPrompt,
           scene_index: 0,
-          engine: "wan", // Wan 2.6 Flash — fast and cheap
         },
       });
 
