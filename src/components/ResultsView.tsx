@@ -14,9 +14,6 @@ interface ResultsViewProps {
 
 const ResultsView = ({
   results,
-  videoUrl,
-  videoDuration,
-  videoMode,
   language,
   accent,
   onReset,
