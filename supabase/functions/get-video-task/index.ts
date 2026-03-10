@@ -24,7 +24,6 @@ async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = 1500
 }
 
 function extractVideoUrl(taskData: Record<string, any>): string | null {
-  // Try resultJson first (may be a JSON string)
   if (typeof taskData?.resultJson === "string" && taskData.resultJson.trim()) {
     try {
       const parsed = JSON.parse(taskData.resultJson);
@@ -41,7 +40,6 @@ function extractVideoUrl(taskData: Record<string, any>): string | null {
     }
   }
 
-  // Try direct fields
   return (
     taskData?.resultUrls?.[0] ||
     taskData?.videoUrl ||
@@ -53,7 +51,6 @@ function extractVideoUrl(taskData: Record<string, any>): string | null {
 }
 
 function extractFailMessage(taskData: Record<string, any>, topLevel: Record<string, any>): string {
-  // Check all known error fields
   const candidates = [
     taskData?.failMsg,
     taskData?.fail_msg,
@@ -68,7 +65,6 @@ function extractFailMessage(taskData: Record<string, any>, topLevel: Record<stri
     if (typeof c === "string" && c.trim().length > 0) return c;
   }
 
-  // Try inside resultJson
   if (typeof taskData?.resultJson === "string" && taskData.resultJson.trim()) {
     try {
       const parsed = JSON.parse(taskData.resultJson);
@@ -89,12 +85,12 @@ serve(async (req) => {
     const { taskId } = await req.json();
 
     if (!taskId) {
-      return jsonOk({ error: "taskId es requerido.", shouldStopPolling: true });
+      return jsonOk({ ok: false, stage: "validation", error: "taskId es requerido.", shouldStopPolling: true });
     }
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) {
-      return jsonOk({ error: "KIE_API_KEY no está configurada.", shouldStopPolling: true });
+      return jsonOk({ ok: false, stage: "config", error: "KIE_API_KEY no está configurada.", shouldStopPolling: true });
     }
 
     const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`;
@@ -109,8 +105,8 @@ serve(async (req) => {
     } catch (e: any) {
       const isTimeout = e?.name === "AbortError";
       console.error(`[get-video-task] Fetch ${isTimeout ? "timeout" : "error"}:`, e?.message);
-      // Network/timeout errors are retryable
       return jsonOk({
+        ok: true,
         taskId,
         status: "processing",
         videoUrl: null,
@@ -128,6 +124,7 @@ serve(async (req) => {
     } catch {
       console.error("[get-video-task] Non-JSON response");
       return jsonOk({
+        ok: true,
         taskId,
         status: "processing",
         videoUrl: null,
@@ -139,28 +136,35 @@ serve(async (req) => {
     if (!response.ok) {
       const shouldStop = response.status >= 400 && response.status < 500;
       return jsonOk({
+        ok: false,
         taskId,
+        stage: "poll",
         status: shouldStop ? "failed" : "processing",
         videoUrl: null,
         error: data?.message || data?.msg || `Error HTTP ${response.status}`,
         shouldStopPolling: shouldStop,
+        retryable: !shouldStop,
       });
     }
 
     const kieCode = data?.code;
     if (kieCode !== undefined && kieCode !== 200) {
       return jsonOk({
+        ok: false,
         taskId,
+        stage: "poll",
         status: "failed",
         videoUrl: null,
         error: data?.msg || `Error del proveedor (código ${kieCode}).`,
         shouldStopPolling: true,
+        retryable: false,
       });
     }
 
     const taskData = data?.data || {};
     const providerState = String(taskData?.state || "").toLowerCase();
-    console.log(`[get-video-task] State: ${providerState}`);
+    const engineModel = taskData?.model || "";
+    console.log(`[get-video-task] State: ${providerState}, model: ${engineModel}`);
 
     let normalizedStatus = "processing";
     let shouldStopPolling = false;
@@ -202,24 +206,27 @@ serve(async (req) => {
       }
 
       default:
-        // Unknown state — keep polling
         console.warn(`[get-video-task] Unknown state: "${providerState}"`);
         normalizedStatus = "processing";
         break;
     }
 
     return jsonOk({
+      ok: normalizedStatus !== "failed",
       taskId,
+      stage: "poll",
       status: normalizedStatus,
       providerState,
+      engine: engineModel,
       videoUrl,
       error: errorMessage,
       shouldStopPolling,
+      retryable: normalizedStatus === "failed",
     });
   } catch (e: any) {
     console.error("[get-video-task] Unhandled error:", e);
     return new Response(
-      JSON.stringify({ error: e?.message || "Error desconocido.", status: "failed", shouldStopPolling: true }),
+      JSON.stringify({ ok: false, stage: "unhandled", error: e?.message || "Error desconocido.", status: "failed", shouldStopPolling: true, retryable: false }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

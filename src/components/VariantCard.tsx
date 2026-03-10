@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video, ChevronDown } from "lucide-react";
+import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video, ChevronDown, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,21 +30,21 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   pending: { label: "Generando...", cls: "bg-muted text-muted-foreground" },
 };
 
-const VIDEO_STATUS_CONFIG: Record<string, { label: string; showLoader?: boolean }> = {
-  idle: { label: "Generar Video" },
-  queued: { label: "En cola...", showLoader: true },
-  processing: { label: "Generando video...", showLoader: true },
-  completed: { label: "Video listo" },
-  failed: { label: "Reintentar video" },
-};
-
+// Engine registry — must match backend ENGINES keys
 const VIDEO_ENGINES = [
-  { key: "auto", label: "Auto (fallback)", description: "Hailuo → Wan → Sora 2" },
-  { key: "hailuo", label: "Hailuo 2.3 Pro", description: "Rápido y estable" },
-  { key: "wan", label: "Wan 2.6", description: "Alta calidad" },
-  { key: "sora2", label: "Sora 2", description: "OpenAI Sora" },
-  { key: "kling", label: "Kling 2.6", description: "Kling última versión" },
+  { key: "kling", label: "Kling 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true },
+  { key: "hailuo", label: "Hailuo 2.3 Pro", duration: "6s", description: "Estable · 6s · Sin audio", stable: true },
+  { key: "wan", label: "Wan 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true },
+  { key: "sora2", label: "Sora 2", duration: "10s", description: "Experimental · 10s · Sin audio", stable: false },
 ];
+
+const AUTO_ENGINE = { key: "auto", label: "Auto (fallback)", description: "Kling → Hailuo → Wan" };
+
+interface VideoSpec {
+  aspect_ratio: string;
+  duration_seconds: number;
+  audio_expected: boolean;
+}
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -78,6 +79,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [activeEngine, setActiveEngine] = useState<string | undefined>();
+  const [videoSpec, setVideoSpec] = useState<VideoSpec | undefined>();
+  const [fallbackUsed, setFallbackUsed] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
@@ -126,7 +129,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
         return;
       }
 
-      if (data?.error && data?.shouldStopPolling) {
+      if (data?.ok === false && data?.shouldStopPolling) {
         setVideoStatus("failed");
         setVideoError(data.error);
         onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: data.error });
@@ -149,7 +152,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
       } else if (newStatus === "completed" && !data.videoUrl) {
         setVideoStatus("failed");
         setVideoError("El proveedor reportó éxito pero no devolvió URL de video.");
-        onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: "El proveedor reportó éxito pero no devolvió URL de video." });
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: "Sin URL de video." });
         stopPolling();
       } else if (newStatus === "failed") {
         setVideoError(data.error || "La generación de video falló.");
@@ -211,7 +214,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     return publicData.publicUrl;
   };
 
-  const handleGenerateVideo = async (engineKey?: string) => {
+  const handleGenerateVideo = async (engineKey: string) => {
     if (isSubmitting || isVideoActive) {
       toast.info("Ya hay una generación de video en curso.");
       return;
@@ -225,14 +228,14 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
       return;
     }
 
-    const selectedModel = engineKey === "auto" ? undefined : engineKey;
-
     setIsSubmitting(true);
     setVideoStatus("queued");
     setVideoError(undefined);
     setVideoUrl(undefined);
     setVideoTaskId(undefined);
     setActiveEngine(undefined);
+    setVideoSpec(undefined);
+    setFallbackUsed(false);
 
     try {
       const publicImageUrl = await uploadBase64ToStorage(variant.generated_image_url, variant.variant_id);
@@ -242,24 +245,20 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
           variantId: variant.variant_id,
           imageUrl: publicImageUrl,
           promptText,
-          mode: "standard",
           language: language || "es-MX",
           accent: accent || "mexicano",
-          model: selectedModel,
+          model: engineKey,
         },
       });
 
-      if (error || data?.error) {
+      // Handle structured error response
+      if (error || (data && data.ok === false)) {
         const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
         setVideoStatus("failed");
         setVideoError(errMsg);
         toast.error(errMsg);
         onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
         return;
-      }
-
-      if (data?.fallbackUsed) {
-        toast.info(`Video ${variant.variant_id}: Usando motor alternativo (${data.modelLabel || data.provider}).`);
       }
 
       if (!data?.taskId) {
@@ -274,9 +273,17 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
       const taskId = data.taskId;
       setVideoTaskId(taskId);
       setVideoStatus("queued");
-      setActiveEngine(data.modelLabel || data.provider);
-      onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.mode });
-      toast.success(`Generación iniciada con ${data.modelLabel || data.provider}`);
+      setActiveEngine(data.modelLabel || data.engine || engineKey);
+      setVideoSpec(data.spec || undefined);
+      setFallbackUsed(data.fallbackUsed || false);
+
+      if (data.fallbackUsed) {
+        toast.info(`Motor alternativo usado: ${data.modelLabel || data.engine}`);
+      } else {
+        toast.success(`Generación iniciada con ${data.modelLabel || data.engine}`);
+      }
+
+      onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : "Error desconocido";
       setVideoStatus("failed");
@@ -296,6 +303,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     setVideoUrl(undefined);
     setElapsedSeconds(0);
     setActiveEngine(undefined);
+    setVideoSpec(undefined);
+    setFallbackUsed(false);
   };
 
   const formatElapsed = (secs: number) => {
@@ -380,37 +389,53 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
         {/* Video generation with engine selector */}
         {variant.generated_image_url && promptText && !isPending && (
           <div className="space-y-2">
-            {/* Generate button with dropdown - shown when idle */}
+            {/* Engine selector — shown when idle */}
             {videoStatus === "idle" && !videoUrl && (
-              <div className="flex gap-1">
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="flex-1 gap-1.5 text-[10px]"
-                  onClick={() => handleGenerateVideo("auto")}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Video className="h-3 w-3" />
-                  )}
-                  {isSubmitting ? "Subiendo imagen..." : "Generar Video"}
-                </Button>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Generar video (sin audio)
+                </p>
+                <div className="grid grid-cols-2 gap-1">
+                  {VIDEO_ENGINES.filter(e => e.stable).map((engine) => (
+                    <Button
+                      key={engine.key}
+                      variant="outline"
+                      size="sm"
+                      className="flex flex-col items-start gap-0 h-auto py-2 px-2.5 text-left"
+                      onClick={() => handleGenerateVideo(engine.key)}
+                      disabled={isSubmitting}
+                    >
+                      <span className="text-[10px] font-medium">{engine.label}</span>
+                      <span className="text-[9px] text-muted-foreground">{engine.duration} · 9:16</span>
+                    </Button>
+                  ))}
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="default" size="sm" className="px-2" disabled={isSubmitting}>
+                    <Button variant="ghost" size="sm" className="w-full gap-1 text-[10px] text-muted-foreground" disabled={isSubmitting}>
                       <ChevronDown className="h-3 w-3" />
+                      Más opciones
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    {VIDEO_ENGINES.map((engine) => (
+                  <DropdownMenuContent align="center" className="w-56">
+                    <DropdownMenuItem
+                      onClick={() => handleGenerateVideo("auto")}
+                      className="flex flex-col items-start gap-0.5"
+                    >
+                      <span className="text-xs font-medium">{AUTO_ENGINE.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{AUTO_ENGINE.description}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {VIDEO_ENGINES.filter(e => !e.stable).map((engine) => (
                       <DropdownMenuItem
                         key={engine.key}
                         onClick={() => handleGenerateVideo(engine.key)}
                         className="flex flex-col items-start gap-0.5"
                       >
-                        <span className="text-xs font-medium">{engine.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium">{engine.label}</span>
+                          <span className="rounded bg-yellow-500/10 px-1 py-0.5 text-[9px] font-medium text-yellow-600">experimental</span>
+                        </div>
                         <span className="text-[10px] text-muted-foreground">{engine.description}</span>
                       </DropdownMenuItem>
                     ))}
@@ -421,21 +446,45 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
 
             {/* Active generation status */}
             {isVideoActive && (
-              <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground">
-                      {VIDEO_STATUS_CONFIG[videoStatus]?.label || "Procesando..."}
+              <div className="space-y-1.5 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <span className="text-[10px] font-medium text-foreground">
+                      {videoStatus === "queued" ? "En cola..." : "Generando video..."}
                     </span>
-                    {activeEngine && (
-                      <span className="text-[9px] text-muted-foreground/70">Motor: {activeEngine}</span>
-                    )}
                   </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    {formatElapsed(elapsedSeconds)}
+                  </span>
                 </div>
-                <span className="text-[10px] font-mono text-muted-foreground">
-                  {formatElapsed(elapsedSeconds)}
-                </span>
+                {/* Engine & spec info */}
+                <div className="flex flex-wrap gap-1.5">
+                  {activeEngine && (
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                      {activeEngine}
+                    </span>
+                  )}
+                  {videoSpec && (
+                    <>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        {videoSpec.aspect_ratio}
+                      </span>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        {videoSpec.duration_seconds}s
+                      </span>
+                      <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        <VolumeX className="h-2.5 w-2.5" />
+                        Sin audio
+                      </span>
+                    </>
+                  )}
+                  {fallbackUsed && (
+                    <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-600">
+                      fallback
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -450,35 +499,13 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
                     <RefreshCw className="h-3 w-3" />
-                    Reintentar
+                    Elegir motor y reintentar
                   </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="px-2">
-                        <ChevronDown className="h-3 w-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      {VIDEO_ENGINES.map((engine) => (
-                        <DropdownMenuItem
-                          key={engine.key}
-                          onClick={() => {
-                            handleRetryVideo();
-                            setTimeout(() => handleGenerateVideo(engine.key), 100);
-                          }}
-                          className="flex flex-col items-start gap-0.5"
-                        >
-                          <span className="text-xs font-medium">{engine.label}</span>
-                          <span className="text-[10px] text-muted-foreground">{engine.description}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               </div>
             )}
 
-            {/* Completed - show video */}
+            {/* Completed — show video with spec badge */}
             {videoStatus === "completed" && videoUrl && (
               <div className="space-y-2">
                 <div className="overflow-hidden rounded-md border border-border">
@@ -489,6 +516,30 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                     preload="metadata"
                     playsInline
                   />
+                </div>
+                {/* Spec badges */}
+                <div className="flex flex-wrap gap-1.5">
+                  {activeEngine && (
+                    <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[9px] font-medium text-green-600">
+                      ✓ {activeEngine}
+                    </span>
+                  )}
+                  {videoSpec && (
+                    <>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        {videoSpec.aspect_ratio} · {videoSpec.duration_seconds}s
+                      </span>
+                      <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        <VolumeX className="h-2.5 w-2.5" />
+                        Sin audio
+                      </span>
+                    </>
+                  )}
+                  {fallbackUsed && (
+                    <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-600">
+                      fallback usado
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button

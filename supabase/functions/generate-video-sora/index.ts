@@ -5,29 +5,42 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Provider Registry ──
+// ── Canonical Video Spec ──
+// Every video generated must target these constraints.
+// Individual engines may have different max durations — that's documented per engine.
 
-interface ProviderConfig {
+interface EngineSpec {
   label: string;
   kieModelId: string;
+  maxDurationSeconds: number;
+  aspectRatio: "9:16";
+  audioSupported: false; // No engine reliably produces speech audio
+  stable: boolean; // Whether this engine is production-ready
   buildInput: (prompt: string, imageUrl: string) => Record<string, unknown>;
 }
 
-const PROVIDERS: Record<string, ProviderConfig> = {
-  sora2: {
-    label: "Sora 2",
-    kieModelId: "sora-2-image-to-video",
+const ENGINES: Record<string, EngineSpec> = {
+  kling: {
+    label: "Kling 2.6",
+    kieModelId: "kling-2.6/image-to-video",
+    maxDurationSeconds: 5,
+    aspectRatio: "9:16",
+    audioSupported: false,
+    stable: true,
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_urls: [imageUrl],
-      aspect_ratio: "portrait",
-      n_frames: "15",
-      remove_watermark: true,
+      duration: "5",
+      sound: false,
     }),
   },
   hailuo: {
     label: "Hailuo 2.3 Pro",
     kieModelId: "hailuo/2-3-image-to-video-pro",
+    maxDurationSeconds: 6,
+    aspectRatio: "9:16",
+    audioSupported: false,
+    stable: true,
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_url: imageUrl,
@@ -38,6 +51,10 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   wan: {
     label: "Wan 2.6",
     kieModelId: "wan/2-6-image-to-video",
+    maxDurationSeconds: 5,
+    aspectRatio: "9:16",
+    audioSupported: false,
+    stable: true,
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_urls: [imageUrl],
@@ -45,20 +62,25 @@ const PROVIDERS: Record<string, ProviderConfig> = {
       resolution: "1080p",
     }),
   },
-  kling: {
-    label: "Kling 2.6",
-    kieModelId: "kling-2.6/image-to-video",
+  sora2: {
+    label: "Sora 2",
+    kieModelId: "sora-2-image-to-video",
+    maxDurationSeconds: 10,
+    aspectRatio: "9:16",
+    audioSupported: false,
+    stable: false, // Frequently returns internal errors
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_urls: [imageUrl],
-      sound: false,
-      duration: "5",
+      aspect_ratio: "portrait",
+      n_frames: "10",
+      remove_watermark: true,
     }),
   },
 };
 
-// Auto fallback chain: try these in order
-const AUTO_CHAIN: string[] = ["hailuo", "wan", "sora2"];
+// Auto fallback chain — only used when user explicitly selects "auto"
+const AUTO_CHAIN: string[] = ["kling", "hailuo", "wan"];
 
 // ── Helpers ──
 
@@ -86,70 +108,93 @@ function extractTaskId(data: Record<string, unknown>): string | null {
   return d?.data?.taskId || d?.taskId || d?.data?.task_id || d?.task_id || null;
 }
 
-// ── Prompt sanitization ──
+// ── Prompt builder — duration-aware, no false audio promises ──
 
 const MAX_PROMPT_CHARS = 2000;
 
-function buildSanitizationSuffix(language: string, accent: string): string {
-  const langLabel = language === "es-MX" ? "español mexicano" : language === "es-CO" ? "español colombiano" : language === "es-ES" ? "español de España" : language === "es-US" ? "español estadounidense" : language === "en-US" ? "English (US)" : language;
+function buildVideoPrompt(rawPrompt: string, engine: EngineSpec, language: string, accent: string): string {
+  const langLabel = language === "es-MX" ? "español mexicano" : language === "es-CO" ? "español colombiano" : language === "es-ES" ? "español de España" : language === "en-US" ? "English (US)" : language;
   const isSpanish = language.startsWith("es");
 
-  return `
+  const suffix = `
 
 MANDATORY VIDEO RULES:
 - Use the attached image as the actor identity and first-frame reference.
-- Create a natural handheld 9:16 UGC-style video exactly 15 seconds long.
-- Compress to 15s: 0-2.5s HOOK | 2.5-6s CONTEXT | 6-10.5s DEMO | 10.5-12.5s OBJECTION | 12.5-15s CTA.
+- Create a natural handheld 9:16 vertical UGC-style video.
+- Duration: exactly ${engine.maxDurationSeconds} seconds.
 - No subtitles, captions, text overlays, stickers, or motion graphics.
+- No spoken audio — this is a SILENT video clip.
 - Clean native smartphone recording style.
+- Smooth natural motion, slight handheld movement.
 
-LANGUAGE: All spoken dialogue in ${langLabel}, accent: ${accent}.${isSpanish ? ` Natural ${langLabel} vocabulary.` : ""}`;
-}
+LANGUAGE CONTEXT: Visual text/signs should be in ${langLabel}${isSpanish ? `, accent context: ${accent}` : ""}.
+NOTE: Audio/voiceover will be added separately in post-production.`;
 
-function sanitizePrompt(promptText: string, language: string, accent: string): string {
-  const suffix = buildSanitizationSuffix(language, accent);
   const maxBase = MAX_PROMPT_CHARS - suffix.length;
-
-  let sanitized = promptText.trim();
+  let sanitized = rawPrompt.trim();
   if (sanitized.length > maxBase) {
-    console.log(`[generate-video-sora] Truncating prompt from ${sanitized.length} to ${maxBase} chars`);
+    console.log(`[generate-video] Truncating prompt from ${sanitized.length} to ${maxBase} chars`);
     sanitized = sanitized.substring(0, maxBase);
   }
 
-  sanitized += suffix;
-  return sanitized;
+  return sanitized + suffix;
 }
 
-// ── Error map ──
+// ── Response helpers ──
 
-const ERROR_MAP: Record<number, string> = {
-  401: "La autenticación con el proveedor falló.",
-  402: "No hay créditos suficientes para generar el video.",
-  404: "Recurso no encontrado en el proveedor.",
-  422: "La solicitud fue rechazada por parámetros inválidos.",
-  429: "Límite de solicitudes alcanzado. Intenta en unos minutos.",
-  455: "El servicio de video está en mantenimiento.",
-  500: "Error interno del proveedor.",
-  501: "Error interno del proveedor.",
-  505: "Función de generación deshabilitada.",
-};
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-// ── Attempt a single model ──
+function errorResponse(stage: string, engine: string, error: string, retryable: boolean, httpStatus = 400) {
+  return jsonResponse({ ok: false, stage, engine, error, retryable }, httpStatus);
+}
+
+function successResponse(taskId: string, engineKey: string, engine: EngineSpec, variantId: string, fallbackUsed: boolean) {
+  return jsonResponse({
+    ok: true,
+    taskId,
+    variantId,
+    status: "queued",
+    engine: engineKey,
+    modelLabel: engine.label,
+    model: engine.kieModelId,
+    fallbackUsed,
+    spec: {
+      aspect_ratio: engine.aspectRatio,
+      duration_seconds: engine.maxDurationSeconds,
+      audio_expected: engine.audioSupported,
+    },
+  });
+}
+
+// ── Validation ──
+
+function validateRequest(engineKey: string): { engine: EngineSpec } | { error: string } {
+  const engine = ENGINES[engineKey];
+  if (!engine) {
+    return { error: `Motor desconocido: "${engineKey}". Motores disponibles: ${Object.keys(ENGINES).join(", ")}` };
+  }
+  return { engine };
+}
+
+// ── Attempt a single engine ──
 
 async function attemptCreateTask(
-  providerKey: string,
-  sanitizedPrompt: string,
+  engineKey: string,
+  engine: EngineSpec,
+  prompt: string,
   imageUrl: string,
   apiKey: string,
-): Promise<{ taskId: string; model: string; provider: string } | { error: string; httpStatus?: number }> {
-  const config = PROVIDERS[providerKey];
-  if (!config) return { error: `Proveedor desconocido: ${providerKey}` };
+): Promise<{ taskId: string } | { error: string; retryable: boolean }> {
+  const input = engine.buildInput(prompt, imageUrl);
+  const requestBody = { model: engine.kieModelId, input };
 
-  const input = config.buildInput(sanitizedPrompt, imageUrl);
-  const requestBody = { model: config.kieModelId, input };
-
-  console.log(`[generate-video-sora] Trying ${config.label} (${config.kieModelId}), prompt length: ${sanitizedPrompt.length}`);
-  console.log(`[generate-video-sora] Request body:`, JSON.stringify(requestBody).substring(0, 500));
+  console.log(`[generate-video] → ${engine.label} (${engine.kieModelId}), prompt: ${prompt.length} chars, duration: ${engine.maxDurationSeconds}s`);
+  console.log(`[generate-video] Payload preview:`, JSON.stringify(requestBody).substring(0, 600));
 
   let response: Response;
   try {
@@ -167,145 +212,128 @@ async function attemptCreateTask(
     );
   } catch (e: any) {
     const msg = e?.name === "AbortError"
-      ? `Timeout (30s) conectando con ${config.label}`
-      : `Error de red (${config.label}): ${e?.message}`;
-    console.error(`[generate-video-sora] ${msg}`);
-    return { error: msg };
+      ? `Timeout (30s) conectando con ${engine.label}`
+      : `Error de red (${engine.label}): ${e?.message}`;
+    console.error(`[generate-video] ${msg}`);
+    return { error: msg, retryable: true };
   }
 
   const responseText = await response.text();
-  console.log(`[generate-video-sora] ${config.label} HTTP ${response.status}, body: ${responseText.substring(0, 500)}`);
+  console.log(`[generate-video] ${engine.label} HTTP ${response.status}, body: ${responseText.substring(0, 500)}`);
 
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(responseText);
   } catch {
-    return { error: `Respuesta no-JSON de ${config.label}`, httpStatus: 502 };
+    return { error: `Respuesta no-JSON de ${engine.label}`, retryable: false };
   }
 
   if (!response.ok) {
-    const friendlyError = ERROR_MAP[response.status] || `${config.label} rechazó (HTTP ${response.status})`;
-    return { error: friendlyError, httpStatus: response.status };
+    const statusErrors: Record<number, string> = {
+      401: "Autenticación con el proveedor falló.",
+      402: "Sin créditos suficientes.",
+      422: "Parámetros inválidos para este motor.",
+      429: "Límite de solicitudes. Intenta en unos minutos.",
+    };
+    const friendly = statusErrors[response.status] || `${engine.label} rechazó la solicitud (HTTP ${response.status})`;
+    return { error: `${engine.label}: ${friendly}`, retryable: response.status === 429 || response.status >= 500 };
   }
 
   const kieCode = (data as any).code;
   if (kieCode !== undefined && kieCode !== 200) {
     const msg = (data as any).msg || `código ${kieCode}`;
-    console.error(`[generate-video-sora] ${config.label} app error: ${kieCode} ${msg}`);
-    return { error: `${config.label}: ${msg}` };
+    console.error(`[generate-video] ${engine.label} app error: ${kieCode} ${msg}`);
+    return { error: `${engine.label}: ${msg}`, retryable: false };
   }
 
   const taskId = extractTaskId(data);
   if (!taskId) {
-    console.error(`[generate-video-sora] No taskId from ${config.label}:`, JSON.stringify(data).substring(0, 500));
-    return { error: `${config.label} no devolvió taskId.` };
+    console.error(`[generate-video] No taskId from ${engine.label}:`, JSON.stringify(data).substring(0, 500));
+    return { error: `${engine.label} no devolvió taskId.`, retryable: false };
   }
 
-  return { taskId, model: config.kieModelId, provider: providerKey };
+  return { taskId };
 }
 
-// ── Main ──
+// ── Main handler ──
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { variantId, imageUrl, promptText, mode, language, accent, model } = await req.json();
+    const { variantId, imageUrl, promptText, language, accent, model } = await req.json();
 
-    console.log("[generate-video-sora] Request:", JSON.stringify({
+    console.log("[generate-video] Request:", JSON.stringify({
       variantId,
       imageUrlPreview: imageUrl?.substring(0, 80),
       promptLength: promptText?.length,
-      mode,
       language,
       accent,
       model,
     }));
 
-    // ── Validation ──
-    if (!variantId) {
-      return new Response(JSON.stringify({ error: "variantId es requerido." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!imageUrl) {
-      return new Response(JSON.stringify({ error: "La imagen de la variante es requerida." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (imageUrl.startsWith("data:") || imageUrl.startsWith("blob:")) {
-      return new Response(JSON.stringify({ error: "La imagen debe ser una URL pública (no base64/blob). Sube la imagen primero." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!isValidHttpUrl(imageUrl)) {
-      return new Response(JSON.stringify({ error: "imageUrl no es una URL HTTP/HTTPS válida." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!promptText || promptText.trim().length < 20) {
-      return new Response(JSON.stringify({ error: "El prompt de animación es requerido (mínimo 20 caracteres)." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // ── Input validation ──
+    if (!variantId) return errorResponse("validation", "", "variantId es requerido.", false, 400);
+    if (!imageUrl) return errorResponse("validation", "", "La imagen de la variante es requerida.", false, 400);
+    if (imageUrl.startsWith("data:") || imageUrl.startsWith("blob:"))
+      return errorResponse("validation", "", "La imagen debe ser una URL pública (no base64/blob).", false, 400);
+    if (!isValidHttpUrl(imageUrl))
+      return errorResponse("validation", "", "imageUrl no es una URL HTTP/HTTPS válida.", false, 400);
+    if (!promptText || promptText.trim().length < 20)
+      return errorResponse("validation", "", "El prompt es requerido (mínimo 20 caracteres).", false, 400);
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
-    if (!KIE_API_KEY) {
-      return new Response(JSON.stringify({ error: "KIE_API_KEY no está configurada." }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!KIE_API_KEY) return errorResponse("config", "", "KIE_API_KEY no está configurada.", false, 500);
 
     const videoLanguage = language || "es-MX";
     const videoAccent = accent || "mexicano";
-    const sanitizedPrompt = sanitizePrompt(promptText, videoLanguage, videoAccent);
-    console.log(`[generate-video-sora] Final prompt length: ${sanitizedPrompt.length}`);
 
-    // ── Determine which models to try ──
-    const modelsToTry: string[] = model && PROVIDERS[model]
-      ? [model]                // User chose specific model
-      : [...AUTO_CHAIN];       // Auto fallback chain
+    // ── Determine engine(s) to try ──
+    const isAutoMode = !model || model === "auto";
+    const enginesToTry: string[] = isAutoMode ? [...AUTO_CHAIN] : [model];
+
+    // Validate all engines before attempting
+    for (const key of enginesToTry) {
+      const validation = validateRequest(key);
+      if ("error" in validation) {
+        return errorResponse("validation", key, validation.error, false, 400);
+      }
+    }
 
     const errors: string[] = [];
 
-    for (let i = 0; i < modelsToTry.length; i++) {
-      const providerKey = modelsToTry[i];
-      const result = await attemptCreateTask(providerKey, sanitizedPrompt, imageUrl, KIE_API_KEY);
+    for (let i = 0; i < enginesToTry.length; i++) {
+      const engineKey = enginesToTry[i];
+      const engine = ENGINES[engineKey];
+
+      // Build duration-accurate prompt for THIS engine
+      const finalPrompt = buildVideoPrompt(promptText, engine, videoLanguage, videoAccent);
+      console.log(`[generate-video] Final prompt for ${engine.label}: ${finalPrompt.length} chars`);
+
+      const result = await attemptCreateTask(engineKey, engine, finalPrompt, imageUrl, KIE_API_KEY);
 
       if ("taskId" in result) {
-        return new Response(JSON.stringify({
-          taskId: result.taskId,
-          variantId,
-          status: "queued",
-          imageUrl,
-          provider: result.provider,
-          model: result.model,
-          modelLabel: PROVIDERS[result.provider]?.label || result.provider,
-          mode: mode || "standard",
-          fallbackUsed: i > 0,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (i > 0) {
+          console.log(`[generate-video] ⚠ Fallback used: original ${enginesToTry[0]} → ${engineKey}`);
+        }
+        return successResponse(result.taskId, engineKey, engine, variantId, i > 0);
       }
 
       errors.push(result.error);
-      console.warn(`[generate-video-sora] ${providerKey} failed: ${result.error}. ${i < modelsToTry.length - 1 ? "Trying next..." : "No more fallbacks."}`);
+      console.warn(`[generate-video] ${engineKey} failed: ${result.error}. ${i < enginesToTry.length - 1 ? "Trying next in chain..." : "No more engines."}`);
+
+      // In explicit mode (not auto), do NOT try other engines
+      if (!isAutoMode) break;
     }
 
     const combinedError = errors.length > 1
       ? `Todos los motores fallaron: ${errors.join(" | ")}`
       : errors[0] || "Error desconocido del proveedor.";
 
-    console.error(`[generate-video-sora] All models failed:`, combinedError);
-
-    return new Response(JSON.stringify({ error: combinedError, fallbackUsed: modelsToTry.length > 1 }), {
-      status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse("create_task", enginesToTry[0], combinedError, true, 502);
 
   } catch (e: any) {
-    console.error("[generate-video-sora] Unhandled error:", e);
-    return new Response(JSON.stringify({ error: e?.message || "Error desconocido al generar video." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("[generate-video] Unhandled error:", e);
+    return errorResponse("unhandled", "", e?.message || "Error desconocido.", false, 500);
   }
 });
