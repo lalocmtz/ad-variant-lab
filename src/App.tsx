@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import Index from "./pages/Index";
 import StaticVariants from "./pages/StaticVariants";
+import BofVideosPage from "./pages/BofVideosPage";
 import BrandSystemPage from "./pages/BrandSystemPage";
 import AssetsPage from "./pages/AssetsPage";
 import HistoryPage from "./pages/HistoryPage";
