@@ -121,7 +121,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     if (!isMountedRef.current) return;
     try {
       const { data, error } = await supabase.functions.invoke("get-video-task", {
-        body: { taskId },
+        body: { taskId, engine: activeEngine },
       });
 
       if (!isMountedRef.current) return;

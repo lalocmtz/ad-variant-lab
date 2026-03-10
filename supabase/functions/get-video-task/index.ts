@@ -92,7 +92,7 @@ serve(async (req) => {
   }
 
   try {
-    const { taskId } = await req.json();
+    const { taskId, engine } = await req.json();
 
     if (!taskId) {
       return jsonOk({ ok: false, stage: "validation", error: "taskId es requerido.", shouldStopPolling: true });
@@ -103,8 +103,11 @@ serve(async (req) => {
       return jsonOk({ ok: false, stage: "config", error: "KIE_API_KEY no está configurada.", shouldStopPolling: true });
     }
 
-    const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`;
-    console.log("[get-video-task] Polling:", url);
+    const isVeo = typeof engine === "string" && engine.startsWith("veo3");
+    const url = isVeo
+      ? `https://api.kie.ai/api/v1/veo/record-info?taskId=${encodeURIComponent(taskId)}`
+      : `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`;
+    console.log(`[get-video-task] Polling (${isVeo ? "veo" : "legacy"}):`, url);
 
     let response: Response;
     try {
