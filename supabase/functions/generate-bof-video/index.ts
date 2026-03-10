@@ -51,7 +51,7 @@ serve(async (req) => {
       console.log("BOF video: uploaded to", publicImageUrl);
     }
 
-    const sanitizedPrompt = (prompt_text || `Animate this product image with subtle handheld camera motion. Slow zoom in, gentle pan, and natural lighting shifts. Keep it looking like a real TikTok creator recording. 9:16 vertical. No text, no overlays, no graphics. Clean video only. Duration: 7-10 seconds.`).substring(0, 9500);
+    const sanitizedPrompt = (prompt_text || `Animate this product image with subtle handheld camera motion. Slow zoom in, gentle pan, and natural lighting shifts. Keep it looking like a real TikTok creator recording. 9:16 vertical. No text, no overlays, no graphics. Clean video only. Duration: approximately 9 seconds. Mexican Spanish visual context.`).substring(0, 9500);
 
     const requestBody = {
       model: "sora-2-image-to-video",
@@ -64,7 +64,7 @@ serve(async (req) => {
       },
     };
 
-    console.log("BOF video generation:", { format_id, imageUrlPreview: publicImageUrl.substring(0, 80) });
+    console.log("BOF video generation (Sora 2):", { format_id, imageUrlPreview: publicImageUrl.substring(0, 80) });
 
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",

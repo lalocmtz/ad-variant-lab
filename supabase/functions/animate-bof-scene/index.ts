@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { image_url, motion_prompt, scene_index, engine } = await req.json();
+    const { image_url, motion_prompt, scene_index } = await req.json();
 
     if (!image_url) throw new Error("image_url is required");
 
@@ -50,43 +50,22 @@ serve(async (req) => {
       console.log("[animate-bof-scene] Uploaded to:", publicImageUrl);
     }
 
-    const defaultPrompt = "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural lighting. Keep product clearly visible. Smooth cinematic movement. No text, no overlays.";
+    const defaultPrompt = "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural lighting. Keep product sharp and clearly visible. Smooth cinematic movement. Duration: approximately 9 seconds. No text, no overlays, no graphics. Clean UGC smartphone recording style.";
     const sanitizedPrompt = (motion_prompt || defaultPrompt).substring(0, 2000);
 
-    // Engine selection: "wan" (default) or "kling" (fallback)
-    const selectedEngine = engine === "kling" ? "kling" : "wan";
+    // Sora 2 — single engine for the entire platform
+    const requestBody = {
+      model: "sora-2-image-to-video",
+      input: {
+        prompt: sanitizedPrompt,
+        image_urls: [publicImageUrl],
+        aspect_ratio: "portrait",
+        n_frames: "10",
+        remove_watermark: true,
+      },
+    };
 
-    let requestBody: Record<string, unknown>;
-
-    if (selectedEngine === "kling") {
-      // Kling 2.6 — fallback engine
-      requestBody = {
-        model: "kling-2.6/image-to-video",
-        input: {
-          image_urls: [publicImageUrl],
-          prompt: sanitizedPrompt,
-          sound: false,
-          duration: "5",
-          aspect_ratio: "9:16",
-        },
-      };
-      console.log("[animate-bof-scene] Using KLING 2.6 (fallback)");
-    } else {
-      // Wan 2.6 Flash — default engine (faster, cheaper)
-      requestBody = {
-        model: "wan/2-6-image-to-video",
-        input: {
-          image_urls: [publicImageUrl],
-          prompt: sanitizedPrompt,
-          duration: "5",
-          resolution: "1080p",
-          aspect_ratio: "9:16",
-        },
-      };
-      console.log("[animate-bof-scene] Using WAN 2.6 Flash (default)");
-    }
-
-    console.log("[animate-bof-scene] Sending to KIE:", { scene_index, engine: selectedEngine, imagePreview: publicImageUrl.substring(0, 80) });
+    console.log("[animate-bof-scene] Using SORA 2 (standard engine):", { scene_index, imagePreview: publicImageUrl.substring(0, 80) });
 
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",
@@ -111,7 +90,7 @@ serve(async (req) => {
     const taskId = (data as any).data?.taskId || (data as any).taskId || (data as any).data?.task_id;
     if (!taskId) throw new Error("No taskId returned from animation provider");
 
-    return new Response(JSON.stringify({ taskId, status: "queued", engine: selectedEngine, public_image_url: publicImageUrl }), {
+    return new Response(JSON.stringify({ taskId, status: "queued", engine: "sora2", public_image_url: publicImageUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {

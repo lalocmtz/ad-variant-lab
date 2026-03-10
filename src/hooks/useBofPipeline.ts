@@ -49,7 +49,7 @@ export function useBofPipeline() {
       await sleep(POLL_INTERVAL);
       try {
         const { data, error } = await supabase.functions.invoke("get-video-task", {
-          body: { taskId, engine: "wan" },
+          body: { taskId, engine: "sora2" },
         });
         if (error) { console.error("Poll error:", error); continue; }
         if (data?.status === "completed" && data?.videoUrl) return data.videoUrl;
@@ -245,12 +245,11 @@ export function useBofPipeline() {
           ];
 
           try {
-            const { data: animData, error: animErr } = await supabase.functions.invoke("animate-bof-scene", {
+              const { data: animData, error: animErr } = await supabase.functions.invoke("animate-bof-scene", {
               body: {
                 image_url: scenes[si].image_url,
                 motion_prompt: motionPrompts[si % motionPrompts.length],
                 scene_index: si,
-                engine: "wan", // Wan 2.6 Flash as default
               },
             });
             if (animErr || animData?.error) {
