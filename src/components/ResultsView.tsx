@@ -1,6 +1,5 @@
 import { ArrowLeft } from "lucide-react";
 import VariantCard from "@/components/VariantCard";
-import KlingAnimationPanel from "@/components/KlingAnimationPanel";
 import type { AnalysisResult, VariantStatus, VideoGenerationStatus } from "@/pages/Index";
 
 interface ResultsViewProps {
