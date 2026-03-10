@@ -486,8 +486,13 @@ const Index = () => {
     if (!results) return;
     const updatedVariants = [...results.variants];
     updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], ...videoState };
-    setResults({ ...results, variants: updatedVariants });
-  }, [results]);
+    const updatedResults = { ...results, variants: updatedVariants };
+    setResults(updatedResults);
+    // Persist to DB when video completes or fails
+    if (videoState.video_url || videoState.video_status === "completed" || videoState.video_status === "failed") {
+      persistResultsToHistory(updatedResults);
+    }
+  }, [results, historyEntryId]);
 
   const handleReset = useCallback(() => {
     setStep("input");
