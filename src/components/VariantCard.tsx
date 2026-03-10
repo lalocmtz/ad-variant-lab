@@ -1,13 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video, ChevronDown, Volume2, VolumeX } from "lucide-react";
+import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
