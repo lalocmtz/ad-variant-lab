@@ -16,9 +16,37 @@ serve(async (req) => {
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) throw new Error("KIE_API_KEY not configured");
 
-    // Base64 images can't be sent to Kie — only public URLs
+    // Base64 images: upload to storage first to get a public URL
+    let publicImageUrl = image_url;
     if (image_url.startsWith("data:")) {
-      throw new Error("Image must be a public URL, not base64. Upload the image first.");
+      console.log("BOF video: converting base64 image to public URL via storage upload");
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase config for storage upload");
+
+      const matches = image_url.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (!matches) throw new Error("Invalid base64 image format");
+      const mimeType = matches[1];
+      const base64Data = matches[2];
+      const ext = mimeType.split("/")[1] || "png";
+      const fileName = `bof_video_input_${Date.now()}.${ext}`;
+
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/videos/${fileName}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": mimeType,
+          "x-upsert": "true",
+        },
+        body: bytes,
+      });
+      if (!uploadRes.ok) throw new Error(`Storage upload failed: ${uploadRes.status}`);
+      publicImageUrl = `${SUPABASE_URL}/storage/v1/object/public/videos/${fileName}`;
+      console.log("BOF video: uploaded to", publicImageUrl);
     }
 
     const sanitizedPrompt = (prompt_text || `Animate this product image with subtle handheld camera motion. Slow zoom in, gentle pan, and natural lighting shifts. Keep it looking like a real TikTok creator recording. 9:16 vertical. No text, no overlays, no graphics. Clean video only. Duration: 7-10 seconds.`).substring(0, 9500);
