@@ -78,7 +78,7 @@ serve(async (req) => {
         input: {
           image_urls: [publicImageUrl],
           prompt: sanitizedPrompt,
-          duration: "5",
+          duration: "3",
           resolution: "1080p",
           aspect_ratio: "9:16",
         },
