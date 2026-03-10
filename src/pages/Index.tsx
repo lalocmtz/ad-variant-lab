@@ -152,6 +152,7 @@ interface DownloadedData {
   originalUrl: string;
   videoMode: VideoMode;
   language: string;
+  accent: string;
   diversity_intensity: string;
 }
 
