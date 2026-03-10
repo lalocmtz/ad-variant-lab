@@ -8,6 +8,8 @@ interface ResultsViewProps {
   videoUrl: string;
   videoDuration?: number;
   videoMode?: "avatar" | "no_avatar";
+  language?: string;
+  accent?: string;
   onReset: () => void;
   onRegenerateVariant: (variantIndex: number) => void;
   onUpdateVariantStatus: (variantIndex: number, status: VariantStatus) => void;
