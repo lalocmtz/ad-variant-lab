@@ -551,8 +551,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                         {videoSpec.aspect_ratio} · {videoSpec.duration_seconds}s
                       </span>
                       <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        <VolumeX className="h-2.5 w-2.5" />
-                        Sin audio
+                        {videoSpec.audio_expected ? <Volume2 className="h-2.5 w-2.5" /> : <VolumeX className="h-2.5 w-2.5" />}
+                        {videoSpec.audio_expected ? "Con audio" : "Sin audio"}
                       </span>
                     </>
                   )}
