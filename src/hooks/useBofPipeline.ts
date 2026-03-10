@@ -49,7 +49,7 @@ export function useBofPipeline() {
       await sleep(POLL_INTERVAL);
       try {
         const { data, error } = await supabase.functions.invoke("get-video-task", {
-          body: { taskId, engine: "wan" },
+          body: { taskId, engine: "sora2" },
         });
         if (error) { console.error("Poll error:", error); continue; }
         if (data?.status === "completed" && data?.videoUrl) return data.videoUrl;
