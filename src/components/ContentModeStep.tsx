@@ -108,7 +108,7 @@ const ContentModeStep = ({ classification, coverUrl, onSelectMode, onCancel }: C
               <span className="text-sm font-semibold text-foreground">Voice-Over B-Roll</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Mismo video + múltiples voice-overs con diferentes ángulos. Sin cambios visuales.
+              Genera un video nuevo desde cero basado en patrones de referencia + múltiples voice-overs con diferentes ángulos.
             </p>
             {classification.recommended_pipeline === "product_broll_voice_variants" && (
               <Badge className="mt-2 text-[10px]">Recomendado</Badge>
