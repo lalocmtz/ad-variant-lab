@@ -455,9 +455,9 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                   </div>
                 )}
                 <div className="flex gap-1">
-                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
+                 <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
                     <RefreshCw className="h-3 w-3" />
-                    Elegir motor y reintentar
+                    Reintentar con Sora 2
                   </Button>
                 </div>
               </div>

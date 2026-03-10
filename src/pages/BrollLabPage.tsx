@@ -147,35 +147,22 @@ export default function BrollLabPage() {
       if (successImages.length === 0) throw new Error("No se pudo generar ninguna imagen");
 
       // ============ STEP 4: Animate images ============
-      update({ step: "animating", stepMessage: "Animando escenas con Wan 2.6..." });
+      update({ step: "animating", stepMessage: "Animando escenas con Sora 2..." });
 
       // Start animation tasks for all successful images
       for (const scene of successImages) {
-        const motionPrompt = analysis.scenes[scene.scene_index]?.motion_prompt || "Subtle handheld camera motion. Slow zoom in with gentle drift.";
+        const motionPrompt = analysis.scenes[scene.scene_index]?.motion_prompt || "Subtle handheld camera motion. Slow zoom in with gentle drift. Duration: approximately 9 seconds.";
         try {
           const animResult = await invokeFn<{ taskId: string }>("animate-bof-scene", {
             image_url: scene.image_url,
             motion_prompt: motionPrompt,
             scene_index: scene.scene_index,
-            engine: "wan",
           });
           scene.video_task_id = animResult.taskId;
           scene.status = "polling";
         } catch (e: any) {
-          // Try kling fallback
-          try {
-            const fallback = await invokeFn<{ taskId: string }>("animate-bof-scene", {
-              image_url: scene.image_url,
-              motion_prompt: motionPrompt,
-              scene_index: scene.scene_index,
-              engine: "kling",
-            });
-            scene.video_task_id = fallback.taskId;
-            scene.status = "polling";
-          } catch (e2: any) {
-            scene.status = "error";
-            scene.error = e2.message;
-          }
+          scene.status = "error";
+          scene.error = e.message;
         }
       }
       update({ scenes: [...sceneResults] });

@@ -611,7 +611,7 @@ const Index = () => {
 
         try {
           const { data: pollData } = await supabase.functions.invoke("get-video-task", {
-            body: { taskId: masterTaskId, engine: "wan" },
+            body: { taskId: masterTaskId, engine: "sora2" },
           });
 
           if (pollData?.status === "completed" && pollData?.videoUrl) {
