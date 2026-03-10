@@ -302,6 +302,7 @@ const Index = () => {
     variantCount: number;
     videoMode: VideoMode;
     language: string;
+    accent: string;
     diversity_intensity: string;
   }) => {
     setStep("downloading");
