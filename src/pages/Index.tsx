@@ -457,7 +457,7 @@ const Index = () => {
       for (let i = 0; i < analysisData.variants.length; i++) {
         const variant = analysisData.variants[i];
         try {
-          const { data: imageData, error: imageError } = await supabase.functions.invoke("generate-variant-image", {
+          const imagePromise = supabase.functions.invoke("generate-variant-image", {
             body: {
               prompt: variant.base_image_prompt_9x16,
               scene_geometry: variant.scene_geometry,
@@ -472,6 +472,10 @@ const Index = () => {
               overlay_cleanup_required: overlayCleanup,
             },
           });
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout: imagen tardó más de 120s")), 120_000)
+          );
+          const { data: imageData, error: imageError } = await Promise.race([imagePromise, timeoutPromise]);
           const builtVariant: VariantResult = {
             ...variant,
             status: variant.status || "ready",

@@ -226,29 +226,44 @@ async function callImageGeneration(
   content: Array<{ type: string; text?: string; image_url?: { url: string } }>,
   apiKey: string,
 ): Promise<string | null> {
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image",
-      messages: [{ role: "user", content }],
-      modalities: ["image", "text"],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90_000); // 90s timeout
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("Image generation error:", response.status, errText);
-    if (response.status === 429) throw { status: 429, message: "Demasiadas solicitudes. Intenta de nuevo." };
-    if (response.status === 402) throw { status: 402, message: "Créditos insuficientes." };
-    throw new Error(`Image generation error: ${response.status}`);
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content }],
+        modalities: ["image", "text"],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Image generation error:", response.status, errText);
+      if (response.status === 429) throw { status: 429, message: "Demasiadas solicitudes. Intenta de nuevo." };
+      if (response.status === 402) throw { status: 402, message: "Créditos insuficientes." };
+      throw new Error(`Image generation error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+  } catch (e: any) {
+    clearTimeout(timeoutId);
+    if (e?.name === "AbortError") {
+      console.error("Image generation timed out after 90s");
+      throw new Error("Timeout: la generación de imagen tardó más de 90 segundos.");
+    }
+    throw e;
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
 }
 
 serve(async (req) => {
