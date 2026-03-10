@@ -37,7 +37,7 @@ serve(async (req) => {
       for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
       const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/videos/${fileName}`, {
-        method: "POST",
+        method: "PUT",
         headers: {
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           "Content-Type": mimeType,
@@ -45,7 +45,11 @@ serve(async (req) => {
         },
         body: bytes,
       });
-      if (!uploadRes.ok) throw new Error(`Storage upload failed: ${uploadRes.status}`);
+      const uploadBody = await uploadRes.text();
+      if (!uploadRes.ok) {
+        console.error("Storage upload error:", uploadRes.status, uploadBody);
+        throw new Error(`Storage upload failed: ${uploadRes.status} - ${uploadBody}`);
+      }
       publicImageUrl = `${SUPABASE_URL}/storage/v1/object/public/videos/${fileName}`;
       console.log("BOF video: uploaded to", publicImageUrl);
     }
