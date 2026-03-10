@@ -252,6 +252,11 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
         return;
       }
 
+      // Show fallback toast if a backup model was used
+      if (data?.fallbackUsed) {
+        toast.info(`Video ${variant.variant_id}: Modelo principal no disponible, usando modelo alternativo.`);
+      }
+
       // Validate we got a taskId back
       if (!data?.taskId) {
         const errMsg = "El proveedor no devolvió un taskId válido.";

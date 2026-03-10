@@ -301,6 +301,10 @@ const KlingAnimationPanel = ({ variants, videoUrl, videoDuration, videoMode = "a
         return;
       }
 
+      if (data?.fallbackUsed) {
+        toast.info(`Variante ${variantIndex + 1}: Usando modelo alternativo.`);
+      }
+
       setTasks(prev =>
         prev.map(t =>
           t.variantIndex === variantIndex ? { ...t, taskId: data.taskId, status: "processing", startTime: Date.now() } : t
