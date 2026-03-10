@@ -30,17 +30,8 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   pending: { label: "Generando...", cls: "bg-muted text-muted-foreground" },
 };
 
-// Engine registry — must match backend ENGINES keys
-const VIDEO_ENGINES = [
-  { key: "veo3_fast", label: "Veo 3.1 Fast", duration: "8s", description: "Recomendado · 8s · Con audio · $0.025", stable: true, recommended: true },
-  { key: "veo3", label: "Veo 3.1 Quality", duration: "8s", description: "Alta calidad · 8s · Con audio · $1.25", stable: true, recommended: false },
-  { key: "kling", label: "Kling 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true, recommended: false },
-  { key: "hailuo", label: "Hailuo 2.3 Pro", duration: "6s", description: "Estable · 6s · Sin audio", stable: true, recommended: false },
-  { key: "wan", label: "Wan 2.6", duration: "5s", description: "Estable · 5s · Sin audio", stable: true, recommended: false },
-  { key: "sora2", label: "Sora 2", duration: "10s", description: "Experimental · 10s · Sin audio", stable: false, recommended: false },
-];
-
-const AUTO_ENGINE = { key: "auto", label: "Auto (fallback)", description: "Veo Fast → Kling → Hailuo" };
+// Single engine — Sora 2 across the entire platform
+const SORA_ENGINE = { key: "sora2", label: "Sora 2", duration: "9s", description: "Motor estándar · 9s · Sin audio" };
 
 interface VideoSpec {
   aspect_ratio: string;
