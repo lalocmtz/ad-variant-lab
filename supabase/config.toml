@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.analyze-bof-source]
 verify_jwt = false
+
+[functions.analyze-broll-references]
+verify_jwt = false

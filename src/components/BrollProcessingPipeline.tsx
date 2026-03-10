@@ -1,9 +1,12 @@
 import { motion } from "framer-motion";
-import { Brain, FileText, Mic, Volume2, CheckCircle2 } from "lucide-react";
+import { Brain, FileText, Mic, Volume2, CheckCircle2, ImageIcon, Video, Search } from "lucide-react";
 
 const steps = [
-  { label: "Clasificando contenido", icon: Brain },
-  { label: "Generando guiones", icon: FileText },
+  { label: "Analizando referencias", icon: Search },
+  { label: "Detectando patrones visuales comunes", icon: Brain },
+  { label: "Generando imagen master", icon: ImageIcon },
+  { label: "Generando video nuevo desde cero", icon: Video },
+  { label: "Generando guiones de voz", icon: FileText },
   { label: "Generando audio (TTS)", icon: Mic },
   { label: "Preparando variantes", icon: Volume2 },
   { label: "Listo", icon: CheckCircle2 },
@@ -11,16 +14,20 @@ const steps = [
 
 interface BrollProcessingPipelineProps {
   currentStep: number;
+  statusMessage?: string;
 }
 
-const BrollProcessingPipeline = ({ currentStep }: BrollProcessingPipelineProps) => {
+const BrollProcessingPipeline = ({ currentStep, statusMessage }: BrollProcessingPipelineProps) => {
   return (
     <div className="mx-auto max-w-md space-y-10">
       <div className="space-y-3 text-center">
-        <h2 className="text-2xl font-bold text-foreground">Generando Voice-Overs</h2>
+        <h2 className="text-2xl font-bold text-foreground">Generando Video + Voice-Overs</h2>
         <p className="text-sm text-muted-foreground">
-          Creando guiones y generando audio para el video de producto...
+          Sintetizando patrones de referencia y generando un video original con variantes de voz...
         </p>
+        {statusMessage && (
+          <p className="text-xs text-primary animate-pulse">{statusMessage}</p>
+        )}
       </div>
 
       <div className="space-y-1">

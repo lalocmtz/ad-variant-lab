@@ -509,20 +509,138 @@ const Index = () => {
     }
   }, [downloadedData, user]);
 
-  // B-roll pipeline
+  // B-roll pipeline — generates NEW master visual from references + voice-over variants
   const handleStartBrollPipeline = useCallback(async (config: BrollConfig) => {
     if (!downloadedData) return;
     setStep("broll_processing");
     setBrollPipelineStep(0);
 
     try {
-      // Step 1: Generate scripts
+      // Upload product image first
+      let productImageUrl = "";
+      if (config.product_image) {
+        const ext = config.product_image.name.split(".").pop() || "png";
+        const productFileName = `broll_product_${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("videos")
+          .upload(productFileName, config.product_image, { contentType: config.product_image.type });
+        if (uploadErr) throw new Error("Error subiendo imagen del producto");
+        const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(productFileName);
+        productImageUrl = pubUrl.publicUrl;
+      }
+
+      // Step 0-1: Download additional references and build reference covers array
+      setBrollPipelineStep(0);
+      const referencCovers: Array<{ cover_url: string; video_url?: string; metadata?: Record<string, unknown> }> = [
+        { cover_url: downloadedData.cover_url, video_url: downloadedData.video_url, metadata: downloadedData.metadata },
+      ];
+
+      for (const refUrl of config.additional_reference_urls) {
+        try {
+          const { data: refData } = await supabase.functions.invoke("download-tiktok", {
+            body: { url: refUrl },
+          });
+          if (refData?.cover_url) {
+            referencCovers.push({ cover_url: refData.cover_url, video_url: refData.video_url, metadata: refData.metadata });
+          }
+        } catch (e) {
+          console.warn("Failed to download additional reference:", refUrl, e);
+        }
+      }
+
+      // Step 1: Analyze references to synthesize patterns
       setBrollPipelineStep(1);
+      const { data: synthesisData, error: synthesisError } = await supabase.functions.invoke("analyze-broll-references", {
+        body: {
+          reference_covers: referencCovers,
+          product_image_url: productImageUrl,
+          product_url: config.product_url || undefined,
+        },
+      });
+
+      if (synthesisError || synthesisData?.error) {
+        throw new Error(synthesisData?.error || synthesisError?.message || "Error analizando referencias");
+      }
+
+      // Step 2: Generate master image using synthesis prompt
+      setBrollPipelineStep(2);
+      const { data: imageData, error: imageError } = await supabase.functions.invoke("generate-bof-images", {
+        body: {
+          product_image_url: productImageUrl,
+          prompt: synthesisData.master_image_prompt,
+          format_id: "broll_master",
+        },
+      });
+
+      if (imageError || imageData?.error) {
+        throw new Error(imageData?.error || imageError?.message || "Error generando imagen master");
+      }
+
+      const masterImageUrl = imageData?.image_url;
+      if (!masterImageUrl) throw new Error("No se obtuvo imagen master");
+
+      // Step 3: Generate master video from the AI image
+      setBrollPipelineStep(3);
+      const videoPrompt = synthesisData.master_video_prompt || 
+        "Animate this product image with subtle handheld camera motion. Slow zoom in, gentle pan. TikTok Shop UGC style. 9:16 vertical. No text, no overlays. Clean video only.";
+
+      const { data: videoTaskData, error: videoTaskError } = await supabase.functions.invoke("generate-bof-video", {
+        body: {
+          image_url: masterImageUrl,
+          prompt_text: videoPrompt,
+          format_id: "broll_master",
+        },
+      });
+
+      if (videoTaskError || videoTaskData?.error) {
+        throw new Error(videoTaskData?.error || videoTaskError?.message || "Error generando video master");
+      }
+
+      const masterTaskId = videoTaskData?.taskId;
+      if (!masterTaskId) throw new Error("No se obtuvo taskId para video master");
+
+      // Poll for video completion
+      let masterVideoUrl = "";
+      let pollAttempts = 0;
+      const maxPolls = 60;
+      while (pollAttempts < maxPolls) {
+        await new Promise(r => setTimeout(r, 5000));
+        pollAttempts++;
+
+        try {
+          const { data: pollData } = await supabase.functions.invoke("get-video-task", {
+            body: { taskId: masterTaskId },
+          });
+
+          if (pollData?.status === "completed" && pollData?.video_url) {
+            masterVideoUrl = pollData.video_url;
+            break;
+          }
+          if (pollData?.status === "failed") {
+            throw new Error("Video generation failed: " + (pollData?.error || "unknown"));
+          }
+        } catch (e) {
+          if (pollAttempts >= maxPolls) throw e;
+        }
+      }
+
+      if (!masterVideoUrl) throw new Error("Timeout esperando video master");
+
+      // Step 4: Generate scripts
+      setBrollPipelineStep(4);
       const { data: scriptData, error: scriptError } = await supabase.functions.invoke("generate-broll-scripts", {
         body: {
-          video_url: downloadedData.video_url,
-          cover_url: downloadedData.cover_url,
-          metadata: downloadedData.metadata,
+          video_url: masterVideoUrl,
+          cover_url: masterImageUrl,
+          metadata: { 
+            ...(downloadedData.metadata || {}), 
+            synthesis: {
+              product: synthesisData.product_detected,
+              common_actions: synthesisData.common_actions,
+              viral_structure: synthesisData.viral_structure,
+              commercial_energy: synthesisData.commercial_energy,
+            },
+          },
           variant_count: config.variant_count,
           language: config.language,
           accent: config.accent,
@@ -534,8 +652,8 @@ const Index = () => {
         throw new Error(scriptData?.error || scriptError?.message || "Error generando guiones");
       }
 
-      // Step 2: Generate TTS audio for each variant
-      setBrollPipelineStep(2);
+      // Step 5: Generate TTS audio for each variant
+      setBrollPipelineStep(5);
       const variants: BrollVariant[] = [];
 
       for (const sv of scriptData.variants) {
@@ -562,12 +680,9 @@ const Index = () => {
             }
           );
 
-          if (!ttsResponse.ok) {
-            throw new Error(`TTS failed: ${ttsResponse.status}`);
-          }
+          if (!ttsResponse.ok) throw new Error(`TTS failed: ${ttsResponse.status}`);
 
           const audioBlob = await ttsResponse.blob();
-          // Upload audio to storage
           const audioFileName = `broll_voice_${sv.variant_id}_${Date.now()}.mp3`;
           const { error: uploadErr } = await supabase.storage
             .from("videos")
@@ -576,7 +691,6 @@ const Index = () => {
           if (uploadErr) throw new Error(`Audio upload failed: ${uploadErr.message}`);
 
           const { data: audioUrlData } = supabase.storage.from("videos").getPublicUrl(audioFileName);
-
           brollVariant.audio_url = audioUrlData.publicUrl;
           brollVariant.status = "ready";
         } catch (e) {
@@ -588,20 +702,32 @@ const Index = () => {
         variants.push(brollVariant);
       }
 
-      // Step 3: Done
-      setBrollPipelineStep(3);
+      // Step 6-7: Done
+      setBrollPipelineStep(6);
 
       const brollResult: BrollResults = {
-        product_detected: scriptData.product_detected,
-        scene_analysis: scriptData.scene_analysis,
+        product_detected: scriptData.product_detected || synthesisData.product_detected,
+        scene_analysis: scriptData.scene_analysis || {
+          shot_types: synthesisData.common_shot_types || [],
+          product_handling: true,
+          environment: synthesisData.common_environments?.[0] || "studio",
+          pacing: synthesisData.pacing || "medium",
+        },
         variants,
-        master_video_url: downloadedData.video_url,
+        master_video_url: masterVideoUrl,
+        is_ai_generated_master: true,
+        scene_description: synthesisData.scene_description_es,
+        synthesis_summary: {
+          common_shot_types: synthesisData.common_shot_types,
+          common_actions: synthesisData.common_actions,
+          viral_structure: synthesisData.viral_structure,
+        },
       };
 
       setBrollResults(brollResult);
-      setBrollPipelineStep(4);
+      setBrollPipelineStep(7);
       setStep("broll_results");
-      toast.success(`${variants.filter(v => v.status === "ready").length} voice-overs generados`);
+      toast.success(`${variants.filter(v => v.status === "ready").length} voice-overs generados con video master IA`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
       setError(msg);
