@@ -92,7 +92,7 @@ serve(async (req) => {
   }
 
   try {
-    const { taskId } = await req.json();
+    const { taskId, engine } = await req.json();
 
     if (!taskId) {
       return jsonOk({ ok: false, stage: "validation", error: "taskId es requerido.", shouldStopPolling: true });
@@ -103,8 +103,11 @@ serve(async (req) => {
       return jsonOk({ ok: false, stage: "config", error: "KIE_API_KEY no está configurada.", shouldStopPolling: true });
     }
 
-    const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`;
-    console.log("[get-video-task] Polling:", url);
+    const isVeo = typeof engine === "string" && engine.startsWith("veo3");
+    const url = isVeo
+      ? `https://api.kie.ai/api/v1/veo/record-info?taskId=${encodeURIComponent(taskId)}`
+      : `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`;
+    console.log(`[get-video-task] Polling (${isVeo ? "veo" : "legacy"}):`, url);
 
     let response: Response;
     try {
@@ -185,55 +188,90 @@ serve(async (req) => {
     }
 
     const taskData = data?.data || {};
-    const providerState = String(taskData?.state || "").toLowerCase();
-    const engineModel = taskData?.model || "";
-    console.log(`[get-video-task] State: ${providerState}, model: ${engineModel}`);
-
+    const engineModel = taskData?.model || engine || "";
+    
     let normalizedStatus = "processing";
     let shouldStopPolling = false;
     let videoUrl: string | null = null;
     let errorMessage: string | null = null;
 
-    switch (providerState) {
-      case "waiting":
-      case "queuing":
-        normalizedStatus = "queued";
-        break;
+    if (isVeo) {
+      // Veo uses numeric status: 0=generating, 1=success, 2=failed, 3=generation_failed
+      const veoStatus = taskData?.status ?? taskData?.state;
+      const veoStatusNum = typeof veoStatus === "number" ? veoStatus : parseInt(String(veoStatus), 10);
+      console.log(`[get-video-task] Veo status: ${veoStatus} (parsed: ${veoStatusNum}), model: ${engineModel}`);
 
-      case "generating":
-      case "processing":
-        normalizedStatus = "processing";
-        break;
-
-      case "success":
-      case "completed": {
-        videoUrl = extractVideoUrl(taskData);
+      if (veoStatusNum === 1) {
+        // Success — extract URL from Veo response shape
+        const infoUrls = taskData?.info?.resultUrls;
+        if (typeof infoUrls === "string") {
+          try { const parsed = JSON.parse(infoUrls); videoUrl = Array.isArray(parsed) ? parsed[0] : null; } catch { /* ignore */ }
+        } else if (Array.isArray(infoUrls)) {
+          videoUrl = infoUrls[0] || null;
+        }
+        // Also try direct resultUrls
+        if (!videoUrl) videoUrl = extractVideoUrl(taskData);
+        
         if (videoUrl) {
           normalizedStatus = "completed";
-          console.log("[get-video-task] ✓ Video URL:", videoUrl);
+          console.log("[get-video-task] ✓ Veo Video URL:", videoUrl);
         } else {
           normalizedStatus = "failed";
-          errorMessage = "Tarea completada pero sin URL de video.";
-          console.warn("[get-video-task] Success but no videoUrl. taskData:", JSON.stringify(taskData).substring(0, 1000));
+          errorMessage = "Veo reportó éxito pero no devolvió URL de video.";
+          console.warn("[get-video-task] Veo success but no videoUrl. taskData:", JSON.stringify(taskData).substring(0, 1000));
         }
         shouldStopPolling = true;
-        break;
-      }
-
-      case "fail":
-      case "failed":
-      case "error": {
+      } else if (veoStatusNum === 2 || veoStatusNum === 3) {
         normalizedStatus = "failed";
         shouldStopPolling = true;
-        errorMessage = extractFailMessage(taskData, data);
-        console.error(`[get-video-task] Task failed: ${errorMessage}`);
-        break;
-      }
-
-      default:
-        console.warn(`[get-video-task] Unknown state: "${providerState}"`);
+        errorMessage = taskData?.failMsg || taskData?.errorMessage || data?.msg || "La generación de video Veo falló.";
+        console.error(`[get-video-task] Veo task failed (status ${veoStatusNum}): ${errorMessage}`);
+      } else {
+        // 0 or unknown = still generating
         normalizedStatus = "processing";
-        break;
+      }
+    } else {
+      // Legacy engines (Kling, Hailuo, Wan, Sora)
+      const providerState = String(taskData?.state || "").toLowerCase();
+      console.log(`[get-video-task] Legacy state: ${providerState}, model: ${engineModel}`);
+
+      switch (providerState) {
+        case "waiting":
+        case "queuing":
+          normalizedStatus = "queued";
+          break;
+        case "generating":
+        case "processing":
+          normalizedStatus = "processing";
+          break;
+        case "success":
+        case "completed": {
+          videoUrl = extractVideoUrl(taskData);
+          if (videoUrl) {
+            normalizedStatus = "completed";
+            console.log("[get-video-task] ✓ Video URL:", videoUrl);
+          } else {
+            normalizedStatus = "failed";
+            errorMessage = "Tarea completada pero sin URL de video.";
+            console.warn("[get-video-task] Success but no videoUrl. taskData:", JSON.stringify(taskData).substring(0, 1000));
+          }
+          shouldStopPolling = true;
+          break;
+        }
+        case "fail":
+        case "failed":
+        case "error": {
+          normalizedStatus = "failed";
+          shouldStopPolling = true;
+          errorMessage = extractFailMessage(taskData, data);
+          console.error(`[get-video-task] Task failed: ${errorMessage}`);
+          break;
+        }
+        default:
+          console.warn(`[get-video-task] Unknown state: "${providerState}"`);
+          normalizedStatus = "processing";
+          break;
+      }
     }
 
     return jsonOk({
