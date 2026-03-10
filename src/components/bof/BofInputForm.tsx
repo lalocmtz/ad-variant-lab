@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Upload, Package, DollarSign, Target, Zap, Users, Hash, Globe, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { BOF_FORMATS } from "@/lib/bof_video_formats";
-import type { BofFormData } from "@/lib/bof_types";
+import type { BofFormData, BofAutofillResult } from "@/lib/bof_types";
+import BofAutofillPanel from "./BofAutofillPanel";
 
 interface BofInputFormProps {
   onSubmit: (data: BofFormData) => void;
@@ -29,6 +30,7 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
   const [selectedFormats, setSelectedFormats] = useState<string[]>(["01_LO_SIENTO_POR_LOS_QUE"]);
   const [language, setLanguage] = useState("es-MX");
   const [accent, setAccent] = useState("mexicano");
+  const [autofillFields, setAutofillFields] = useState<Set<string>>(new Set());
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,7 +46,38 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
         ? prev.filter(f => f !== formatId)
         : [...prev, formatId]
     );
+    // Clear autofill indicator for formats when user changes them
+    setAutofillFields(prev => { const n = new Set(prev); n.delete("formats"); return n; });
   };
+
+  const handleAutofillComplete = (data: BofAutofillResult) => {
+    const filled = new Set<string>();
+
+    if (data.product_name) { setProductName(data.product_name); filled.add("product_name"); }
+    if (data.current_price) { setCurrentPrice(data.current_price); filled.add("current_price"); }
+    if (data.old_price) { setOldPrice(data.old_price); filled.add("old_price"); }
+    if (data.main_benefit) { setMainBenefit(data.main_benefit); filled.add("main_benefit"); }
+    if (data.offer) { setOffer(data.offer); filled.add("offer"); }
+    if (data.pain_point) { setPainPoint(data.pain_point); filled.add("pain_point"); }
+    if (data.audience) { setAudience(data.audience); filled.add("audience"); }
+    if (data.suggested_formats?.length > 0) {
+      setSelectedFormats(data.suggested_formats);
+      filled.add("formats");
+    }
+    if (data.language) setLanguage(data.language);
+    if (data.accent) setAccent(data.accent);
+    if (data.product_image_file) {
+      setProductImage(data.product_image_file);
+      setProductImagePreview(URL.createObjectURL(data.product_image_file));
+    }
+
+    setAutofillFields(filled);
+  };
+
+  const isAutofilled = (field: string) => autofillFields.has(field);
+
+  const autofillRing = (field: string) =>
+    isAutofilled(field) ? "ring-1 ring-primary/40" : "";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +108,9 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
         <p className="text-sm text-muted-foreground mt-1">Genera 3–5 anuncios verticales de producto para TikTok Shop desde una sola imagen.</p>
       </div>
 
+      {/* Autofill Panel */}
+      <BofAutofillPanel onAutofillComplete={handleAutofillComplete} />
+
       {/* Product Image */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Imagen del producto *</Label>
@@ -95,7 +131,7 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
               <Label className="text-xs text-muted-foreground">Nombre del producto *</Label>
               <div className="relative">
                 <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={productName} onChange={e => setProductName(e.target.value)} placeholder="Sérum facial anti-edad" className="pl-9" />
+                <Input value={productName} onChange={e => { setProductName(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("product_name"); return n; }); }} placeholder="Sérum facial anti-edad" className={`pl-9 ${autofillRing("product_name")}`} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -103,14 +139,14 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
                 <Label className="text-xs text-muted-foreground">Precio actual *</Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input value={currentPrice} onChange={e => setCurrentPrice(e.target.value)} placeholder="$299" className="pl-9" />
+                  <Input value={currentPrice} onChange={e => { setCurrentPrice(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("current_price"); return n; }); }} placeholder="$299" className={`pl-9 ${autofillRing("current_price")}`} />
                 </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Precio anterior</Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input value={oldPrice} onChange={e => setOldPrice(e.target.value)} placeholder="$599" className="pl-9" />
+                  <Input value={oldPrice} onChange={e => { setOldPrice(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("old_price"); return n; }); }} placeholder="$599" className={`pl-9 ${autofillRing("old_price")}`} />
                 </div>
               </div>
             </div>
@@ -124,32 +160,37 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
           <Label className="text-xs text-muted-foreground">Beneficio principal *</Label>
           <div className="relative">
             <Zap className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={mainBenefit} onChange={e => setMainBenefit(e.target.value)} placeholder="Reduce arrugas en 2 semanas" className="pl-9" />
+            <Input value={mainBenefit} onChange={e => { setMainBenefit(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("main_benefit"); return n; }); }} placeholder="Reduce arrugas en 2 semanas" className={`pl-9 ${autofillRing("main_benefit")}`} />
           </div>
         </div>
         <div>
           <Label className="text-xs text-muted-foreground">Oferta / urgencia</Label>
           <div className="relative">
             <Target className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={offer} onChange={e => setOffer(e.target.value)} placeholder="2x1 solo hoy" className="pl-9" />
+            <Input value={offer} onChange={e => { setOffer(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("offer"); return n; }); }} placeholder="2x1 solo hoy" className={`pl-9 ${autofillRing("offer")}`} />
           </div>
         </div>
         <div>
           <Label className="text-xs text-muted-foreground">Pain point</Label>
-          <Input value={painPoint} onChange={e => setPainPoint(e.target.value)} placeholder="Mi piel se veía opaca y sin vida" />
+          <Input value={painPoint} onChange={e => { setPainPoint(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("pain_point"); return n; }); }} placeholder="Mi piel se veía opaca y sin vida" className={autofillRing("pain_point")} />
         </div>
         <div>
           <Label className="text-xs text-muted-foreground">Audiencia</Label>
           <div className="relative">
             <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={audience} onChange={e => setAudience(e.target.value)} placeholder="Mujeres 25-40 años" className="pl-9" />
+            <Input value={audience} onChange={e => { setAudience(e.target.value); setAutofillFields(p => { const n = new Set(p); n.delete("audience"); return n; }); }} placeholder="Mujeres 25-40 años" className={`pl-9 ${autofillRing("audience")}`} />
           </div>
         </div>
       </div>
 
       {/* Format Selection */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium">Formatos *</Label>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-medium">Formatos *</Label>
+          {isAutofilled("formats") && (
+            <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded">IA sugerido</span>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {BOF_FORMATS.map(format => (
             <label
