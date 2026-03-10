@@ -51,6 +51,8 @@ const ResultsView = ({
           <VariantCard
             key={variant.variant_id}
             variant={variant}
+            language={language}
+            accent={accent}
             onRegenerate={() => onRegenerateVariant(index)}
             onApprove={() => onUpdateVariantStatus(index, "approved")}
             onReject={() => onUpdateVariantStatus(index, "rejected")}

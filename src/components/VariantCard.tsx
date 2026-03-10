@@ -238,6 +238,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
           imageUrl: publicImageUrl,
           promptText,
           mode: "standard",
+          language: language || "es-MX",
+          accent: accent || "mexicano",
         },
       });
 

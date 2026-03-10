@@ -541,6 +541,8 @@ const Index = () => {
                 videoUrl={downloadedData?.video_url || ""}
                 videoDuration={downloadedData?.metadata?.duration as number | undefined}
                 videoMode={downloadedData?.videoMode}
+                language={downloadedData?.language || "es-MX"}
+                accent={downloadedData?.accent || "mexicano"}
                 onReset={handleReset}
                 onRegenerateVariant={handleRegenerateVariant}
                 onUpdateVariantStatus={handleUpdateVariantStatus}
