@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Video, Image, LayoutDashboard, Palette, FolderOpen, Clock, Settings, Plus, LogOut } from "lucide-react";
+import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,22 +49,6 @@ function AppSidebar() {
               <span className="text-sm font-semibold text-foreground tracking-tight">Tryholo Copilot</span>
             )}
           </div>
-        </SidebarGroup>
-
-        {/* Dashboard */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location.pathname === "/dashboard"}>
-                  <NavLink to="/dashboard" end className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-foreground font-medium">
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    {!collapsed && <span>Dashboard</span>}
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
         </SidebarGroup>
 
         {/* Create */}
@@ -124,7 +108,7 @@ function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
           {!collapsed && (
-            <Button onClick={() => navigate("/dashboard")} className="w-full gradient-cta text-white border-0 mt-2" size="sm">
+            <Button onClick={() => navigate("/create/video")} className="w-full gradient-cta text-white border-0 mt-2" size="sm">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Project
             </Button>

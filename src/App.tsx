@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
-import Dashboard from "./pages/Dashboard";
 import Index from "./pages/Index";
 import StaticVariants from "./pages/StaticVariants";
 import BrandSystemPage from "./pages/BrandSystemPage";
@@ -32,8 +31,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 const AppRoutes = () => (
   <Routes>
     <Route path="/auth" element={<Auth />} />
-    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-    <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+    <Route path="/" element={<Navigate to="/create/video" replace />} />
+    <Route path="/dashboard" element={<Navigate to="/create/video" replace />} />
     <Route path="/create/video" element={<AppLayout><Index /></AppLayout>} />
     <Route path="/create/static" element={<AppLayout><StaticVariants /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
