@@ -7,6 +7,8 @@ import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
 
 interface VariantCardProps {
   variant: VariantResult;
+  language?: string;
+  accent?: string;
   onRegenerate: () => void;
   onApprove: () => void;
   onReject: () => void;
