@@ -6,10 +6,17 @@ import type { VideoMode } from "@/components/InputStep";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultsView from "@/components/ResultsView";
 import CoverPreviewStep from "@/components/CoverPreviewStep";
+import ContentModeStep from "@/components/ContentModeStep";
+import type { ClassificationResult } from "@/components/ContentModeStep";
+import BrollConfigPanel from "@/components/BrollConfigPanel";
+import type { BrollConfig } from "@/components/BrollConfigPanel";
+import BrollProcessingPipeline from "@/components/BrollProcessingPipeline";
+import BrollResultsView from "@/components/BrollResultsView";
+import type { BrollResults, BrollVariant } from "@/components/BrollResultsView";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-export type AppStep = "input" | "downloading" | "preview" | "processing" | "results";
+export type AppStep = "input" | "downloading" | "preview" | "classifying" | "mode_select" | "broll_config" | "broll_processing" | "broll_results" | "processing" | "results";
 
 export interface SceneGeometry {
   camera_distance: string;
@@ -125,7 +132,6 @@ export interface VariantResult {
   generated_image_url: string;
   animation_prompt_json?: Record<string, unknown>;
   prompt_package?: AnimationPromptPackage;
-  // Video generation state
   video_task_id?: string;
   video_status?: VideoGenerationStatus;
   video_url?: string;
@@ -160,7 +166,6 @@ function buildAnimationPromptPackage(
   variant: VariantResult,
   winnerBlueprint: WinnerBlueprint,
 ): AnimationPromptPackage {
-  // Use the rich animation_prompt_json from Gemini if available, otherwise build a fallback
   const promptJson = variant.animation_prompt_json || {
     video_metadata: {
       duracion_total_segundos_objetivo: "15",
@@ -281,6 +286,11 @@ const Index = () => {
   const [downloadedData, setDownloadedData] = useState<DownloadedData | null>(null);
   const [historyEntryId, setHistoryEntryId] = useState<string | null>(null);
 
+  // Classification & broll state
+  const [classification, setClassification] = useState<ClassificationResult | null>(null);
+  const [brollResults, setBrollResults] = useState<BrollResults | null>(null);
+  const [brollPipelineStep, setBrollPipelineStep] = useState(0);
+
   const saveToHistory = async (url: string, variantCount: number, analysisResults: AnalysisResult) => {
     try {
       const { data } = await supabase.from("analysis_history").insert([{
@@ -360,7 +370,63 @@ const Index = () => {
     }
   }, []);
 
+  // After cover preview confirmation, classify the content
   const handleConfirmPreview = useCallback(async () => {
+    if (!downloadedData) return;
+    setStep("classifying");
+
+    try {
+      const { data: classData, error: classError } = await supabase.functions.invoke("classify-content", {
+        body: {
+          cover_url: downloadedData.cover_url,
+          video_url: downloadedData.video_url,
+          metadata: downloadedData.metadata,
+        },
+      });
+
+      if (classError || classData?.error) {
+        console.warn("Classification failed, defaulting to avatar:", classData?.error || classError?.message);
+        // Default to avatar pipeline on classification failure
+        setClassification({
+          content_mode: "avatar",
+          confidence: 0.5,
+          recommended_pipeline: "avatar_variants",
+          reasoning: "Clasificación no disponible — usando pipeline por defecto.",
+          person_visibility_ratio: 0.5,
+          product_visual_dominance: 0.5,
+        });
+      } else {
+        setClassification(classData);
+      }
+
+      setStep("mode_select");
+    } catch (e) {
+      console.warn("Classification error, defaulting to avatar:", e);
+      setClassification({
+        content_mode: "avatar",
+        confidence: 0.5,
+        recommended_pipeline: "avatar_variants",
+        reasoning: "Error en clasificación — pipeline por defecto.",
+        person_visibility_ratio: 0.5,
+        product_visual_dominance: 0.5,
+      });
+      setStep("mode_select");
+    }
+  }, [downloadedData]);
+
+  // User selects mode after classification
+  const handleSelectMode = useCallback((mode: "avatar" | "product_broll") => {
+    if (mode === "avatar") {
+      // Continue with existing avatar pipeline
+      runAvatarPipeline();
+    } else {
+      // Show broll config
+      setStep("broll_config");
+    }
+  }, [downloadedData]);
+
+  // Avatar pipeline (existing flow)
+  const runAvatarPipeline = useCallback(async () => {
     if (!downloadedData) return;
     setStep("processing");
     setPipelineStep(2);
@@ -443,6 +509,107 @@ const Index = () => {
     }
   }, [downloadedData, user]);
 
+  // B-roll pipeline
+  const handleStartBrollPipeline = useCallback(async (config: BrollConfig) => {
+    if (!downloadedData) return;
+    setStep("broll_processing");
+    setBrollPipelineStep(0);
+
+    try {
+      // Step 1: Generate scripts
+      setBrollPipelineStep(1);
+      const { data: scriptData, error: scriptError } = await supabase.functions.invoke("generate-broll-scripts", {
+        body: {
+          video_url: downloadedData.video_url,
+          cover_url: downloadedData.cover_url,
+          metadata: downloadedData.metadata,
+          variant_count: config.variant_count,
+          language: config.language,
+          accent: config.accent,
+          tone: config.tone,
+        },
+      });
+
+      if (scriptError || scriptData?.error) {
+        throw new Error(scriptData?.error || scriptError?.message || "Error generando guiones");
+      }
+
+      // Step 2: Generate TTS audio for each variant
+      setBrollPipelineStep(2);
+      const variants: BrollVariant[] = [];
+
+      for (const sv of scriptData.variants) {
+        const brollVariant: BrollVariant = {
+          ...sv,
+          status: "generating_audio" as const,
+        };
+
+        try {
+          const ttsResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bof-voice`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({
+                text: sv.script_text,
+                language: config.language,
+                accent: config.accent,
+              }),
+            }
+          );
+
+          if (!ttsResponse.ok) {
+            throw new Error(`TTS failed: ${ttsResponse.status}`);
+          }
+
+          const audioBlob = await ttsResponse.blob();
+          // Upload audio to storage
+          const audioFileName = `broll_voice_${sv.variant_id}_${Date.now()}.mp3`;
+          const { error: uploadErr } = await supabase.storage
+            .from("videos")
+            .upload(audioFileName, audioBlob, { contentType: "audio/mpeg" });
+
+          if (uploadErr) throw new Error(`Audio upload failed: ${uploadErr.message}`);
+
+          const { data: audioUrlData } = supabase.storage.from("videos").getPublicUrl(audioFileName);
+
+          brollVariant.audio_url = audioUrlData.publicUrl;
+          brollVariant.status = "ready";
+        } catch (e) {
+          console.error(`TTS failed for ${sv.variant_id}:`, e);
+          brollVariant.status = "failed";
+          brollVariant.error = e instanceof Error ? e.message : "Audio generation failed";
+        }
+
+        variants.push(brollVariant);
+      }
+
+      // Step 3: Done
+      setBrollPipelineStep(3);
+
+      const brollResult: BrollResults = {
+        product_detected: scriptData.product_detected,
+        scene_analysis: scriptData.scene_analysis,
+        variants,
+        master_video_url: downloadedData.video_url,
+      };
+
+      setBrollResults(brollResult);
+      setBrollPipelineStep(4);
+      setStep("broll_results");
+      toast.success(`${variants.filter(v => v.status === "ready").length} voice-overs generados`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error desconocido";
+      setError(msg);
+      toast.error(msg);
+      setStep("input");
+    }
+  }, [downloadedData]);
+
   const handleRegenerateVariant = useCallback(async (variantIndex: number) => {
     if (!results || !downloadedData) return;
     const variant = results.variants[variantIndex];
@@ -501,11 +668,59 @@ const Index = () => {
     updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], ...videoState };
     const updatedResults = { ...results, variants: updatedVariants };
     setResults(updatedResults);
-    // Persist to DB when video completes or fails
     if (videoState.video_url || videoState.video_status === "completed" || videoState.video_status === "failed") {
       persistResultsToHistory(updatedResults);
     }
   }, [results, historyEntryId]);
+
+  const handleRegenerateBrollVariant = useCallback(async (variantIndex: number) => {
+    if (!brollResults || !downloadedData) return;
+    const variant = brollResults.variants[variantIndex];
+    if (!variant) return;
+
+    const updatedVariants = [...brollResults.variants];
+    updatedVariants[variantIndex] = { ...variant, status: "generating_audio" };
+    setBrollResults({ ...brollResults, variants: updatedVariants });
+
+    try {
+      const ttsResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bof-voice`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            text: variant.script_text,
+            language: "es-MX",
+            accent: "mexicano",
+          }),
+        }
+      );
+
+      if (!ttsResponse.ok) throw new Error(`TTS failed: ${ttsResponse.status}`);
+
+      const audioBlob = await ttsResponse.blob();
+      const audioFileName = `broll_voice_${variant.variant_id}_${Date.now()}.mp3`;
+      const { error: uploadErr } = await supabase.storage
+        .from("videos")
+        .upload(audioFileName, audioBlob, { contentType: "audio/mpeg" });
+
+      if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
+
+      const { data: audioUrlData } = supabase.storage.from("videos").getPublicUrl(audioFileName);
+
+      updatedVariants[variantIndex] = { ...variant, audio_url: audioUrlData.publicUrl, status: "ready", error: undefined };
+      setBrollResults({ ...brollResults, variants: [...updatedVariants] });
+      toast.success(`Audio ${variant.variant_id} regenerado`);
+    } catch (e) {
+      updatedVariants[variantIndex] = { ...variant, status: "failed", error: e instanceof Error ? e.message : "Error" };
+      setBrollResults({ ...brollResults, variants: [...updatedVariants] });
+      toast.error(`Error regenerando audio: ${e instanceof Error ? e.message : "Error"}`);
+    }
+  }, [brollResults, downloadedData]);
 
   const handleReset = useCallback(() => {
     setStep("input");
@@ -513,6 +728,9 @@ const Index = () => {
     setError(null);
     setDownloadedData(null);
     setHistoryEntryId(null);
+    setClassification(null);
+    setBrollResults(null);
+    setBrollPipelineStep(0);
   }, []);
 
   return (
@@ -536,6 +754,44 @@ const Index = () => {
                 productImageUrl={downloadedData.product_image_url}
                 onConfirm={handleConfirmPreview}
                 onCancel={handleReset}
+              />
+            </motion.div>
+          )}
+          {(step === "classifying") && (
+            <motion.div key="classifying" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <ProcessingPipeline currentStep={1} />
+            </motion.div>
+          )}
+          {step === "mode_select" && classification && downloadedData && (
+            <motion.div key="mode_select" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <ContentModeStep
+                classification={classification}
+                coverUrl={downloadedData.cover_url}
+                onSelectMode={handleSelectMode}
+                onCancel={handleReset}
+              />
+            </motion.div>
+          )}
+          {step === "broll_config" && downloadedData && (
+            <motion.div key="broll_config" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <BrollConfigPanel
+                coverUrl={downloadedData.cover_url}
+                onStart={handleStartBrollPipeline}
+                onCancel={() => setStep("mode_select")}
+              />
+            </motion.div>
+          )}
+          {step === "broll_processing" && (
+            <motion.div key="broll_processing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <BrollProcessingPipeline currentStep={brollPipelineStep} />
+            </motion.div>
+          )}
+          {step === "broll_results" && brollResults && (
+            <motion.div key="broll_results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <BrollResultsView
+                results={brollResults}
+                onReset={handleReset}
+                onRegenerateVariant={handleRegenerateBrollVariant}
               />
             </motion.div>
           )}
