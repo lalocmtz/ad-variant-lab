@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.analyze-broll-references]
 verify_jwt = false
+
+[functions.animate-bof-scene]
+verify_jwt = false
