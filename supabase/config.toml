@@ -50,3 +50,9 @@ verify_jwt = false
 
 [functions.animate-bof-scene]
 verify_jwt = false
+
+[functions.analyze-broll-lab]
+verify_jwt = false
+
+[functions.generate-broll-lab-image]
+verify_jwt = false
