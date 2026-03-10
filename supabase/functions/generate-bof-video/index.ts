@@ -21,13 +21,14 @@ serve(async (req) => {
     let publicImageUrl = image_url;
     if (image_url.startsWith("data:")) {
       console.log("BOF video: converting base64 image to public URL via storage upload");
-      const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase config for storage upload");
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
       const commaIdx = image_url.indexOf(",");
       if (commaIdx === -1) throw new Error("Invalid base64 image format");
-      const header = image_url.substring(5, commaIdx); // e.g. "image/png;base64"
+      const header = image_url.substring(5, commaIdx);
       const mimeType = header.split(";")[0] || "image/png";
       const base64Data = image_url.substring(commaIdx + 1);
       const ext = mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "png";
@@ -37,20 +38,15 @@ serve(async (req) => {
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/videos/${fileName}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          "Content-Type": mimeType,
-          "x-upsert": "true",
-        },
-        body: bytes,
-      });
-      const uploadBody = await uploadRes.text();
-      if (!uploadRes.ok) {
-        console.error("Storage upload error:", uploadRes.status, uploadBody);
-        throw new Error(`Storage upload failed: ${uploadRes.status} - ${uploadBody}`);
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("videos")
+        .upload(fileName, bytes, { contentType: mimeType, upsert: true });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw new Error(`Storage upload failed: ${uploadError.message}`);
       }
+
       publicImageUrl = `${SUPABASE_URL}/storage/v1/object/public/videos/${fileName}`;
       console.log("BOF video: uploaded to", publicImageUrl);
     }
