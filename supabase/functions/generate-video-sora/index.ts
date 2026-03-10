@@ -26,8 +26,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     }),
   },
   hailuo: {
-    label: "Hailuo",
-    kieModelId: "hailuo-image-to-video",
+    label: "Hailuo 2.3 Pro",
+    kieModelId: "hailuo/2-3-image-to-video-pro",
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_url: imageUrl,
@@ -36,8 +36,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     }),
   },
   wan: {
-    label: "Wan",
-    kieModelId: "wan-image-to-video",
+    label: "Wan 2.6",
+    kieModelId: "wan/2-6-image-to-video",
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_url: imageUrl,
@@ -45,8 +45,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     }),
   },
   kling: {
-    label: "Kling",
-    kieModelId: "kling-2-master-image-to-video",
+    label: "Kling 2.6",
+    kieModelId: "kling-2.6/image-to-video",
     buildInput: (prompt, imageUrl) => ({
       prompt,
       image_url: imageUrl,
