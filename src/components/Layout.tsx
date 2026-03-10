@@ -20,6 +20,7 @@ import {
 
 const createItems = [
   { title: "Video Variants", url: "/create/video", icon: Video },
+  { title: "BOF Videos", url: "/create/bof", icon: ShoppingBag },
   { title: "Static Variants", url: "/create/static", icon: Image },
 ];
 
