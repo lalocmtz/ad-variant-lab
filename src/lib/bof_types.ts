@@ -1,4 +1,4 @@
-export type BofBatchStatus = "pending" | "generating_scripts" | "generating_scenes" | "generating_images" | "animating_scenes" | "generating_voice" | "merging" | "completed" | "failed";
+export type BofBatchStatus = "pending" | "generating_scripts" | "generating_scenes" | "generating_images" | "animating_scenes" | "animating_clips" | "stitching_video" | "generating_voice" | "merging_audio_video" | "merging" | "completed" | "failed";
 export type BofVariantStatus = "pending" | "script_ready" | "scenes_ready" | "image_ready" | "animating" | "clips_ready" | "voice_ready" | "completed" | "failed";
 
 export interface BofFormData {

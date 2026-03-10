@@ -1,95 +1,55 @@
 
 
-# Plan: Reestructurar Pipeline BOF B-Roll
+## Plan: Eliminar timeout + Garantizar audio en videos generados
 
-## Diagnóstico
+### Problema 1: Timeout de 10 minutos mata tareas validas
+La tarea de Kling sigue procesandose en el servidor pero el frontend la marca como "fallida" a los 10 minutos y deja de hacer polling.
 
-El pipeline BOF actual ya tiene la arquitectura multi-escena correcta en `useBofPipeline.ts`:
-1. Scripts → 2. Imágenes (3 escenas) → 3. Animación (Kling 2.6) → 4. Voz → 5. Completado
+**Solucion:** Eliminar el timeout completamente. El polling continua indefinidamente hasta que KIE devuelva `success` o `fail`. La UI muestra solo el tiempo transcurrido sin limite maximo.
 
-**Problemas a resolver:**
+**Archivo:** `src/components/KlingAnimationPanel.tsx`
+- Eliminar la constante `TIMEOUT_MS` y toda la logica de timeout en `pollTask` (lineas 82-94)
+- Cambiar la barra de progreso para que sea una animacion pulsante (indeterminada) en vez de basada en tiempo
+- Cambiar el timer de `"2:30 / 10:00"` a solo `"2:30"` (tiempo transcurrido sin limite)
 
-1. **`animate-bof-scene` usa Kling 2.6 con modelo `kling-v2-6`** — funciona pero es lento/caro. Debe cambiarse a **Wan 2.6 Flash** como default con Kling como fallback.
-2. **`generate-bof-video` (Sora 2)** sigue existiendo y se usa desde `Index.tsx` (Video Variants). Para BOF, ya no se usa directamente pero debería marcarse como legacy.
-3. **No hay concatenación de clips** — actualmente `raw_video_url` es solo el primer clip. Falta un paso de stitching.
-4. **Voz se genera secuencialmente después de video** — debería ser paralelo.
-5. **Pipeline UI** muestra 6 pasos pero falta "Uniendo clips" como paso separado.
+### Problema 2: Videos entregados sin audio
+Kling Motion Control genera video **sin audio** por diseno — solo anima la imagen con el movimiento del video de referencia. El audio del TikTok original se pierde.
 
-## Cambios Propuestos
+**Solucion:** Crear una edge function `merge-audio` que use ffmpeg-wasm para combinar el video de Kling (sin audio) con el audio extraido del video original de TikTok. Cuando el polling detecta que un video esta listo, automaticamente llama a `merge-audio` antes de mostrarlo al usuario.
 
-### 1. Edge Function: `animate-bof-scene/index.ts`
-- Cambiar motor default de `kling-v2-6` a `wan/2-6-image-to-video` (Wan 2.6 Flash)
-- Agregar parámetro `engine` opcional para permitir fallback a `kling-v2-6`
-- Configurar input correcto para Wan: `image_urls` (array), `duration: "5"`, `resolution: "1080p"`, `aspect_ratio: "9:16"`
-- Mantener lógica de upload base64 → storage intacta
+**Archivos nuevos/modificados:**
 
-### 2. Hook: `src/hooks/useBofPipeline.ts`
-- Pasar `engine: "wan"` a `animate-bof-scene` por defecto
-- **Paralelizar voz y animación**: Lanzar `generate-bof-voice` al mismo tiempo que la animación, no después
-- Agregar paso de stitching (pipeline step 4) — por ahora, el "stitch" será tomar todos los `clip_urls` y el primero como `raw_video_url` (la concatenación real requiere ffmpeg que no está disponible en edge functions, pero los clips individuales son el entregable útil)
-- Actualizar `pipelineStep` indices para reflejar 7 pasos
+| Archivo | Cambio |
+|---|---|
+| `src/components/KlingAnimationPanel.tsx` | Eliminar timeout, cambiar progreso a indeterminado, agregar paso de merge post-completado |
+| `supabase/functions/merge-audio/index.ts` | **Nuevo** — Descarga video Kling + video original, extrae audio del original, los combina con ffmpeg-wasm, sube resultado a storage |
+| `supabase/config.toml` | Agregar entrada para `merge-audio` |
 
-### 3. UI Pipeline: `src/components/bof/BofPipeline.tsx`
-- Actualizar `PIPELINE_STEPS` a 7 pasos:
-  1. Generando scripts
-  2. Generando escenas visuales  
-  3. Generando imágenes
-  4. Animando escenas
-  5. Uniendo clips
-  6. Generando voz
-  7. Fusionando audio + video
-
-### 4. Tipos: `src/lib/bof_types.ts`
-- Agregar `"animating_clips" | "stitching_video" | "merging_audio_video"` a `BofBatchStatus`
-
-### 5. NO tocar
-- `generate-bof-video` (legacy, usado por Video Variants en Index.tsx)
-- `generate-bof-voice` 
-- `merge-broll-audio`
-- `BofInputForm`
-- `BofResultsView` (ya soporta multi-scene)
-- `get-video-task` (ya funciona correctamente)
-- Flujo de avatar
-- `analyze-video`, `analyze-bof-source`
-
-## Detalle Técnico
-
-### Wan 2.6 Flash config para `animate-bof-scene`:
-```typescript
-const requestBody = {
-  model: "wan/2-6-image-to-video",
-  input: {
-    image_urls: [publicImageUrl],
-    prompt: sanitizedPrompt,
-    duration: "5",
-    resolution: "1080p",
-    aspect_ratio: "9:16",
-  },
-};
-```
-
-### Paralelización en `useBofPipeline.ts`:
+### Flujo actualizado post-Kling
 ```text
-CURRENT:    Images → Animate → Poll → Voice → Done
-PROPOSED:   Images → [Animate + Voice] (parallel) → Done
+Kling completa video (sin audio)
+        │
+        ▼
+Estado UI: "Agregando audio del video original..."
+        │
+        ▼
+Edge function merge-audio:
+  1. Descarga video Kling (solo video)
+  2. Descarga video TikTok original (tiene audio)
+  3. ffmpeg: combina video de Kling + audio de TikTok
+  4. Sube MP4 final a storage
+  5. Devuelve URL publica
+        │
+        ▼
+UI muestra video final CON audio
 ```
 
-La voz no depende del video, así que se lanzan en paralelo usando `Promise.all`.
+### Detalle tecnico de merge-audio
+- Usa `@ffmpeg/ffmpeg` (version WASM que corre en Deno edge functions)
+- Comando equivalente: `ffmpeg -i kling.mp4 -i tiktok.mp4 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output.mp4`
+- Solo remuxea (no re-encoda video), por lo que es rapido
+- Si el audio es mas largo que el video, se corta al largo del video (`-shortest`)
 
-### Polling
-- Se mantiene `get-video-task` con `engine: "kling"` (ambos Wan y Kling usan el endpoint legacy de KIE)
-- El frontend ya hace polling paralelo de todos los clips
-
-## Archivos a Modificar
-1. `supabase/functions/animate-bof-scene/index.ts` — cambiar motor a Wan 2.6
-2. `src/hooks/useBofPipeline.ts` — paralelizar voz, actualizar steps
-3. `src/components/bof/BofPipeline.tsx` — 7 pasos en UI
-4. `src/lib/bof_types.ts` — nuevos estados
-
-## Archivos que NO se tocan
-- `generate-bof-video` (legacy Sora, usado por Video Variants)
-- `generate-bof-voice`, `merge-broll-audio`
-- `BofInputForm`, `BofResultsView`
-- `get-video-task`, `Index.tsx`
-- Todo el flujo de avatar
+### Estado de la UI durante merge
+Se agrega un nuevo `detailState`: `"merging_audio"` con label `"Agregando audio..."` para que el usuario sepa que falta un paso despues de que Kling termine.
 
