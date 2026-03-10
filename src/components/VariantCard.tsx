@@ -39,10 +39,10 @@ const VIDEO_STATUS_CONFIG: Record<string, { label: string; showLoader?: boolean 
 
 const VIDEO_ENGINES = [
   { key: "auto", label: "Auto (fallback)", description: "Hailuo → Wan → Sora 2" },
-  { key: "hailuo", label: "Hailuo", description: "Rápido y estable" },
-  { key: "wan", label: "Wan", description: "Alta calidad" },
+  { key: "hailuo", label: "Hailuo 2.3 Pro", description: "Rápido y estable" },
+  { key: "wan", label: "Wan 2.6", description: "Alta calidad" },
   { key: "sora2", label: "Sora 2", description: "OpenAI Sora" },
-  { key: "kling", label: "Kling", description: "Kling 2 Master" },
+  { key: "kling", label: "Kling 2.6", description: "Kling última versión" },
 ];
 
 const POLL_INTERVAL_MS = 5000;
