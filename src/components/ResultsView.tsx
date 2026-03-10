@@ -1,13 +1,9 @@
 import { ArrowLeft } from "lucide-react";
 import VariantCard from "@/components/VariantCard";
-import KlingAnimationPanel from "@/components/KlingAnimationPanel";
 import type { AnalysisResult, VariantStatus, VideoGenerationStatus } from "@/pages/Index";
 
 interface ResultsViewProps {
   results: AnalysisResult;
-  videoUrl: string;
-  videoDuration?: number;
-  videoMode?: "avatar" | "no_avatar";
   language?: string;
   accent?: string;
   onReset: () => void;
@@ -18,9 +14,6 @@ interface ResultsViewProps {
 
 const ResultsView = ({
   results,
-  videoUrl,
-  videoDuration,
-  videoMode,
   language,
   accent,
   onReset,
@@ -60,15 +53,6 @@ const ResultsView = ({
           />
         ))}
       </div>
-
-      {videoUrl && (
-        <KlingAnimationPanel
-          variants={results.variants}
-          videoUrl={videoUrl}
-          videoDuration={videoDuration}
-          videoMode={videoMode}
-        />
-      )}
     </div>
   );
 };

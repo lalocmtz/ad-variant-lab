@@ -237,36 +237,34 @@ function buildAnimationPromptPackage(
     },
   };
 
+  const scriptHook = variant.script_variant?.hook || "";
+  const scriptBody = variant.script_variant?.body || "";
+  const scriptCta = variant.script_variant?.cta || "";
+  const scriptFull = variant.script_variant?.full_script || `${scriptHook} ${scriptBody} ${scriptCta}`.trim();
+
   const promptText = `Use the attached generated image as the visual identity reference for the actor.
 
-Your task is to animate or recreate a vertical short-form UGC ad that preserves the same winning persuasion structure, creator role, trust profile, pacing logic, gestures, and conversion mechanics of the source ad.
+Animate a 15-second vertical UGC ad. The actor must SPEAK the following script on camera:
 
-This execution must be exactly 15 seconds long.
+=== GUION (el actor dice esto en voz alta) ===
+HOOK (0-2.5s): "${scriptHook}"
+BODY (2.5-10.5s): "${scriptBody}"
+CTA (10.5-15s): "${scriptCta}"
 
-Important rules:
-- use the uploaded product as absolute truth
-- preserve the same broad market and creator plausibility as the original ad
-- preserve the same creator role and trust profile unless explicitly changed by the user
-- do not clone the original actor
-- keep this generated actor identity
-- preserve hook structure, delivery energy, body language rhythm, objection handling, and CTA logic
-- compress the ad to exactly 15 seconds by keeping only the highest-conversion beats
-- do not add on-screen text, subtitles, captions, comment bubbles, social UI, or motion graphics
-- preserve the comment-reply mechanic only as spoken context if relevant, never as visible text
-- keep the result natural, believable, handheld, and UGC-style
+GUION COMPLETO: "${scriptFull}"
+=== FIN DEL GUION ===
 
-LANGUAGE RULES:
-- All spoken dialogue and scripts MUST be in Spanish (Mexican Spanish by default).
-- Use natural Mexican Spanish vocabulary, tone, and phrasing.
-- The accent must be Mexican.
-- Avoid Spain Spanish phrasing.
-- Avoid unnatural "neutral corporate Spanish".
-- If a script is provided in Spanish, preserve it — do NOT translate to English.
-- Visual/technical instructions may remain in English for model quality.
+VISUAL DIRECTION:
+- Actor: ${variant.actor_archetype || "UGC creator"}, ${variant.actor_visual_direction?.overall_vibe || "natural"}, age ${variant.actor_visual_direction?.approx_age_band || "25-35"}
+- Energy: ${variant.heygen_ready_brief?.energy || "medium"}, pace: ${variant.heygen_ready_brief?.pace || "natural"}, delivery: ${variant.heygen_ready_brief?.delivery_style || "conversational"}
+- Gestures: ${variant.heygen_ready_brief?.gesture_style || "natural hand movements"}
+- Expression: ${variant.heygen_ready_brief?.facial_expression || "friendly, authentic"}
+- Scene: ${winnerBlueprint.scene_type || "indoor"}, camera: ${winnerBlueprint.camera_style || "handheld"}, lighting: ${winnerBlueprint.scene_geometry?.lighting_direction || "natural"}
+- Format: 9:16 vertical, UGC style, no text overlays, no subtitles, no graphics
 
-Use the following JSON blueprint as the execution spec:
+LANGUAGE: Spanish (Mexican accent). Natural vocabulary, no corporate tone.
 
-JSON:
+EXECUTION BLUEPRINT (JSON):
 ${JSON.stringify(promptJson, null, 2)}`;
 
   return {
@@ -934,9 +932,6 @@ const Index = () => {
             <motion.div key="results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
               <ResultsView
                 results={results}
-                videoUrl={downloadedData?.video_url || ""}
-                videoDuration={downloadedData?.metadata?.duration as number | undefined}
-                videoMode={downloadedData?.videoMode}
                 language={downloadedData?.language || "es-MX"}
                 accent={downloadedData?.accent || "mexicano"}
                 onReset={handleReset}

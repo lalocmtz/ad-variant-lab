@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Loader2, Download, Video } from "lucide-react";
+import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,7 +57,6 @@ function handleDownloadVideo(url: string, variantId: string) {
 
 const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
   const [copied, setCopied] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
   const [videoTaskId, setVideoTaskId] = useState<string | undefined>(variant.video_task_id);
   const [videoUrl, setVideoUrl] = useState<string | undefined>(variant.video_url);
@@ -476,39 +475,6 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
           )}
         </div>
 
-        {/* Collapsed technical details */}
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-border/30 py-1 text-[10px] text-muted-foreground hover:bg-muted"
-        >
-          {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          {showDetails ? "Ocultar detalles" : "Detalles técnicos (opcional)"}
-        </button>
-
-        {showDetails && (
-          <div className="space-y-2 text-[11px]">
-            <Detail label="Actor" value={variant.actor_archetype} />
-            <Detail label="Distancia" value={variant.identity_distance?.toUpperCase()} />
-            {variant.script_variant && (
-              <>
-                <Detail label="Hook" value={variant.script_variant.hook} />
-                <Detail label="Body" value={variant.script_variant.body} />
-                <Detail label="CTA" value={variant.script_variant.cta} />
-                <Detail label="Duración objetivo" value="15s" />
-              </>
-            )}
-            {variant.heygen_ready_brief && (
-              <Detail label="Energía" value={`${variant.heygen_ready_brief.energy} · ${variant.heygen_ready_brief.pace} · ${variant.heygen_ready_brief.delivery_style}`} />
-            )}
-            {variant.generation_attempt > 1 && (
-              <Detail label="Intento" value={`#${variant.generation_attempt}`} />
-            )}
-            {videoTaskId && (
-              <Detail label="Video Task" value={videoTaskId} />
-            )}
-            <Detail label="Resumen" value={variant.variant_summary} />
-          </div>
-        )}
       </div>
     </div>
   );
