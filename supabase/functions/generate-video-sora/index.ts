@@ -5,6 +5,60 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Provider Registry ──
+
+interface ProviderConfig {
+  label: string;
+  kieModelId: string;
+  buildInput: (prompt: string, imageUrl: string) => Record<string, unknown>;
+}
+
+const PROVIDERS: Record<string, ProviderConfig> = {
+  sora2: {
+    label: "Sora 2",
+    kieModelId: "sora-2-image-to-video",
+    buildInput: (prompt, imageUrl) => ({
+      prompt,
+      image_urls: [imageUrl],
+      aspect_ratio: "portrait",
+      n_frames: "15",
+      remove_watermark: true,
+    }),
+  },
+  hailuo: {
+    label: "Hailuo",
+    kieModelId: "hailuo-image-to-video",
+    buildInput: (prompt, imageUrl) => ({
+      prompt,
+      image_url: imageUrl,
+      aspect_ratio: "9:16",
+      duration: 5,
+    }),
+  },
+  wan: {
+    label: "Wan",
+    kieModelId: "wan-image-to-video",
+    buildInput: (prompt, imageUrl) => ({
+      prompt,
+      image_url: imageUrl,
+      aspect_ratio: "9:16",
+    }),
+  },
+  kling: {
+    label: "Kling",
+    kieModelId: "kling-2-master-image-to-video",
+    buildInput: (prompt, imageUrl) => ({
+      prompt,
+      image_url: imageUrl,
+      aspect_ratio: "9:16",
+      duration: "5",
+    }),
+  },
+};
+
+// Auto fallback chain: try these in order
+const AUTO_CHAIN: string[] = ["hailuo", "wan", "sora2"];
+
 // ── Helpers ──
 
 function isValidHttpUrl(url: string): boolean {
@@ -56,7 +110,6 @@ function sanitizePrompt(promptText: string, language: string, accent: string): s
   const maxBase = MAX_PROMPT_CHARS - suffix.length;
 
   let sanitized = promptText.trim();
-
   if (sanitized.length > maxBase) {
     console.log(`[generate-video-sora] Truncating prompt from ${sanitized.length} to ${maxBase} chars`);
     sanitized = sanitized.substring(0, maxBase);
@@ -80,36 +133,21 @@ const ERROR_MAP: Record<number, string> = {
   505: "Función de generación deshabilitada.",
 };
 
-// ── Fallback model chain ──
-
-interface ModelConfig {
-  model: string;
-  extraInput?: Record<string, unknown>;
-}
-
-const MODEL_CHAIN: ModelConfig[] = [
-  { model: "sora-2-image-to-video" },
-  { model: "sora-2-pro-image-to-video", extraInput: { size: "standard" } },
-];
+// ── Attempt a single model ──
 
 async function attemptCreateTask(
-  modelConfig: ModelConfig,
+  providerKey: string,
   sanitizedPrompt: string,
   imageUrl: string,
   apiKey: string,
-): Promise<{ taskId: string; model: string } | { error: string; httpStatus?: number }> {
-  const input: Record<string, unknown> = {
-    prompt: sanitizedPrompt,
-    image_urls: [imageUrl],
-    aspect_ratio: "portrait",
-    n_frames: "15",
-    remove_watermark: true,
-    ...modelConfig.extraInput,
-  };
+): Promise<{ taskId: string; model: string; provider: string } | { error: string; httpStatus?: number }> {
+  const config = PROVIDERS[providerKey];
+  if (!config) return { error: `Proveedor desconocido: ${providerKey}` };
 
-  const requestBody = { model: modelConfig.model, input };
+  const input = config.buildInput(sanitizedPrompt, imageUrl);
+  const requestBody = { model: config.kieModelId, input };
 
-  console.log(`[generate-video-sora] Trying model: ${modelConfig.model}, prompt length: ${sanitizedPrompt.length}`);
+  console.log(`[generate-video-sora] Trying ${config.label} (${config.kieModelId}), prompt length: ${sanitizedPrompt.length}`);
 
   let response: Response;
   try {
@@ -127,43 +165,41 @@ async function attemptCreateTask(
     );
   } catch (e: any) {
     const msg = e?.name === "AbortError"
-      ? `Timeout (30s) conectando con proveedor (${modelConfig.model})`
-      : `Error de red (${modelConfig.model}): ${e?.message}`;
+      ? `Timeout (30s) conectando con ${config.label}`
+      : `Error de red (${config.label}): ${e?.message}`;
     console.error(`[generate-video-sora] ${msg}`);
     return { error: msg };
   }
 
   const responseText = await response.text();
-  console.log(`[generate-video-sora] ${modelConfig.model} HTTP ${response.status}, body: ${responseText.substring(0, 500)}`);
+  console.log(`[generate-video-sora] ${config.label} HTTP ${response.status}, body: ${responseText.substring(0, 500)}`);
 
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(responseText);
   } catch {
-    return { error: `Respuesta no-JSON del proveedor (${modelConfig.model})`, httpStatus: 502 };
+    return { error: `Respuesta no-JSON de ${config.label}`, httpStatus: 502 };
   }
 
-  // HTTP-level failure
   if (!response.ok) {
-    const friendlyError = ERROR_MAP[response.status] || `Proveedor rechazó (HTTP ${response.status})`;
+    const friendlyError = ERROR_MAP[response.status] || `${config.label} rechazó (HTTP ${response.status})`;
     return { error: friendlyError, httpStatus: response.status };
   }
 
-  // Application-level failure
   const kieCode = (data as any).code;
   if (kieCode !== undefined && kieCode !== 200) {
     const msg = (data as any).msg || `código ${kieCode}`;
-    console.error(`[generate-video-sora] ${modelConfig.model} app error: ${kieCode} ${msg}`);
-    return { error: `${modelConfig.model}: ${msg}` };
+    console.error(`[generate-video-sora] ${config.label} app error: ${kieCode} ${msg}`);
+    return { error: `${config.label}: ${msg}` };
   }
 
   const taskId = extractTaskId(data);
   if (!taskId) {
-    console.error(`[generate-video-sora] No taskId in response:`, JSON.stringify(data).substring(0, 500));
-    return { error: `${modelConfig.model} no devolvió taskId.` };
+    console.error(`[generate-video-sora] No taskId from ${config.label}:`, JSON.stringify(data).substring(0, 500));
+    return { error: `${config.label} no devolvió taskId.` };
   }
 
-  return { taskId, model: modelConfig.model };
+  return { taskId, model: config.kieModelId, provider: providerKey };
 }
 
 // ── Main ──
@@ -172,7 +208,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { variantId, imageUrl, promptText, mode, language, accent } = await req.json();
+    const { variantId, imageUrl, promptText, mode, language, accent, model } = await req.json();
 
     console.log("[generate-video-sora] Request:", JSON.stringify({
       variantId,
@@ -181,6 +217,7 @@ serve(async (req) => {
       mode,
       language,
       accent,
+      model,
     }));
 
     // ── Validation ──
@@ -217,19 +254,21 @@ serve(async (req) => {
       });
     }
 
-    // ── Sanitize prompt (hard cap at 2000 chars) ──
     const videoLanguage = language || "es-MX";
     const videoAccent = accent || "mexicano";
     const sanitizedPrompt = sanitizePrompt(promptText, videoLanguage, videoAccent);
-
     console.log(`[generate-video-sora] Final prompt length: ${sanitizedPrompt.length}`);
 
-    // ── Try model chain with fallback ──
+    // ── Determine which models to try ──
+    const modelsToTry: string[] = model && PROVIDERS[model]
+      ? [model]                // User chose specific model
+      : [...AUTO_CHAIN];       // Auto fallback chain
+
     const errors: string[] = [];
 
-    for (let i = 0; i < MODEL_CHAIN.length; i++) {
-      const modelConfig = MODEL_CHAIN[i];
-      const result = await attemptCreateTask(modelConfig, sanitizedPrompt, imageUrl, KIE_API_KEY);
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const providerKey = modelsToTry[i];
+      const result = await attemptCreateTask(providerKey, sanitizedPrompt, imageUrl, KIE_API_KEY);
 
       if ("taskId" in result) {
         return new Response(JSON.stringify({
@@ -237,8 +276,9 @@ serve(async (req) => {
           variantId,
           status: "queued",
           imageUrl,
-          provider: "kie_sora2",
+          provider: result.provider,
           model: result.model,
+          modelLabel: PROVIDERS[result.provider]?.label || result.provider,
           mode: mode || "standard",
           fallbackUsed: i > 0,
         }), {
@@ -247,17 +287,16 @@ serve(async (req) => {
       }
 
       errors.push(result.error);
-      console.warn(`[generate-video-sora] ${modelConfig.model} failed: ${result.error}. ${i < MODEL_CHAIN.length - 1 ? "Trying fallback..." : "No more fallbacks."}`);
+      console.warn(`[generate-video-sora] ${providerKey} failed: ${result.error}. ${i < modelsToTry.length - 1 ? "Trying next..." : "No more fallbacks."}`);
     }
 
-    // All models exhausted
     const combinedError = errors.length > 1
-      ? `Todos los modelos fallaron: ${errors.join(" | ")}`
+      ? `Todos los motores fallaron: ${errors.join(" | ")}`
       : errors[0] || "Error desconocido del proveedor.";
 
     console.error(`[generate-video-sora] All models failed:`, combinedError);
 
-    return new Response(JSON.stringify({ error: combinedError, fallbackUsed: true }), {
+    return new Response(JSON.stringify({ error: combinedError, fallbackUsed: modelsToTry.length > 1 }), {
       status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 

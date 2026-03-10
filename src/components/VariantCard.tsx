@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video } from "lucide-react";
+import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
@@ -24,12 +30,20 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
 };
 
 const VIDEO_STATUS_CONFIG: Record<string, { label: string; showLoader?: boolean }> = {
-  idle: { label: "Generar Video (15s)" },
+  idle: { label: "Generar Video" },
   queued: { label: "En cola...", showLoader: true },
   processing: { label: "Generando video...", showLoader: true },
   completed: { label: "Video listo" },
   failed: { label: "Reintentar video" },
 };
+
+const VIDEO_ENGINES = [
+  { key: "auto", label: "Auto (fallback)", description: "Hailuo → Wan → Sora 2" },
+  { key: "hailuo", label: "Hailuo", description: "Rápido y estable" },
+  { key: "wan", label: "Wan", description: "Alta calidad" },
+  { key: "sora2", label: "Sora 2", description: "OpenAI Sora" },
+  { key: "kling", label: "Kling", description: "Kling 2 Master" },
+];
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -63,6 +77,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
   const [videoError, setVideoError] = useState<string | undefined>(variant.video_error);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [activeEngine, setActiveEngine] = useState<string | undefined>();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
@@ -73,13 +88,11 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
 
   const isVideoActive = videoStatus === "queued" || videoStatus === "processing";
 
-  // Track mounted state
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Sync from parent if props change
   useEffect(() => {
     if (variant.video_status && variant.video_status !== videoStatus) setVideoStatus(variant.video_status);
     if (variant.video_task_id && variant.video_task_id !== videoTaskId) setVideoTaskId(variant.video_task_id);
@@ -87,7 +100,6 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     if (variant.video_error !== undefined) setVideoError(variant.video_error);
   }, [variant.video_status, variant.video_task_id, variant.video_url, variant.video_error]);
 
-  // Cleanup all intervals on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
@@ -100,7 +112,6 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
-  // Polling logic
   const pollTask = useCallback(async (taskId: string) => {
     if (!isMountedRef.current) return;
     try {
@@ -112,12 +123,10 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
 
       if (error) {
         console.error("Poll network error:", error.message);
-        // Network errors - don't stop polling, might be transient
         return;
       }
 
       if (data?.error && data?.shouldStopPolling) {
-        // Hard failure from backend - stop polling
         setVideoStatus("failed");
         setVideoError(data.error);
         onVideoStateChange?.({ video_task_id: taskId, video_status: "failed", video_error: data.error });
@@ -155,20 +164,16 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     }
   }, [variant.variant_id, onVideoStateChange, stopPolling]);
 
-  // Start polling when video is active
   useEffect(() => {
     if (isVideoActive && videoTaskId) {
-      // Ensure only one polling interval per card
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
 
-      // Start elapsed timer
       setElapsedSeconds(0);
       timerRef.current = setInterval(() => {
         if (isMountedRef.current) setElapsedSeconds(s => s + 1);
       }, 1000);
 
-      // Poll immediately, then at interval
       pollTask(videoTaskId);
       pollingRef.current = setInterval(() => pollTask(videoTaskId), POLL_INTERVAL_MS);
 
@@ -206,8 +211,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     return publicData.publicUrl;
   };
 
-  const handleGenerateVideo = async () => {
-    // Prevent duplicate submissions
+  const handleGenerateVideo = async (engineKey?: string) => {
     if (isSubmitting || isVideoActive) {
       toast.info("Ya hay una generación de video en curso.");
       return;
@@ -221,14 +225,16 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
       return;
     }
 
+    const selectedModel = engineKey === "auto" ? undefined : engineKey;
+
     setIsSubmitting(true);
     setVideoStatus("queued");
     setVideoError(undefined);
     setVideoUrl(undefined);
     setVideoTaskId(undefined);
+    setActiveEngine(undefined);
 
     try {
-      // Upload base64 image to storage to get a public URL
       const publicImageUrl = await uploadBase64ToStorage(variant.generated_image_url, variant.variant_id);
 
       const { data, error } = await supabase.functions.invoke("generate-video-sora", {
@@ -239,6 +245,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
           mode: "standard",
           language: language || "es-MX",
           accent: accent || "mexicano",
+          model: selectedModel,
         },
       });
 
@@ -251,12 +258,10 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
         return;
       }
 
-      // Show fallback toast if a backup model was used
       if (data?.fallbackUsed) {
-        toast.info(`Video ${variant.variant_id}: Modelo principal no disponible, usando modelo alternativo.`);
+        toast.info(`Video ${variant.variant_id}: Usando motor alternativo (${data.modelLabel || data.provider}).`);
       }
 
-      // Validate we got a taskId back
       if (!data?.taskId) {
         const errMsg = "El proveedor no devolvió un taskId válido.";
         setVideoStatus("failed");
@@ -269,8 +274,9 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
       const taskId = data.taskId;
       setVideoTaskId(taskId);
       setVideoStatus("queued");
+      setActiveEngine(data.modelLabel || data.provider);
       onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.mode });
-      toast.success("Generación de video iniciada");
+      toast.success(`Generación iniciada con ${data.modelLabel || data.provider}`);
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : "Error desconocido";
       setVideoStatus("failed");
@@ -289,7 +295,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     setVideoTaskId(undefined);
     setVideoUrl(undefined);
     setElapsedSeconds(0);
-    // Don't auto-trigger - let user click again
+    setActiveEngine(undefined);
   };
 
   const formatElapsed = (secs: number) => {
@@ -341,10 +347,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
         {promptText && (
           <div className="space-y-1.5">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Prompt universal para Sora / HeyGen / Kling
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              Copia y pega este bloque completo en tu generador de video. Ya incluye estructura, energía, delivery, timeline comprimido a 15 segundos y guion variante.
+              Prompt universal para video
             </p>
             <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2.5">
               <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-foreground font-mono">
@@ -374,25 +377,46 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
           )}
         </div>
 
-        {/* Video generation */}
+        {/* Video generation with engine selector */}
         {variant.generated_image_url && promptText && !isPending && (
           <div className="space-y-2">
-            {/* Generate button - shown when idle or no video */}
+            {/* Generate button with dropdown - shown when idle */}
             {videoStatus === "idle" && !videoUrl && (
-              <Button
-                variant="default"
-                size="sm"
-                className="w-full gap-1.5 text-[10px]"
-                onClick={handleGenerateVideo}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Video className="h-3 w-3" />
-                )}
-                {isSubmitting ? "Subiendo imagen..." : "Generar Video (15s)"}
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="flex-1 gap-1.5 text-[10px]"
+                  onClick={() => handleGenerateVideo("auto")}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Video className="h-3 w-3" />
+                  )}
+                  {isSubmitting ? "Subiendo imagen..." : "Generar Video"}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="default" size="sm" className="px-2" disabled={isSubmitting}>
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {VIDEO_ENGINES.map((engine) => (
+                      <DropdownMenuItem
+                        key={engine.key}
+                        onClick={() => handleGenerateVideo(engine.key)}
+                        className="flex flex-col items-start gap-0.5"
+                      >
+                        <span className="text-xs font-medium">{engine.label}</span>
+                        <span className="text-[10px] text-muted-foreground">{engine.description}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
 
             {/* Active generation status */}
@@ -400,9 +424,14 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
               <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  <span className="text-[10px] text-muted-foreground">
-                    {VIDEO_STATUS_CONFIG[videoStatus]?.label || "Procesando..."}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-muted-foreground">
+                      {VIDEO_STATUS_CONFIG[videoStatus]?.label || "Procesando..."}
+                    </span>
+                    {activeEngine && (
+                      <span className="text-[9px] text-muted-foreground/70">Motor: {activeEngine}</span>
+                    )}
+                  </div>
                 </div>
                 <span className="text-[10px] font-mono text-muted-foreground">
                   {formatElapsed(elapsedSeconds)}
@@ -418,10 +447,34 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                     <p className="text-[10px] text-destructive">{videoError}</p>
                   </div>
                 )}
-                <Button variant="outline" size="sm" className="w-full gap-1 text-[10px]" onClick={handleRetryVideo}>
-                  <RefreshCw className="h-3 w-3" />
-                  Reintentar video
-                </Button>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
+                    <RefreshCw className="h-3 w-3" />
+                    Reintentar
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="px-2">
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      {VIDEO_ENGINES.map((engine) => (
+                        <DropdownMenuItem
+                          key={engine.key}
+                          onClick={() => {
+                            handleRetryVideo();
+                            setTimeout(() => handleGenerateVideo(engine.key), 100);
+                          }}
+                          className="flex flex-col items-start gap-0.5"
+                        >
+                          <span className="text-xs font-medium">{engine.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{engine.description}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             )}
 
@@ -479,15 +532,5 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     </div>
   );
 };
-
-function Detail({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
-  return (
-    <div>
-      <span className="text-muted-foreground">{label}: </span>
-      <span className="text-foreground">{value}</span>
-    </div>
-  );
-}
 
 export default VariantCard;
