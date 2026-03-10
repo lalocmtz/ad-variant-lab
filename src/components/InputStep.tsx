@@ -45,8 +45,15 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
   const [url, setUrl] = useState("");
   const [productImage, setProductImage] = useState<File | null>(null);
   const [language, setLanguage] = useState("es-MX");
+  const [accent, setAccent] = useState("mexicano");
   const [diversityIntensity, setDiversityIntensity] = useState("high");
   const productInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLanguageChange = (newLang: string) => {
+    setLanguage(newLang);
+    const accents = ACCENTS[newLang] || [];
+    setAccent(accents[0]?.value || "");
+  };
 
   const isValid = url.trim().length > 0 && url.includes("tiktok") && productImage !== null;
 
