@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Download, Copy, Play, Pause, ChevronDown, ChevronUp, Film } from "lucide-react";
-import { toast } from "sonner";
+import { Download, Play, ChevronDown, ChevronUp, Film } from "lucide-react";
 import type { BrollLabState, VoiceVariant } from "@/lib/broll_lab_types";
 
 interface Props {
@@ -90,17 +89,16 @@ function MasterVideoPlayer({ videoUrls, audioUrl, label }: { videoUrls: string[]
 }
 
 function VoiceVariantCard({ variant, videoUrls }: { variant: VoiceVariant; videoUrls: string[] }) {
-  const handleCopy = () => {
-    navigator.clipboard.writeText(variant.script.full_text);
-    toast.success("Guión copiado");
-  };
-
-  const handleDownloadAudio = () => {
-    if (!variant.audio_url) return;
+  const handleDownloadVideo = () => {
+    const url = variant.final_video_url;
+    if (!url) return;
     const link = document.createElement("a");
-    link.href = variant.audio_url;
-    link.download = `broll_variante_${variant.variant_index + 1}.mp3`;
+    link.href = url;
+    link.download = `broll_variante_${variant.variant_index + 1}.mp4`;
+    link.target = "_blank";
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -120,23 +118,9 @@ function VoiceVariantCard({ variant, videoUrls }: { variant: VoiceVariant; video
           />
         )}
 
-        <div className="space-y-1">
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Hook</p>
-          <p className="text-xs text-foreground">{variant.script.hook}</p>
-        </div>
-
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-          {variant.script.full_text}
-        </p>
-
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={handleDownloadAudio} disabled={!variant.audio_url} className="flex-1">
-            <Download className="h-3.5 w-3.5 mr-1" /> Audio
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleCopy} className="flex-1">
-            <Copy className="h-3.5 w-3.5 mr-1" /> Guión
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" onClick={handleDownloadVideo} disabled={!variant.final_video_url} className="w-full">
+          <Download className="h-3.5 w-3.5 mr-1" /> Descargar
+        </Button>
       </CardContent>
     </Card>
   );
