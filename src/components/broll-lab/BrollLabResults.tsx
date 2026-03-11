@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Download, Copy, Play, Pause, ChevronDown, ChevronUp, Film } from "lucide-react";
-import { toast } from "sonner";
+import { Download, Play, ChevronDown, ChevronUp, Film } from "lucide-react";
 import type { BrollLabState, VoiceVariant } from "@/lib/broll_lab_types";
 
 interface Props {
