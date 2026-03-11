@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import BrollLabInput from "@/components/broll-lab/BrollLabInput";
 import BrollLabPipeline from "@/components/broll-lab/BrollLabPipeline";
@@ -87,10 +88,40 @@ async function pollVideoTask(taskId: string, maxAttempts = 120, intervalMs = 500
 }
 
 export default function BrollLabPage() {
+  const { user } = useAuth();
   const [state, setState] = useState<BrollLabState>(INITIAL_STATE);
   const [running, setRunning] = useState(false);
   const [savedInputs, setSavedInputs] = useState<BrollLabInputs | null>(null);
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
+  const savedToDb = useRef(false);
+
+  // Auto-save to broll_lab_history when pipeline completes
+  useEffect(() => {
+    if (state.step !== "done" || !user || !savedInputs || savedToDb.current) return;
+    savedToDb.current = true;
+
+    const saveHistory = async () => {
+      try {
+        const tiktokUrls = [savedInputs.tiktokUrl1, savedInputs.tiktokUrl2, savedInputs.tiktokUrl3].filter(Boolean);
+        await supabase.from("broll_lab_history" as any).insert({
+          user_id: user.id,
+          product_image_url: savedInputs.productImageUrl,
+          product_url: savedInputs.productUrl || "",
+          tiktok_urls: tiktokUrls,
+          analysis: state.analysis,
+          scenes: state.scenes,
+          master_video_urls: state.masterVideoUrls,
+          voice_variants: state.voiceVariants,
+          variant_count: state.voiceVariants.filter(v => v.status === "done").length,
+          inputs: savedInputs,
+        } as any);
+        console.log("Broll Lab history saved");
+      } catch (e: any) {
+        console.error("Failed to save broll lab history:", e);
+      }
+    };
+    saveHistory();
+  }, [state.step, user, savedInputs, state.analysis, state.scenes, state.masterVideoUrls, state.voiceVariants]);
 
   const update = useCallback((partial: Partial<BrollLabState>) => {
     setState((prev) => ({ ...prev, ...partial }));

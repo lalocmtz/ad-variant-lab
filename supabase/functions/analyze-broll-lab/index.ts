@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { covers, product_image_url, product_url, language, accent, voice_tone, voice_count } = await req.json();
+    const { covers, product_image_url, product_url, language, accent, voice_tone, voice_count, existing_scripts } = await req.json();
 
     if (!covers || covers.length === 0) throw new Error("At least one TikTok cover is required");
     if (!product_image_url) throw new Error("product_image_url is required");
@@ -209,7 +209,20 @@ ALLOWED & ENCOURAGED:
 Product URL: ${product_url || "N/A"}
 Language: ${lang}
 Accent: ${accentLabel}
-Voice tone: ${tone}`,
+Voice tone: ${tone}
+
+${existing_scripts && existing_scripts.length > 0 ? `
+========================
+ANTI-REPETITION CONSTRAINT (CRITICAL)
+========================
+
+The following scripts were ALREADY GENERATED for this product. You MUST generate completely DIFFERENT variants.
+Do NOT reuse any hook, angle, CTA, or phrasing from these existing scripts.
+Use different emotions, different structures, different selling angles, different urgency tactics.
+
+EXISTING SCRIPTS (DO NOT REPEAT):
+${existing_scripts.map((s: string, i: number) => `--- Script ${i + 1} ---\n${s}`).join("\n\n")}
+` : ""}`,
       },
       { type: "text", text: "=== PRODUCT IMAGE (ground truth for product appearance) ===" },
       { type: "image_url", image_url: { url: product_image_url } },

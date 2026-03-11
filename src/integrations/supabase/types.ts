@@ -242,6 +242,51 @@ export type Database = {
         }
         Relationships: []
       }
+      broll_lab_history: {
+        Row: {
+          analysis: Json | null
+          created_at: string | null
+          id: string
+          inputs: Json | null
+          master_video_urls: Json | null
+          product_image_url: string
+          product_url: string | null
+          scenes: Json | null
+          tiktok_urls: Json | null
+          user_id: string
+          variant_count: number | null
+          voice_variants: Json | null
+        }
+        Insert: {
+          analysis?: Json | null
+          created_at?: string | null
+          id?: string
+          inputs?: Json | null
+          master_video_urls?: Json | null
+          product_image_url: string
+          product_url?: string | null
+          scenes?: Json | null
+          tiktok_urls?: Json | null
+          user_id: string
+          variant_count?: number | null
+          voice_variants?: Json | null
+        }
+        Update: {
+          analysis?: Json | null
+          created_at?: string | null
+          id?: string
+          inputs?: Json | null
+          master_video_urls?: Json | null
+          product_image_url?: string
+          product_url?: string | null
+          scenes?: Json | null
+          tiktok_urls?: Json | null
+          user_id?: string
+          variant_count?: number | null
+          voice_variants?: Json | null
+        }
+        Relationships: []
+      }
       campaign_ads: {
         Row: {
           campaign_id: string
