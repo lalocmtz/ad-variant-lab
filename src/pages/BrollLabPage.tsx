@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import BrollLabInput from "@/components/broll-lab/BrollLabInput";
 import BrollLabPipeline from "@/components/broll-lab/BrollLabPipeline";
 import BrollLabResults from "@/components/broll-lab/BrollLabResults";
+import ImageApprovalPanel from "@/components/broll-lab/ImageApprovalPanel";
 import type {
   BrollLabInputs,
   BrollLabState,
@@ -18,6 +19,7 @@ const INITIAL_STATE: BrollLabState = {
   stepMessage: "",
   analysis: null,
   scenes: [],
+  approvedScenes: [],
   voiceVariants: [],
   masterVideoUrls: [],
   error: null,
@@ -52,7 +54,6 @@ async function invokeRaw(name: string, body: Record<string, unknown>): Promise<A
   return resp.arrayBuffer();
 }
 
-/** Poll video task with fail-fast and consecutive error limit */
 async function pollVideoTask(taskId: string, maxAttempts = 120, intervalMs = 5000): Promise<string> {
   let consecutiveErrors = 0;
   const MAX_CONSECUTIVE_ERRORS = 5;
@@ -66,7 +67,6 @@ async function pollVideoTask(taskId: string, maxAttempts = 120, intervalMs = 500
 
       if (error) {
         consecutiveErrors++;
-        console.warn(`Poll attempt ${i + 1} network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error.message);
         if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
           throw new Error(`Polling falló después de ${MAX_CONSECUTIVE_ERRORS} errores consecutivos: ${error.message}`);
         }
@@ -74,11 +74,8 @@ async function pollVideoTask(taskId: string, maxAttempts = 120, intervalMs = 500
       }
 
       consecutiveErrors = 0;
-
       const videoUrl = data?.videoUrl || data?.video_url;
-
       if (data?.status === "completed" && videoUrl) return videoUrl;
-
       if (data?.status === "failed" || data?.shouldStopPolling) {
         throw new Error(data?.error || "La animación falló en el proveedor.");
       }
@@ -92,17 +89,21 @@ async function pollVideoTask(taskId: string, maxAttempts = 120, intervalMs = 500
 export default function BrollLabPage() {
   const [state, setState] = useState<BrollLabState>(INITIAL_STATE);
   const [running, setRunning] = useState(false);
+  const [savedInputs, setSavedInputs] = useState<BrollLabInputs | null>(null);
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
 
   const update = useCallback((partial: Partial<BrollLabState>) => {
     setState((prev) => ({ ...prev, ...partial }));
   }, []);
 
-  const runPipeline = useCallback(async (inputs: BrollLabInputs) => {
+  // Phase 1: Download → Analyze → Generate images → Stop for approval
+  const runPhase1 = useCallback(async (inputs: BrollLabInputs) => {
     setRunning(true);
+    setSavedInputs(inputs);
     setState({ ...INITIAL_STATE, step: "downloading", stepMessage: "Descargando TikToks de referencia..." });
 
     try {
-      // ============ STEP 1: Download TikToks ============
+      // STEP 1: Download TikToks
       const urls = [inputs.tiktokUrl1, inputs.tiktokUrl2, inputs.tiktokUrl3].filter(Boolean);
       const downloads: TikTokDownloadResult[] = [];
 
@@ -116,17 +117,12 @@ export default function BrollLabPage() {
           toast.error(`No se pudo descargar: ${url}`);
         }
       }
-
       if (downloads.length === 0) throw new Error("No se pudo descargar ningún video de referencia");
 
-      // ============ STEP 2: Analyze references ============
+      // STEP 2: Analyze references
       update({ step: "analyzing", stepMessage: "Analizando hooks, escenas y patrones ganadores..." });
 
-      const covers = downloads.map((d) => ({
-        cover_url: d.cover_url,
-        title: d.metadata.title,
-      }));
-
+      const covers = downloads.map((d) => ({ cover_url: d.cover_url, title: d.metadata.title }));
       const analysis = await invokeFn<BrollLabAnalysis>("analyze-broll-lab", {
         covers,
         product_image_url: inputs.productImageUrl,
@@ -136,14 +132,13 @@ export default function BrollLabPage() {
         voice_tone: inputs.voiceTone,
         voice_count: inputs.voiceVariantCount,
       });
-
       update({ analysis });
 
       if (!analysis.scenes || analysis.scenes.length < NUM_SCENES) {
         throw new Error(`El análisis no generó las ${NUM_SCENES} escenas necesarias`);
       }
 
-      // ============ STEP 3: Generate 4 images ============
+      // STEP 3: Generate images
       update({ step: "generating_images", stepMessage: `Generando ${NUM_SCENES} escenas ultra-realistas...` });
 
       const sceneResults: SceneResult[] = analysis.scenes.slice(0, NUM_SCENES).map((s) => ({
@@ -165,12 +160,11 @@ export default function BrollLabPage() {
             environment_context: analysis.environment_context || "",
             product_interactions: analysis.product_interactions || "",
           });
-          sceneResults[i] = { ...sceneResults[i], image_url: imgResult.image_url, status: "animating" };
+          sceneResults[i] = { ...sceneResults[i], image_url: imgResult.image_url, status: "pending" };
           update({ scenes: [...sceneResults] });
         } catch (e: any) {
           sceneResults[i] = { ...sceneResults[i], status: "error", error: e.message };
           update({ scenes: [...sceneResults] });
-          console.error(`Image gen failed for scene ${i}:`, e);
         }
         if (i < NUM_SCENES - 1) await sleep(2000);
       }
@@ -178,12 +172,78 @@ export default function BrollLabPage() {
       const successImages = sceneResults.filter((s) => s.image_url);
       if (successImages.length === 0) throw new Error("No se pudo generar ninguna imagen");
 
-      // ============ STEP 4: Animate with Grok Imagine ============
+      // STOP — await approval
+      update({
+        step: "awaiting_approval",
+        stepMessage: "Revisa y aprueba las imágenes antes de continuar.",
+        scenes: [...sceneResults],
+        approvedScenes: sceneResults.map(() => false),
+      });
+    } catch (e: any) {
+      console.error("Broll Lab pipeline phase 1 error:", e);
+      update({ step: "error", error: e.message, stepMessage: e.message });
+      toast.error(e.message || "Error en el pipeline");
+    } finally {
+      setRunning(false);
+    }
+  }, [update]);
+
+  // Approve a scene
+  const handleApprove = useCallback((index: number) => {
+    setState((prev) => {
+      const approved = [...prev.approvedScenes];
+      approved[index] = !approved[index];
+      return { ...prev, approvedScenes: approved };
+    });
+  }, []);
+
+  // Regenerate a single scene image
+  const handleRegenerate = useCallback(async (index: number) => {
+    if (!savedInputs || !state.analysis) return;
+    setRegeneratingIndex(index);
+    try {
+      const imgResult = await invokeFn<{ image_url: string }>("generate-broll-lab-image", {
+        image_prompt: state.analysis.scenes[index].image_prompt,
+        scene_index: index,
+        product_image_url: savedInputs.productImageUrl,
+        human_actions: state.analysis.human_actions || "",
+        camera_behavior: state.analysis.camera_behavior || "",
+        environment_context: state.analysis.environment_context || "",
+        product_interactions: state.analysis.product_interactions || "",
+      });
+
+      setState((prev) => {
+        const scenes = [...prev.scenes];
+        scenes[index] = { ...scenes[index], image_url: imgResult.image_url, status: "pending", error: undefined };
+        const approved = [...prev.approvedScenes];
+        approved[index] = false;
+        return { ...prev, scenes, approvedScenes: approved };
+      });
+      toast.success(`Escena ${index + 1} regenerada`);
+    } catch (e: any) {
+      toast.error(`Error regenerando escena ${index + 1}: ${e.message}`);
+    } finally {
+      setRegeneratingIndex(null);
+    }
+  }, [savedInputs, state.analysis]);
+
+  // Phase 2: Animate → Voices → Merge → Done
+  const runPhase2 = useCallback(async () => {
+    if (!savedInputs || !state.analysis) return;
+    setRunning(true);
+
+    const sceneResults = [...state.scenes];
+    const analysis = state.analysis;
+    const inputs = savedInputs;
+
+    try {
+      // STEP 4: Animate with Grok Imagine
       update({ step: "animating", stepMessage: "Animando escenas con Grok Imagine..." });
 
+      const successImages = sceneResults.filter((s) => s.image_url);
       for (const scene of successImages) {
         const motionPrompt = analysis.scenes[scene.scene_index]?.motion_prompt ||
-          "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural smartphone recording. Duration: approximately 6 seconds.";
+          "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural smartphone recording.";
         try {
           const animResult = await invokeFn<{ taskId: string }>("animate-broll-lab-scene", {
             image_url: scene.image_url,
@@ -195,7 +255,6 @@ export default function BrollLabPage() {
         } catch (e: any) {
           scene.status = "error";
           scene.error = e.message;
-          console.error(`Animation start failed for scene ${scene.scene_index}:`, e);
         }
       }
       update({ scenes: [...sceneResults] });
@@ -214,17 +273,16 @@ export default function BrollLabPage() {
         } catch (e: any) {
           scene.status = "error";
           scene.error = e.message;
-          console.error(`Animation poll failed for scene ${scene.scene_index}:`, e);
         }
         update({ scenes: [...sceneResults] });
       }
 
       if (videoUrls.length === 0) throw new Error("No se pudo animar ninguna escena");
 
-      // ============ STEP 5: Master video ready ============
-      update({ step: "stitching", stepMessage: `Video master listo (${videoUrls.length} clips) — preparando variantes de voz...`, masterVideoUrls: videoUrls });
+      // STEP 5: Master video ready
+      update({ step: "stitching", stepMessage: `Video master listo (${videoUrls.length} clips)`, masterVideoUrls: videoUrls });
 
-      // ============ STEP 6: Generate 5 voices ============
+      // STEP 6: Generate voices
       update({ step: "generating_voices", stepMessage: "Generando variantes de voz..." });
 
       const voiceVariants: VoiceVariant[] = (analysis.voice_scripts || []).map((script) => ({
@@ -248,24 +306,24 @@ export default function BrollLabPage() {
           for (let b = 0; b < bytes.length; b++) binary += String.fromCharCode(bytes[b]);
           const base64Audio = btoa(binary);
 
-          const mergeResult = await invokeFn<{ audio_url: string }>("merge-broll-audio", {
+          const mergeResult = await invokeFn<{ audio_url?: string; video_url?: string }>("merge-broll-audio", {
             video_url: videoUrls[0],
             audio_base64: base64Audio,
             variant_id: `broll_lab_v${i}_${Date.now()}`,
           });
 
           voiceVariants[i].audio_url = mergeResult.audio_url;
+          voiceVariants[i].final_video_url = mergeResult.video_url || videoUrls[0];
           voiceVariants[i].status = "done";
         } catch (e: any) {
           voiceVariants[i].status = "error";
           voiceVariants[i].error = e.message;
-          console.error(`Voice ${i} failed:`, e);
         }
         update({ voiceVariants: [...voiceVariants] });
         if (i < voiceVariants.length - 1) await sleep(1000);
       }
 
-      // ============ STEP 7: Done ============
+      // STEP 7: Done
       update({
         step: "done",
         stepMessage: `¡Listo! ${videoUrls.length} clips master + ${voiceVariants.filter(v => v.status === "done").length} variantes de voz.`,
@@ -273,29 +331,43 @@ export default function BrollLabPage() {
       });
       toast.success("Pipeline completado — Variantes listas para descargar");
     } catch (e: any) {
-      console.error("Broll Lab pipeline error:", e);
+      console.error("Broll Lab pipeline phase 2 error:", e);
       update({ step: "error", error: e.message, stepMessage: e.message });
       toast.error(e.message || "Error en el pipeline");
     } finally {
       setRunning(false);
     }
-  }, [update]);
+  }, [savedInputs, state.analysis, state.scenes, update]);
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground tracking-tight">B-Roll Variants Lab</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Analiza TikToks ganadores → genera 4 escenas → anima con Grok Imagine → crea variantes de voz. Todo desde cero con máximo realismo.
+          Analiza TikToks ganadores → genera 4 escenas → aprueba → anima con Grok Imagine → crea variantes de voz.
         </p>
       </div>
 
-      {state.step === "idle" && <BrollLabInput onSubmit={runPipeline} loading={running} />}
+      {state.step === "idle" && <BrollLabInput onSubmit={runPhase1} loading={running} />}
 
       {state.step !== "idle" && (
         <>
           <BrollLabPipeline currentStep={state.step} stepMessage={state.stepMessage} />
+
+          {state.step === "awaiting_approval" && (
+            <ImageApprovalPanel
+              scenes={state.scenes}
+              approvedScenes={state.approvedScenes}
+              analysis={state.analysis}
+              onApprove={handleApprove}
+              onRegenerate={handleRegenerate}
+              onContinue={runPhase2}
+              regeneratingIndex={regeneratingIndex}
+            />
+          )}
+
           <BrollLabResults state={state} />
+
           {(state.step === "done" || state.step === "error") && (
             <button
               onClick={() => setState(INITIAL_STATE)}

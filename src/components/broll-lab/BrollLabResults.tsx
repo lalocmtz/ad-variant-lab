@@ -2,21 +2,18 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Download, Play, ChevronDown, ChevronUp, Film } from "lucide-react";
+import { Download, Play, ChevronDown, ChevronUp, Film, Music } from "lucide-react";
 import type { BrollLabState, VoiceVariant } from "@/lib/broll_lab_types";
 
 interface Props {
   state: BrollLabState;
-  onRegenerateVoice?: (variantIndex: number) => void;
 }
 
-/** Plays multiple video clips sequentially with optional audio overlay */
 function MasterVideoPlayer({ videoUrls, audioUrl, label }: { videoUrls: string[]; audioUrl?: string; label?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentClipIdx, setCurrentClipIdx] = useState(0);
-
   const currentUrl = videoUrls[currentClipIdx] || videoUrls[0];
 
   const togglePlay = () => {
@@ -40,36 +37,20 @@ function MasterVideoPlayer({ videoUrls, audioUrl, label }: { videoUrls: string[]
       } else {
         setPlaying(false);
         setCurrentClipIdx(0);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        }
+        if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
       }
     };
     video.addEventListener("ended", handleEnded);
     return () => video.removeEventListener("ended", handleEnded);
   }, [currentClipIdx, videoUrls.length]);
 
-  useEffect(() => {
-    if (playing && videoRef.current) {
-      videoRef.current.play();
-    }
-  }, [currentClipIdx]);
+  useEffect(() => { if (playing && videoRef.current) videoRef.current.play(); }, [currentClipIdx]);
 
   return (
     <div className="relative rounded-lg overflow-hidden bg-black aspect-[9/16] max-h-[320px]">
-      <video
-        ref={videoRef}
-        src={currentUrl}
-        className="w-full h-full object-contain"
-        playsInline
-        muted={!!audioUrl}
-      />
+      <video ref={videoRef} src={currentUrl} className="w-full h-full object-contain" playsInline muted={!!audioUrl} />
       {audioUrl && <audio ref={audioRef} src={audioUrl} />}
-      <button
-        onClick={togglePlay}
-        className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors"
-      >
+      <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors">
         {!playing && <Play className="h-10 w-10 text-white/90" />}
       </button>
       {label && (
@@ -89,17 +70,19 @@ function MasterVideoPlayer({ videoUrls, audioUrl, label }: { videoUrls: string[]
 }
 
 function VoiceVariantCard({ variant, videoUrls }: { variant: VoiceVariant; videoUrls: string[] }) {
-  const handleDownloadVideo = () => {
-    const url = variant.final_video_url;
-    if (!url) return;
+  const downloadFile = (url: string, filename: string) => {
     const link = document.createElement("a");
     link.href = url;
-    link.download = `broll_variante_${variant.variant_index + 1}.mp4`;
+    link.download = filename;
     link.target = "_blank";
+    link.rel = "noopener noreferrer";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  const hasVideo = videoUrls.length > 0;
+  const hasAudio = !!variant.audio_url;
 
   return (
     <Card className="border-border/60 bg-card/80">
@@ -109,18 +92,30 @@ function VoiceVariantCard({ variant, videoUrls }: { variant: VoiceVariant; video
           <Badge variant="outline" className="text-xs">{variant.script.tone}</Badge>
         </div>
 
-        {/* Play master video with this variant's audio */}
-        {videoUrls.length > 0 && variant.audio_url && (
-          <MasterVideoPlayer
-            videoUrls={videoUrls}
-            audioUrl={variant.audio_url}
-            label={`Voz ${variant.variant_index + 1}`}
-          />
+        {hasVideo && hasAudio && (
+          <MasterVideoPlayer videoUrls={videoUrls} audioUrl={variant.audio_url} label={`Voz ${variant.variant_index + 1}`} />
         )}
 
-        <Button size="sm" variant="outline" onClick={handleDownloadVideo} disabled={!variant.final_video_url} className="w-full">
-          <Download className="h-3.5 w-3.5 mr-1" /> Descargar
-        </Button>
+        <div className="space-y-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => hasVideo && downloadFile(videoUrls[0], `broll_variante_${variant.variant_index + 1}_video.mp4`)}
+            disabled={!hasVideo}
+            className="w-full"
+          >
+            <Download className="h-3.5 w-3.5 mr-1" /> Descargar Video
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => hasAudio && downloadFile(variant.audio_url!, `broll_variante_${variant.variant_index + 1}_audio.mp3`)}
+            disabled={!hasAudio}
+            className="w-full text-xs h-7"
+          >
+            <Music className="h-3 w-3 mr-1" /> Descargar Audio
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -129,8 +124,10 @@ function VoiceVariantCard({ variant, videoUrls }: { variant: VoiceVariant; video
 export default function BrollLabResults({ state }: Props) {
   const [showDetails, setShowDetails] = useState(false);
 
-  if (state.step !== "done" && state.voiceVariants.length === 0 && state.scenes.length === 0) return null;
+  if (state.step !== "done" && state.step !== "awaiting_approval" && state.voiceVariants.length === 0 && state.scenes.length === 0) return null;
 
+  // Don't render scenes grid here during approval — ImageApprovalPanel handles it
+  const showScenesGrid = state.step !== "awaiting_approval" && state.scenes.length > 0;
   const videoUrls = state.masterVideoUrls;
 
   return (
@@ -162,8 +159,8 @@ export default function BrollLabResults({ state }: Props) {
         </Card>
       )}
 
-      {/* Generated scenes (4 images) */}
-      {state.scenes.length > 0 && (
+      {/* Generated scenes */}
+      {showScenesGrid && (
         <div>
           <h3 className="text-sm font-medium text-foreground mb-3">{state.scenes.length} Escenas generadas</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -195,7 +192,7 @@ export default function BrollLabResults({ state }: Props) {
         </div>
       )}
 
-      {/* Voice variants — 1 master video + 5 different voices */}
+      {/* Voice variants */}
       {state.voiceVariants.length > 0 && (
         <div>
           <h3 className="text-sm font-medium text-foreground mb-3">
@@ -203,11 +200,7 @@ export default function BrollLabResults({ state }: Props) {
           </h3>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {state.voiceVariants.map((v) => (
-              <VoiceVariantCard
-                key={v.variant_index}
-                variant={v}
-                videoUrls={videoUrls}
-              />
+              <VoiceVariantCard key={v.variant_index} variant={v} videoUrls={videoUrls} />
             ))}
           </div>
         </div>

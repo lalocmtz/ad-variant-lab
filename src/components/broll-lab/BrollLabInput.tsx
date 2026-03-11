@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Upload, Link, Sparkles } from "lucide-react";
 import type { BrollLabInputs } from "@/lib/broll_lab_types";
@@ -162,18 +163,21 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
           </div>
 
           <div>
-            <Label className="text-xs text-muted-foreground">Número de variantes de voz</Label>
-            <Select
-              value={String(inputs.voiceVariantCount)}
-              onValueChange={(v) => setInputs((p) => ({ ...p, voiceVariantCount: Number(v) }))}
-            >
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {[3, 4, 5].map((n) => (
-                  <SelectItem key={n} value={String(n)}>{n} variantes</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-xs text-muted-foreground">
+              Número de variantes de voz: <span className="font-semibold text-foreground">{inputs.voiceVariantCount}</span>
+            </Label>
+            <Slider
+              value={[inputs.voiceVariantCount]}
+              onValueChange={([v]) => setInputs((p) => ({ ...p, voiceVariantCount: v }))}
+              min={3}
+              max={20}
+              step={1}
+              className="mt-2"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+              <span>3</span>
+              <span>20</span>
+            </div>
           </div>
         </CardContent>
       </Card>

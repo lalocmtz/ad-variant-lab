@@ -171,12 +171,40 @@ Generate ${voiceCount} completely different voice-over script variants.
 - Accent: ${accentLabel} — natural, authentic Mexican creator voice
 - STRICTLY PROHIBITED: Argentine accent, Spain Spanish, corporate neutral tone
 - Tone: ${tone}
-- Each script must be 10-15 seconds when spoken naturally
+- Each script must be 20-24 seconds when spoken at fast TikTok pace (rapid-fire delivery)
 - Each variant must have a DIFFERENT hook, different wording, different CTA
 - Same product and core benefit across all variants
-- Include bottom-of-funnel urgency hooks like: "último día", "aprovecha hoy", "ya se está agotando", "esta oferta termina hoy", "no lo dejes pasar"
-- Write as a real Mexican TikTok creator would naturally speak
-- Short, punchy, conversational phrases
+- ALL ${voiceCount} variants must be UNIQUE — different angles, different emotions, different structures
+- Short, punchy, conversational phrases — NO dead air, constant forward momentum
+- Every sentence MUST add new information — no repetition
+
+PACING & RETENTION STRUCTURE (MANDATORY):
+- Hook (2-3s): Grab attention with curiosity, urgency, or bold statement
+- Problem/Context (4-5s): Relatable pain point or situation
+- Benefit 1 (3-4s): Key product advantage (stated as personal experience, NOT promise)
+- Benefit 2 (3-4s): Secondary advantage or social proof angle
+- Social proof (3-4s): "miles ya lo probaron", "se está agotando", testimonial-style
+- CTA urgency (3-4s): Scarcity + action — "últimas unidades", "link en bio antes de que se acabe"
+
+========================
+TIKTOK SHOP ANTI-BAN COMPLIANCE (CRITICAL)
+========================
+
+FORBIDDEN PHRASES & CLAIMS — will get the ad BANNED:
+- NO health promises: "te cura", "elimina", "sana", "desaparece el dolor"
+- NO guaranteed results: "garantizado", "100% efectivo", "resultados asegurados"
+- NO medical claims: "clínicamente probado", "recomendado por doctores" (unless truly certified)
+- NO before/after promises: "antes y después", "transformación garantizada"
+- NO absolute claims: "el mejor del mundo", "único en el mercado", "nada se compara"
+- NO misleading urgency: fake countdown, false scarcity
+
+ALLOWED & ENCOURAGED:
+- Personal experience: "a mí me funcionó", "yo lo probé y..."
+- Social proof: "miles ya lo están usando", "se está agotando"
+- Real urgency: "última oportunidad con este descuento", "oferta de temporada"
+- Benefit description WITHOUT promise: "ayuda a...", "diseñado para...", "ideal para..."
+- Emotional hooks: curiosity, FOMO, relatability
+- Discount/offer focus: "con descuento hoy", "aprovecha el precio especial"
 
 Product URL: ${product_url || "N/A"}
 Language: ${lang}

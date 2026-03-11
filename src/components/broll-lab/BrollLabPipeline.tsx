@@ -1,10 +1,11 @@
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, XCircle, PauseCircle } from "lucide-react";
 import type { PipelineStep } from "@/lib/broll_lab_types";
 
 const STEPS: { key: PipelineStep; label: string }[] = [
   { key: "downloading", label: "Descargando referencias TikTok" },
   { key: "analyzing", label: "Analizando hooks, escenas y patrones" },
   { key: "generating_images", label: "Generando 4 escenas ultra-realistas" },
+  { key: "awaiting_approval", label: "Aprobación de imágenes" },
   { key: "animating", label: "Animando escenas con Grok Imagine" },
   { key: "stitching", label: "Preparando video master" },
   { key: "generating_voices", label: "Generando variantes de voz" },
@@ -31,8 +32,9 @@ export default function BrollLabPipeline({ currentStep, stepMessage }: Props) {
   return (
     <div className="space-y-3 py-4">
       {STEPS.map((s, i) => {
-        let status: "done" | "active" | "pending" | "error" = "pending";
+        let status: "done" | "active" | "pending" | "error" | "paused" = "pending";
         if (isDone || i < currentIdx) status = "done";
+        else if (i === currentIdx && s.key === "awaiting_approval") status = "paused";
         else if (i === currentIdx && !isError) status = "active";
         else if (i === currentIdx && isError) status = "error";
 
@@ -40,6 +42,7 @@ export default function BrollLabPipeline({ currentStep, stepMessage }: Props) {
           <div key={s.key} className="flex items-center gap-3">
             {status === "done" && <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />}
             {status === "active" && <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />}
+            {status === "paused" && <PauseCircle className="h-5 w-5 text-yellow-500 shrink-0" />}
             {status === "pending" && <Circle className="h-5 w-5 text-muted-foreground/40 shrink-0" />}
             {status === "error" && <XCircle className="h-5 w-5 text-destructive shrink-0" />}
             <span
@@ -48,6 +51,8 @@ export default function BrollLabPipeline({ currentStep, stepMessage }: Props) {
                   ? "text-sm text-muted-foreground"
                   : status === "active"
                   ? "text-sm font-medium text-foreground"
+                  : status === "paused"
+                  ? "text-sm font-medium text-yellow-500"
                   : status === "error"
                   ? "text-sm text-destructive"
                   : "text-sm text-muted-foreground/50"
