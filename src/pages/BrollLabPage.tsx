@@ -52,28 +52,39 @@ async function invokeRaw(name: string, body: Record<string, unknown>): Promise<A
 
 /** Poll video task via get-video-task with timeout */
 async function pollVideoTask(taskId: string, maxAttempts = 90, intervalMs = 5000): Promise<string> {
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 5;
+
   for (let i = 0; i < maxAttempts; i++) {
     await sleep(intervalMs);
     try {
-      const data = await invokeFn<{
-        status: string;
-        videoUrl?: string;
-        video_url?: string;
-        shouldStopPolling?: boolean;
-        error?: string;
-      }>("get-video-task", { taskId, engine: "sora2" });
+      const { data, error } = await supabase.functions.invoke("get-video-task", {
+        body: { taskId, engine: "sora2" },
+      });
 
-      const videoUrl = data.videoUrl || data.video_url;
-
-      if (data.status === "completed" && videoUrl) return videoUrl;
-      if (data.status === "failed" || data.shouldStopPolling) {
-        throw new Error(data.error || "La animación falló");
+      // Network/invoke-level error
+      if (error) {
+        consecutiveErrors++;
+        console.warn(`Poll attempt ${i + 1} network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error.message);
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          throw new Error(`Polling falló después de ${MAX_CONSECUTIVE_ERRORS} errores consecutivos: ${error.message}`);
+        }
+        continue;
       }
+
+      consecutiveErrors = 0;
+
+      const videoUrl = data?.videoUrl || data?.video_url;
+
+      if (data?.status === "completed" && videoUrl) return videoUrl;
+
+      if (data?.status === "failed" || data?.shouldStopPolling) {
+        throw new Error(data?.error || "La animación falló en el proveedor.");
+      }
+
+      // Still processing — continue
     } catch (e: any) {
-      // If it's a definitive error, throw immediately
-      if (e.message?.includes("falló") || e.message?.includes("failed")) throw e;
-      // Otherwise keep polling (network hiccup)
-      console.warn(`Poll attempt ${i + 1} error:`, e.message);
+      if (e.message) throw e;
     }
   }
   throw new Error("Timeout: la animación tardó demasiado. Intenta de nuevo.");
