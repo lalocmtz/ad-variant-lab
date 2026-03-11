@@ -4,10 +4,10 @@ import type { PipelineStep } from "@/lib/broll_lab_types";
 const STEPS: { key: PipelineStep; label: string }[] = [
   { key: "downloading", label: "Descargando referencias TikTok" },
   { key: "analyzing", label: "Analizando hooks, escenas y patrones" },
-  { key: "generating_images", label: "Generando 3 escenas ultra-realistas" },
-  { key: "animating", label: "Animando escenas con Sora 2" },
+  { key: "generating_images", label: "Generando 4 escenas ultra-realistas" },
+  { key: "animating", label: "Animando escenas con Grok Imagine" },
   { key: "stitching", label: "Preparando video master" },
-  { key: "generating_voices", label: "Generando 5 variantes de voz" },
+  { key: "generating_voices", label: "Generando variantes de voz" },
   { key: "merging", label: "Fusionando resultados finales" },
 ];
 
