@@ -47,10 +47,65 @@ serve(async (req) => {
       console.log("[animate-broll-lab-scene] Uploaded to:", publicImageUrl);
     }
 
-    const defaultPrompt = "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural lighting. Keep product sharp and clearly visible. Smooth cinematic movement. No text, no overlays, no graphics. Clean UGC smartphone recording style.";
+    const defaultPrompt = `Animate this image as a realistic handheld TikTok UGC recording.
+
+The motion must look like a real person holding an iPhone while casually filming.
+
+The camera should behave like a natural human hand holding a phone.
+
+CAMERA BEHAVIOR:
+Handheld camera motion:
+very subtle natural micro shake
+slight drift left or right
+very small vertical motion from natural breathing and small wrist adjustments
+
+No cinematic camera moves.
+No dramatic motion.
+No sudden cuts.
+
+PRODUCT INTERACTION:
+If hands are present:
+hands move slowly and naturally
+small realistic movements
+natural pauses
+casual gestures
+
+No exaggerated motion.
+No unnatural speed.
+
+PACING:
+The scene should feel calm and organic.
+Actions should unfold slowly and naturally over the duration.
+No rapid changes.
+No abrupt movements.
+
+FOCUS BEHAVIOR:
+Subtle smartphone autofocus behavior:
+slight focus shift
+minor exposure adjustment
+natural camera breathing
+
+LIGHT BEHAVIOR:
+Lighting should remain natural and slightly imperfect.
+Minor changes in reflections or shadows are acceptable.
+
+FORBIDDEN:
+NO cinematic camera moves
+NO dramatic zooms
+NO sudden cuts
+NO fast transitions
+NO robotic hand movement
+NO unnatural object motion
+NO unrealistic physics
+
+STYLE:
+This must feel like a real TikTok creator casually reviewing a product in their home.
+The viewer should believe this was recorded on a phone by a real person.
+
+If any visual element looks artificial, unrealistic, or AI-generated, regenerate the scene to ensure maximum realism.`;
+
     const sanitizedPrompt = (motion_prompt || defaultPrompt).substring(0, 5000);
 
-    // Grok Imagine via Kie AI
     const requestBody = {
       model: "grok-imagine/image-to-video",
       input: {
@@ -62,7 +117,7 @@ serve(async (req) => {
       },
     };
 
-    console.log("[animate-broll-lab-scene] Using Grok Imagine:", {
+    console.log("[animate-broll-lab-scene] Using Grok Imagine with PRO UGC prompt:", {
       scene_index,
       imagePreview: publicImageUrl.substring(0, 80),
       promptLength: sanitizedPrompt.length,

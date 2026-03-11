@@ -160,6 +160,10 @@ export default function BrollLabPage() {
             image_prompt: analysis.scenes[i].image_prompt,
             scene_index: i,
             product_image_url: inputs.productImageUrl,
+            human_actions: analysis.human_actions || "",
+            camera_behavior: analysis.camera_behavior || "",
+            environment_context: analysis.environment_context || "",
+            product_interactions: analysis.product_interactions || "",
           });
           sceneResults[i] = { ...sceneResults[i], image_url: imgResult.image_url, status: "animating" };
           update({ scenes: [...sceneResults] });

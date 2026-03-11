@@ -44,6 +44,11 @@ export interface BrollLabAnalysis {
   common_hooks: string[];
   common_ctas: string[];
   visual_patterns: string[];
+  human_actions?: string;
+  camera_behavior?: string;
+  environment_context?: string;
+  product_interactions?: string;
+  ugc_authenticity_signals?: string;
   scene_structure?: string;
   rhythm_analysis?: string;
   reference_transcripts?: string[];

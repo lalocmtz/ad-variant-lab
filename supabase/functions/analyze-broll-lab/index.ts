@@ -26,63 +26,146 @@ serve(async (req) => {
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
       {
         type: "text",
-        text: `You are a senior TikTok Shop creative strategist specialized in bottom-of-funnel product ads. 
+        text: `You are a senior TikTok UGC commercial director analyzing viral TikTok Shop videos.
 
-Analyze ${covers.length} winning TikTok reference video cover(s) and a product image. Your goal is to create a COMPLETE creative production brief that will be used to generate a NEW B-roll video from scratch — NOT a copy of the originals.
+Your job is to reverse engineer EXACTLY how the video behaves in the real world so we can recreate a believable UGC scene.
 
-=== ANALYSIS TASKS ===
-1. TRANSCRIPT EXTRACTION: From the cover frames and titles, infer what the original videos likely said (hooks, claims, CTAs).
-2. HOOK PATTERNS: Identify the most effective opening hooks across all references.
-3. CTA PATTERNS: Identify the closing calls-to-action that drive purchases.
-4. BENEFIT/CLAIM PATTERNS: What product benefits or claims are repeated.
-5. VISUAL PATTERNS: What visual elements, scenes, camera angles, and product presentations are common.
-6. SCENE STRUCTURE: How are the ads structured (hook → demo → CTA, etc).
-7. RHYTHM & PACING: Fast cuts, slow reveals, zoom-ins, etc.
-8. CONTEXT & OBJECTS: What objects, environments, hands, surfaces appear repeatedly.
+You must extract extremely detailed human behavior and filming style.
 
-=== SCENE GENERATION RULES ===
-Generate exactly 4 NEW scene prompts for AI image generation. These scenes will be animated into 6-second video clips each and stitched into a single master video of ~24 seconds total.
+The goal is to reproduce a scene that feels indistinguishable from real TikTok UGC footage.
+
+========================
+DEEP ANALYSIS TASKS
+========================
+
+1. HOOK STRUCTURE
+What happens in the first 2 seconds?
+Is there a reveal, a question, a surprise, or direct product demonstration?
+
+2. HUMAN BEHAVIOR
+Describe precisely what the person does with the product:
+- hand movements
+- gestures
+- body posture
+- interaction with product
+- natural hesitation
+- pauses
+- casual behavior
+
+3. CAMERA BEHAVIOR
+How the phone camera behaves:
+- handheld or static
+- micro shake
+- camera drift
+- slight reframing
+- slight autofocus adjustment
+- natural human framing mistakes
+
+4. ENVIRONMENT
+Describe the real environment:
+- room type
+- surface textures
+- clutter level
+- lighting source
+- background objects
+
+5. PRODUCT INTERACTION
+How the product is naturally handled:
+- placed
+- opened
+- folded
+- picked up
+- demonstrated
+
+6. PACING
+How fast actions occur:
+- slow reveal
+- quick demonstration
+- casual explanation
+
+7. UGC AUTHENTICITY DETAILS
+Extract subtle realism signals:
+- imperfect framing
+- human pauses
+- natural breathing
+- micro hesitation
+- slight camera wobble
+
+========================
+SCENE GENERATION
+========================
+
+Generate exactly 4 NEW scene prompts for AI image generation. These scenes will be animated into 3-second video clips each and stitched together.
+
+Each scene MUST incorporate the extracted human behavior, camera behavior, environment context, and product interactions from the analysis above.
 
 SCENE 1 — HOOK & PRODUCT REVEAL:
 - Strong visual hook that grabs attention in the first frame
 - Clean product reveal with the product clearly visible
-- Vertical 9:16 UGC realistic framing
+- Vertical 9:16 UGC realistic framing — slightly off-center, casual phone angle
 - The product MUST match the uploaded product image exactly
 
 SCENE 2 — USE/DEMONSTRATION:
 - Clear product usage or demonstration in action
-- Context similar to what worked best in the reference videos
-- Hands interacting with product if applicable
-- Natural environment/setting
+- Hands interacting naturally with product — visible veins, natural nail imperfections
+- Natural environment with real surface textures and subtle clutter
+- Imperfect handheld camera angle
 
 SCENE 3 — CLOSE-UP / BENEFIT DETAIL:
 - Close-up detail shot or visual proof of the product benefit
 - Focus on texture, quality, or key feature
-- Product packaging clearly visible
+- Natural focus falloff, slight highlight clipping
+- Product packaging clearly visible with all labels accurate
 
 SCENE 4 — CTA VISUAL / CLOSING:
 - Implied visual CTA (urgency, satisfaction, result)
-- Product prominently displayed
+- Product prominently displayed in natural context
 - Emotional or aspirational closing shot
+- Casual smartphone recording feel
 
-=== IMAGE PROMPT REQUIREMENTS ===
-Each image_prompt must describe:
-- EXACT product appearance (from the product image — shape, color, material, packaging, branding)
-- Scene setup and environment
-- Camera angle and distance
-- Lighting (natural, window light, golden hour — NEVER studio)
-- Human interaction if relevant (hands, person using it)
-- Style: smartphone UGC, NOT professional photography, NOT AI-looking
-- NEVER include: text, subtitles, overlays, UI elements, watermarks, logos, captions
+========================
+IMAGE PROMPT REQUIREMENTS
+========================
 
-=== MOTION PROMPT REQUIREMENTS ===
-Each motion_prompt must describe subtle realistic camera movement for a 3-5 second clip:
-- Handheld drift, slow zoom, gentle pan
-- Keep product in frame and sharp
-- Natural smartphone recording movement
-- Duration hint: "approximately 4 seconds"
+Each image_prompt MUST describe an ultra-photorealistic vertical 9:16 image that looks exactly like a real TikTok UGC frame captured with an iPhone 15 Pro by a normal person.
 
-=== VOICE SCRIPT REQUIREMENTS ===
+Each prompt MUST include:
+- EXACT product appearance from product image (shape, color, material, packaging, branding, labels)
+- The extracted human_actions behavior for that scene
+- The extracted camera_behavior for natural framing
+- The extracted environment_context for realistic setting
+- The extracted product_interactions for natural handling
+
+Camera: iPhone 15 Pro, natural lens distortion, subtle handheld tilt, slightly imperfect framing, natural focus falloff
+Lighting: only natural — window light, indoor ambient, golden hour. Imperfect: slight highlight clipping, natural shadows, mild uneven exposure
+Textures: skin pores, fingerprint marks, fabric weave, dust particles, surface imperfections, micro scratches
+Surfaces: real wood grain, kitchen counter stone, bathroom ceramic, cloth fibers, plastic reflections
+Human elements: real hands with visible veins, natural nail imperfections, realistic skin texture, minor skin redness
+Composition: slightly off-center, casual phone recording angle, not perfectly aligned, not studio
+Background: normal lived-in environment, subtle clutter allowed, household objects, nothing staged
+Color grading: natural smartphone color science, warm neutral tones, not HDR, not oversaturated
+
+STRICTLY FORBIDDEN in images: text, subtitles, overlays, UI elements, watermarks, logos, captions, studio lighting, symmetrical compositions, artificial gradients, CGI look, smooth plastic textures, AI artifacts, extra fingers, warped objects
+
+End every image_prompt with: "If any visual element looks artificial, unrealistic, or AI-generated, regenerate the scene to ensure maximum realism."
+
+========================
+MOTION PROMPT REQUIREMENTS
+========================
+
+Each motion_prompt must describe realistic handheld TikTok UGC recording motion for ~3 seconds:
+- Very subtle natural micro shake
+- Slight drift left or right
+- Very small vertical motion from natural breathing
+- Subtle smartphone autofocus behavior
+- Minor exposure adjustment
+- NO cinematic camera moves, NO dramatic zooms, NO sudden cuts
+- Movement should feel like natural breathing and small wrist adjustments
+
+========================
+VOICE SCRIPT REQUIREMENTS
+========================
+
 Generate ${voiceCount} completely different voice-over script variants.
 - Language: Mexican Spanish (es-MX) MANDATORY
 - Accent: ${accentLabel} — natural, authentic Mexican creator voice
@@ -122,7 +205,7 @@ Voice tone: ${tone}`,
         messages: [
           {
             role: "system",
-            content: `You are an elite TikTok Shop creative strategist. You analyze winning ads and create production briefs for NEW B-roll videos. You deeply understand what makes TikTok Shop ads convert. Your output is always structured, precise, and actionable. All voice scripts MUST be in natural Mexican Spanish — the kind a real Mexican creator would use in a casual TikTok recommendation. NEVER use Argentine, Spanish (Spain), or corporate neutral tone.`,
+            content: `You are a senior TikTok UGC commercial director. You reverse engineer viral TikTok Shop videos to extract EXACT human behavior, camera behavior, and filming style. Your analysis enables recreating scenes that are indistinguishable from real UGC footage. You deeply understand micro-details: hand movements, camera shake, autofocus behavior, natural pauses, breathing motion. All voice scripts MUST be in natural Mexican Spanish — the kind a real Mexican creator would use in a casual TikTok recommendation. NEVER use Argentine, Spanish (Spain), or corporate neutral tone.`,
           },
           { role: "user", content: userContent },
         ],
@@ -131,35 +214,34 @@ Voice tone: ${tone}`,
             type: "function",
             function: {
               name: "create_production_brief",
-              description: "Return complete production brief with 3 scenes and voice scripts",
+              description: "Return complete production brief with UGC behavior analysis, 4 scenes, and voice scripts",
               parameters: {
                 type: "object",
                 properties: {
-                  product_detected: { type: "string", description: "What product was detected" },
-                  key_benefits: { type: "array", items: { type: "string" }, description: "Key benefits/claims found in references" },
-                  common_hooks: { type: "array", items: { type: "string" }, description: "Most effective hooks from references" },
-                  common_ctas: { type: "array", items: { type: "string" }, description: "Most effective CTAs from references" },
-                  visual_patterns: { type: "array", items: { type: "string" }, description: "Visual patterns that worked (angles, scenes, lighting, objects)" },
-                  scene_structure: { type: "string", description: "How the winning ads are structured (e.g. hook→demo→CTA)" },
-                  rhythm_analysis: { type: "string", description: "Pacing and rhythm patterns (fast cuts, slow reveals, etc)" },
-                  reference_transcripts: { type: "array", items: { type: "string" }, description: "Inferred transcripts or key phrases from each reference" },
-                  ad_structure: { type: "string", description: "Overall ad structure pattern" },
-                  summary_es: { type: "string", description: "Spanish summary of the creative brief and what the new video will show" },
+                  product_detected: { type: "string" },
+                  key_benefits: { type: "array", items: { type: "string" } },
+                  common_hooks: { type: "array", items: { type: "string" } },
+                  common_ctas: { type: "array", items: { type: "string" } },
+                  visual_patterns: { type: "array", items: { type: "string" } },
+                  human_actions: { type: "string", description: "Detailed description of human behavior extracted from references: hand movements, gestures, posture, product interaction, hesitation, pauses" },
+                  camera_behavior: { type: "string", description: "Detailed camera behavior: handheld vs static, micro shake, drift, reframing, autofocus adjustments, framing mistakes" },
+                  environment_context: { type: "string", description: "Environment details: room type, surfaces, clutter, lighting source, background objects" },
+                  product_interactions: { type: "string", description: "How the product is handled: placed, opened, picked up, demonstrated, folded" },
+                  ugc_authenticity_signals: { type: "string", description: "Subtle realism signals: imperfect framing, pauses, breathing, hesitation, camera wobble" },
+                  scene_structure: { type: "string" },
+                  rhythm_analysis: { type: "string" },
+                  reference_transcripts: { type: "array", items: { type: "string" } },
+                  ad_structure: { type: "string" },
+                  summary_es: { type: "string" },
                   scenes: {
                     type: "array",
                     items: {
                       type: "object",
                       properties: {
                         scene_index: { type: "number" },
-                        label: { type: "string", description: "Short label: 'Hook & Product Reveal', 'Use/Demo', 'Close-up & CTA'" },
-                        image_prompt: {
-                          type: "string",
-                          description: "Detailed English prompt for generating a hyper-realistic 9:16 product image. Must describe: exact product appearance from product image (shape, color, material, packaging), scene setup, camera angle (e.g. 45-degree, overhead, eye-level), lighting (natural window light, golden hour), hands/person interaction, environment/surface. Style: authentic smartphone UGC recording, NOT professional studio, NOT AI-looking. Camera: iPhone 15 Pro, natural depth of field. Textures: real skin pores, fabric texture, surface imperfections. NEVER include text, overlays, UI, watermarks, subtitles.",
-                        },
-                        motion_prompt: {
-                          type: "string",
-                          description: "Short English prompt for subtle video animation of approximately 4 seconds. Describe: handheld camera drift direction, zoom speed, pan direction. Keep product sharp and visible. Natural smartphone recording movement. Example: 'Gentle handheld drift left to right with subtle zoom in on product label. Natural smartphone movement. Duration: approximately 4 seconds.'",
-                        },
+                        label: { type: "string" },
+                        image_prompt: { type: "string" },
+                        motion_prompt: { type: "string" },
                       },
                       required: ["scene_index", "label", "image_prompt", "motion_prompt"],
                     },
@@ -172,17 +254,17 @@ Voice tone: ${tone}`,
                       type: "object",
                       properties: {
                         variant_index: { type: "number" },
-                        hook: { type: "string", description: "Opening hook phrase in Mexican Spanish" },
-                        body: { type: "string", description: "Main body text in Mexican Spanish" },
-                        cta: { type: "string", description: "Call to action in Mexican Spanish with BOF urgency" },
-                        full_text: { type: "string", description: "Complete voice-over script in Mexican Spanish. Must be 10-15 seconds when spoken naturally. Written exactly as a Mexican TikTok creator would say it — casual, authentic, no formal language." },
-                        tone: { type: "string", description: "Tone description for this variant (e.g. 'urgente y directo', 'amigable y conversacional')" },
+                        hook: { type: "string" },
+                        body: { type: "string" },
+                        cta: { type: "string" },
+                        full_text: { type: "string" },
+                        tone: { type: "string" },
                       },
                       required: ["variant_index", "hook", "body", "cta", "full_text", "tone"],
                     },
                   },
                 },
-                required: ["product_detected", "key_benefits", "common_hooks", "common_ctas", "visual_patterns", "scene_structure", "ad_structure", "summary_es", "scenes", "voice_scripts"],
+                required: ["product_detected", "key_benefits", "common_hooks", "common_ctas", "visual_patterns", "human_actions", "camera_behavior", "environment_context", "product_interactions", "ugc_authenticity_signals", "scene_structure", "ad_structure", "summary_es", "scenes", "voice_scripts"],
                 additionalProperties: false,
               },
             },
@@ -208,7 +290,13 @@ Voice tone: ${tone}`,
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    console.log("Broll Lab analysis complete:", { product: brief.product_detected, scenes: brief.scenes?.length, scripts: brief.voice_scripts?.length });
+    console.log("Broll Lab analysis complete:", {
+      product: brief.product_detected,
+      scenes: brief.scenes?.length,
+      scripts: brief.voice_scripts?.length,
+      hasHumanActions: !!brief.human_actions,
+      hasCameraBehavior: !!brief.camera_behavior,
+    });
 
     return new Response(JSON.stringify(brief), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
