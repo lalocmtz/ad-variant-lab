@@ -23,6 +23,8 @@ const INITIAL_STATE: BrollLabState = {
   error: null,
 };
 
+const NUM_SCENES = 4;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function invokeFn<T = any>(name: string, body: Record<string, unknown>): Promise<T> {
@@ -50,8 +52,8 @@ async function invokeRaw(name: string, body: Record<string, unknown>): Promise<A
   return resp.arrayBuffer();
 }
 
-/** Poll video task via get-video-task with timeout */
-async function pollVideoTask(taskId: string, maxAttempts = 90, intervalMs = 5000): Promise<string> {
+/** Poll video task with fail-fast and consecutive error limit */
+async function pollVideoTask(taskId: string, maxAttempts = 120, intervalMs = 5000): Promise<string> {
   let consecutiveErrors = 0;
   const MAX_CONSECUTIVE_ERRORS = 5;
 
@@ -59,10 +61,9 @@ async function pollVideoTask(taskId: string, maxAttempts = 90, intervalMs = 5000
     await sleep(intervalMs);
     try {
       const { data, error } = await supabase.functions.invoke("get-video-task", {
-        body: { taskId, engine: "sora2" },
+        body: { taskId, engine: "grok-imagine" },
       });
 
-      // Network/invoke-level error
       if (error) {
         consecutiveErrors++;
         console.warn(`Poll attempt ${i + 1} network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error.message);
@@ -81,8 +82,6 @@ async function pollVideoTask(taskId: string, maxAttempts = 90, intervalMs = 5000
       if (data?.status === "failed" || data?.shouldStopPolling) {
         throw new Error(data?.error || "La animación falló en el proveedor.");
       }
-
-      // Still processing — continue
     } catch (e: any) {
       if (e.message) throw e;
     }
@@ -140,20 +139,22 @@ export default function BrollLabPage() {
 
       update({ analysis });
 
-      if (!analysis.scenes || analysis.scenes.length < 3) throw new Error("El análisis no generó las 3 escenas necesarias");
+      if (!analysis.scenes || analysis.scenes.length < NUM_SCENES) {
+        throw new Error(`El análisis no generó las ${NUM_SCENES} escenas necesarias`);
+      }
 
-      // ============ STEP 3: Generate 3 images ============
-      update({ step: "generating_images", stepMessage: "Generando 3 escenas ultra-realistas..." });
+      // ============ STEP 3: Generate 4 images ============
+      update({ step: "generating_images", stepMessage: `Generando ${NUM_SCENES} escenas ultra-realistas...` });
 
-      const sceneResults: SceneResult[] = analysis.scenes.slice(0, 3).map((s) => ({
+      const sceneResults: SceneResult[] = analysis.scenes.slice(0, NUM_SCENES).map((s) => ({
         scene_index: s.scene_index,
         image_url: "",
         status: "generating_image" as const,
       }));
       update({ scenes: [...sceneResults] });
 
-      for (let i = 0; i < 3; i++) {
-        update({ stepMessage: `Generando escena ${i + 1}/3: ${analysis.scenes[i].label}...` });
+      for (let i = 0; i < NUM_SCENES; i++) {
+        update({ stepMessage: `Generando escena ${i + 1}/${NUM_SCENES}: ${analysis.scenes[i].label}...` });
         try {
           const imgResult = await invokeFn<{ image_url: string }>("generate-broll-lab-image", {
             image_prompt: analysis.scenes[i].image_prompt,
@@ -167,20 +168,20 @@ export default function BrollLabPage() {
           update({ scenes: [...sceneResults] });
           console.error(`Image gen failed for scene ${i}:`, e);
         }
-        if (i < 2) await sleep(2000);
+        if (i < NUM_SCENES - 1) await sleep(2000);
       }
 
       const successImages = sceneResults.filter((s) => s.image_url);
       if (successImages.length === 0) throw new Error("No se pudo generar ninguna imagen");
 
-      // ============ STEP 4: Animate 3 scenes with Sora 2 ============
-      update({ step: "animating", stepMessage: "Animando escenas con Sora 2..." });
+      // ============ STEP 4: Animate with Grok Imagine ============
+      update({ step: "animating", stepMessage: "Animando escenas con Grok Imagine..." });
 
       for (const scene of successImages) {
         const motionPrompt = analysis.scenes[scene.scene_index]?.motion_prompt ||
-          "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural smartphone recording. Duration: approximately 4 seconds.";
+          "Subtle handheld camera motion. Slow zoom in with gentle drift. Natural smartphone recording. Duration: approximately 6 seconds.";
         try {
-          const animResult = await invokeFn<{ taskId: string }>("animate-bof-scene", {
+          const animResult = await invokeFn<{ taskId: string }>("animate-broll-lab-scene", {
             image_url: scene.image_url,
             motion_prompt: motionPrompt,
             scene_index: scene.scene_index,
@@ -200,9 +201,9 @@ export default function BrollLabPage() {
       const videoUrls: string[] = [];
 
       for (const scene of pollingScenes) {
-        update({ stepMessage: `Esperando animación escena ${scene.scene_index + 1}/3...` });
+        update({ stepMessage: `Esperando animación escena ${scene.scene_index + 1}/${NUM_SCENES}...` });
         try {
-          const videoUrl = await pollVideoTask(scene.video_task_id!, 90, 5000);
+          const videoUrl = await pollVideoTask(scene.video_task_id!, 120, 5000);
           scene.video_url = videoUrl;
           scene.status = "done";
           videoUrls.push(videoUrl);
@@ -217,7 +218,7 @@ export default function BrollLabPage() {
       if (videoUrls.length === 0) throw new Error("No se pudo animar ninguna escena");
 
       // ============ STEP 5: Master video ready ============
-      update({ step: "stitching", stepMessage: "Video master listo — preparando variantes de voz...", masterVideoUrls: videoUrls });
+      update({ step: "stitching", stepMessage: `Video master listo (${videoUrls.length} clips) — preparando variantes de voz...`, masterVideoUrls: videoUrls });
 
       // ============ STEP 6: Generate 5 voices ============
       update({ step: "generating_voices", stepMessage: "Generando variantes de voz..." });
@@ -229,7 +230,6 @@ export default function BrollLabPage() {
       }));
       update({ voiceVariants: [...voiceVariants] });
 
-      // Generate voice + merge for each variant
       for (let i = 0; i < voiceVariants.length; i++) {
         update({ stepMessage: `Generando voz ${i + 1}/${voiceVariants.length}...` });
         try {
@@ -239,13 +239,11 @@ export default function BrollLabPage() {
             accent: inputs.accent,
           });
 
-          // Convert to base64
           const bytes = new Uint8Array(audioBuffer);
           let binary = "";
           for (let b = 0; b < bytes.length; b++) binary += String.fromCharCode(bytes[b]);
           const base64Audio = btoa(binary);
 
-          // Upload audio and get URL (uses first master video as reference)
           const mergeResult = await invokeFn<{ audio_url: string }>("merge-broll-audio", {
             video_url: videoUrls[0],
             audio_base64: base64Audio,
@@ -266,7 +264,7 @@ export default function BrollLabPage() {
       // ============ STEP 7: Done ============
       update({
         step: "done",
-        stepMessage: "¡Listo! 1 video master + 5 variantes de voz disponibles.",
+        stepMessage: `¡Listo! ${videoUrls.length} clips master + ${voiceVariants.filter(v => v.status === "done").length} variantes de voz.`,
         voiceVariants: [...voiceVariants],
       });
       toast.success("Pipeline completado — Variantes listas para descargar");
@@ -284,7 +282,7 @@ export default function BrollLabPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground tracking-tight">B-Roll Variants Lab</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Analiza TikToks ganadores → genera 3 escenas nuevas → anima → crea 5 variantes de voz. Todo desde cero con máximo realismo.
+          Analiza TikToks ganadores → genera 4 escenas → anima con Grok Imagine → crea variantes de voz. Todo desde cero con máximo realismo.
         </p>
       </div>
 

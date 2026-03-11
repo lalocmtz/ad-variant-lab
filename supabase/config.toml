@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.generate-broll-lab-image]
 verify_jwt = false
+
+[functions.animate-broll-lab-scene]
+verify_jwt = false

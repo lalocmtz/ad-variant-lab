@@ -41,7 +41,7 @@ Analyze ${covers.length} winning TikTok reference video cover(s) and a product i
 8. CONTEXT & OBJECTS: What objects, environments, hands, surfaces appear repeatedly.
 
 === SCENE GENERATION RULES ===
-Generate exactly 3 NEW scene prompts for AI image generation. These scenes will be animated into video clips and stitched into a single master video of 10-15 seconds total.
+Generate exactly 4 NEW scene prompts for AI image generation. These scenes will be animated into 6-second video clips each and stitched into a single master video of ~24 seconds total.
 
 SCENE 1 — HOOK & PRODUCT REVEAL:
 - Strong visual hook that grabs attention in the first frame
@@ -55,10 +55,15 @@ SCENE 2 — USE/DEMONSTRATION:
 - Hands interacting with product if applicable
 - Natural environment/setting
 
-SCENE 3 — CLOSE-UP / BENEFIT / CTA VISUAL:
+SCENE 3 — CLOSE-UP / BENEFIT DETAIL:
 - Close-up detail shot or visual proof of the product benefit
-- Implied visual CTA (urgency, satisfaction, result)
+- Focus on texture, quality, or key feature
 - Product packaging clearly visible
+
+SCENE 4 — CTA VISUAL / CLOSING:
+- Implied visual CTA (urgency, satisfaction, result)
+- Product prominently displayed
+- Emotional or aspirational closing shot
 
 === IMAGE PROMPT REQUIREMENTS ===
 Each image_prompt must describe:
@@ -158,8 +163,8 @@ Voice tone: ${tone}`,
                       },
                       required: ["scene_index", "label", "image_prompt", "motion_prompt"],
                     },
-                    minItems: 3,
-                    maxItems: 3,
+                    minItems: 4,
+                    maxItems: 4,
                   },
                   voice_scripts: {
                     type: "array",

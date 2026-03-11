@@ -178,11 +178,11 @@ export default function BrollLabResults({ state }: Props) {
         </Card>
       )}
 
-      {/* Generated scenes (3 images) */}
+      {/* Generated scenes (4 images) */}
       {state.scenes.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-foreground mb-3">3 Escenas generadas</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <h3 className="text-sm font-medium text-foreground mb-3">{state.scenes.length} Escenas generadas</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {state.scenes.map((scene) => (
               <div key={scene.scene_index} className="space-y-1">
                 {scene.image_url ? (
