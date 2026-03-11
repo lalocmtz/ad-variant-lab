@@ -11,7 +11,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { image_prompt, scene_index, product_image_url } = await req.json();
+    const { image_prompt, scene_index, product_image_url, human_actions, camera_behavior, environment_context, product_interactions } = await req.json();
 
     if (!image_prompt) throw new Error("image_prompt is required");
 
@@ -21,34 +21,129 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Build content with product image reference
     const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
-    const realismRules = `Generate a hyper-realistic 9:16 vertical product photo that looks like it was taken with an iPhone 15 Pro in natural conditions.
+    const realismRules = `Generate an ultra-photorealistic vertical 9:16 image that looks exactly like a real TikTok UGC frame captured with an iPhone 15 Pro by a normal person.
 
-SCENE PROMPT: ${image_prompt}
+This must look indistinguishable from a real smartphone video frame.
 
-=== PHOTOREALISM REQUIREMENTS ===
-- Camera: iPhone 15 Pro, natural depth of field, slight lens distortion
-- Lighting: Natural only — window light, golden hour, daylight. Imperfect: lens flares, slight overexposure in highlights, natural shadows
-- Textures: Visible skin pores if hands present, fabric weave, surface scratches, dust particles
-- Product: MUST match the reference product image EXACTLY — same shape, colors, material, packaging, branding, labels
-- Environment: Real surfaces (wooden table, bathroom counter, kitchen counter, bed, couch) — NOT clean studio
-- Human elements if needed: Real-looking hands with natural skin texture, visible veins, nail details
-- Composition: Slightly imperfect framing like a real person recording with one hand
-- Color grading: Warm natural tones, NOT oversaturated, NOT HDR-looking
+SCENE CONTEXT:
+${image_prompt}
 
-=== STRICTLY FORBIDDEN ===
-- NO text overlays of any kind
-- NO social media UI elements
-- NO subtitles or captions
-- NO watermarks or logos
-- NO perfect studio lighting
-- NO plastic/artificial skin
-- NO deformed hands or fingers
-- NO AI-looking smooth gradients
-- NO stock photo aesthetic
-- NO centered perfect composition`;
+${human_actions ? `\nThe visual behavior MUST follow these extracted patterns from real TikTok references:\n\nHuman behavior:\n${human_actions}` : ""}
+
+${camera_behavior ? `\nCamera behavior:\n${camera_behavior}` : ""}
+
+${environment_context ? `\nEnvironment context:\n${environment_context}` : ""}
+
+${product_interactions ? `\nProduct interaction:\n${product_interactions}` : ""}
+
+============================
+PHOTOREALISM REQUIREMENTS
+============================
+
+Camera:
+iPhone 15 Pro rear camera
+natural lens distortion
+subtle handheld tilt
+slightly imperfect framing
+natural focus falloff
+
+Lighting:
+only natural lighting
+window light
+indoor ambient light
+or golden hour sunlight
+
+lighting must be imperfect:
+slight highlight clipping
+natural shadows
+mild uneven exposure
+
+Textures must be extremely detailed:
+skin pores
+fingerprint marks
+fabric weave
+dust particles
+surface imperfections
+micro scratches
+
+Surfaces must look real:
+wood grain
+kitchen counter stone
+bathroom ceramic
+cloth fibers
+plastic reflections
+
+Human elements if present:
+real hands only
+visible veins
+natural nail imperfections
+realistic skin texture
+minor skin redness or dryness
+
+Hands must interact with the product naturally.
+
+Composition:
+slightly off-center framing
+casual phone recording angle
+not perfectly aligned
+not studio photography
+
+Background:
+normal lived-in environment
+subtle clutter allowed
+household objects allowed
+nothing staged or sterile
+
+Color grading:
+natural smartphone color science
+warm neutral tones
+not HDR
+not oversaturated
+not cinematic LUT
+
+============================
+PRODUCT ACCURACY
+============================
+
+The product must match the reference image EXACTLY.
+shape
+materials
+colors
+labels
+packaging
+logos
+branding
+
+The product must look physically real and consistent with the reference.
+
+============================
+STRICTLY FORBIDDEN
+============================
+
+NO studio photography
+NO perfect product shots
+NO commercial lighting
+NO symmetrical compositions
+NO artificial gradients
+NO CGI look
+NO smooth plastic textures
+NO AI artifacts
+NO extra fingers
+NO warped objects
+NO unrealistic reflections
+NO unrealistic skin
+NO text overlays of any kind
+NO social media UI elements
+NO subtitles or captions
+NO watermarks or logos
+
+The image must feel like a real TikTok frame grabbed from a phone recording.
+
+If the viewer pauses the video, they should believe this was filmed by a real person.
+
+If any visual element looks artificial, unrealistic, or AI-generated, regenerate the scene to ensure maximum realism.`;
 
     if (product_image_url) {
       content.push(
@@ -59,9 +154,8 @@ SCENE PROMPT: ${image_prompt}
       content.push({ type: "text", text: realismRules });
     }
 
-    console.log(`[generate-broll-lab-image] Scene ${scene_index}: generating with Nano Banana Pro`);
+    console.log(`[generate-broll-lab-image] Scene ${scene_index}: generating with PRO UGC prompt`);
 
-    // Use Nano Banana Pro for higher quality
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -78,10 +172,9 @@ SCENE PROMPT: ${image_prompt}
     if (!response.ok) {
       const errText = await response.text();
       console.error("Image gen error:", response.status, errText);
-      
-      // Fallback to standard model if Pro fails
+
       if (response.status === 429 || response.status === 503) {
-        console.log(`[generate-broll-lab-image] Pro model unavailable (${response.status}), falling back to standard`);
+        console.log(`[generate-broll-lab-image] Pro model unavailable (${response.status}), falling back to flash`);
         const fallbackResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -89,7 +182,7 @@ SCENE PROMPT: ${image_prompt}
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image",
+            model: "google/gemini-3.1-flash-image-preview",
             messages: [{ role: "user", content }],
             modalities: ["image", "text"],
           }),
@@ -105,7 +198,6 @@ SCENE PROMPT: ${image_prompt}
         const fbImageData = fbResult.choices?.[0]?.message?.images?.[0]?.image_url?.url;
         if (!fbImageData) throw new Error("No image generated (fallback)");
 
-        // Upload fallback image
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         const base64Part = fbImageData.split(",")[1] || fbImageData;
         const binaryStr = atob(base64Part);
@@ -136,7 +228,6 @@ SCENE PROMPT: ${image_prompt}
 
     if (!imageData) throw new Error("No image generated");
 
-    // Upload to storage
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const base64Part = imageData.split(",")[1] || imageData;
     const binaryStr = atob(base64Part);
