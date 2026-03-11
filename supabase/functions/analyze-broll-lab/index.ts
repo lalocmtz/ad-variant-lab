@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { covers, product_image_url, product_url, language, accent, voice_tone, voice_count } = await req.json();
+    const { covers, product_image_url, product_url, language, accent, voice_tone, voice_count, existing_scripts } = await req.json();
 
     if (!covers || covers.length === 0) throw new Error("At least one TikTok cover is required");
     if (!product_image_url) throw new Error("product_image_url is required");
