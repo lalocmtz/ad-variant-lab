@@ -1,73 +1,55 @@
 
 
-# Fix: Polling freeze in B-Roll Lab when provider fails
+## Plan: Eliminar timeout + Garantizar audio en videos generados
 
-## Root Cause
+### Problema 1: Timeout de 10 minutos mata tareas validas
+La tarea de Kling sigue procesandose en el servidor pero el frontend la marca como "fallida" a los 10 minutos y deja de hacer polling.
 
-`pollVideoTask` uses `invokeFn` which throws on `data.error` BEFORE the polling logic can check `data.shouldStopPolling` or `data.status`. The catch block then only stops for errors containing "falló" or "failed", but the provider returns "internal error, please try again later." which doesn't match either string. Result: infinite polling of a dead task.
+**Solucion:** Eliminar el timeout completamente. El polling continua indefinidamente hasta que KIE devuelva `success` o `fail`. La UI muestra solo el tiempo transcurrido sin limite maximo.
 
-## Fix
+**Archivo:** `src/components/KlingAnimationPanel.tsx`
+- Eliminar la constante `TIMEOUT_MS` y toda la logica de timeout en `pollTask` (lineas 82-94)
+- Cambiar la barra de progreso para que sea una animacion pulsante (indeterminada) en vez de basada en tiempo
+- Cambiar el timer de `"2:30 / 10:00"` a solo `"2:30"` (tiempo transcurrido sin limite)
 
-### 1. `src/pages/BrollLabPage.tsx` — Rewrite `pollVideoTask`
+### Problema 2: Videos entregados sin audio
+Kling Motion Control genera video **sin audio** por diseno — solo anima la imagen con el movimiento del video de referencia. El audio del TikTok original se pierde.
 
-Stop using `invokeFn` for polling. Instead call `supabase.functions.invoke` directly and inspect the full response object:
+**Solucion:** Crear una edge function `merge-audio` que use ffmpeg-wasm para combinar el video de Kling (sin audio) con el audio extraido del video original de TikTok. Cuando el polling detecta que un video esta listo, automaticamente llama a `merge-audio` antes de mostrarlo al usuario.
 
-```typescript
-async function pollVideoTask(taskId: string, maxAttempts = 90, intervalMs = 5000): Promise<string> {
-  let consecutiveErrors = 0;
-  const MAX_CONSECUTIVE_ERRORS = 5;
+**Archivos nuevos/modificados:**
 
-  for (let i = 0; i < maxAttempts; i++) {
-    await sleep(intervalMs);
-    try {
-      const { data, error } = await supabase.functions.invoke("get-video-task", {
-        body: { taskId, engine: "sora2" },
-      });
+| Archivo | Cambio |
+|---|---|
+| `src/components/KlingAnimationPanel.tsx` | Eliminar timeout, cambiar progreso a indeterminado, agregar paso de merge post-completado |
+| `supabase/functions/merge-audio/index.ts` | **Nuevo** — Descarga video Kling + video original, extrae audio del original, los combina con ffmpeg-wasm, sube resultado a storage |
+| `supabase/config.toml` | Agregar entrada para `merge-audio` |
 
-      // Network/invoke-level error
-      if (error) {
-        consecutiveErrors++;
-        console.warn(`Poll attempt ${i+1} network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error.message);
-        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          throw new Error(`Polling falló después de ${MAX_CONSECUTIVE_ERRORS} errores consecutivos: ${error.message}`);
-        }
-        continue;
-      }
-
-      consecutiveErrors = 0; // reset on successful call
-
-      // Check response fields
-      const videoUrl = data?.videoUrl || data?.video_url;
-
-      if (data?.status === "completed" && videoUrl) return videoUrl;
-
-      if (data?.status === "failed" || data?.shouldStopPolling) {
-        throw new Error(data?.error || "La animación falló en el proveedor.");
-      }
-
-      // Still processing — continue
-    } catch (e: any) {
-      // Any thrown error from inside (including the explicit throws above) should stop
-      if (e.message) throw e;
-    }
-  }
-  throw new Error("Timeout: la animación tardó demasiado. Intenta de nuevo.");
-}
+### Flujo actualizado post-Kling
+```text
+Kling completa video (sin audio)
+        │
+        ▼
+Estado UI: "Agregando audio del video original..."
+        │
+        ▼
+Edge function merge-audio:
+  1. Descarga video Kling (solo video)
+  2. Descarga video TikTok original (tiene audio)
+  3. ffmpeg: combina video de Kling + audio de TikTok
+  4. Sube MP4 final a storage
+  5. Devuelve URL publica
+        │
+        ▼
+UI muestra video final CON audio
 ```
 
-Key changes:
-- Uses `supabase.functions.invoke` directly instead of `invokeFn`
-- Checks `shouldStopPolling` and `status === "failed"` from response data (not from thrown errors)
-- Adds consecutive error counter (5 max) for network failures before giving up
-- Any provider failure immediately stops polling and surfaces the error message
+### Detalle tecnico de merge-audio
+- Usa `@ffmpeg/ffmpeg` (version WASM que corre en Deno edge functions)
+- Comando equivalente: `ffmpeg -i kling.mp4 -i tiktok.mp4 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output.mp4`
+- Solo remuxea (no re-encoda video), por lo que es rapido
+- Si el audio es mas largo que el video, se corta al largo del video (`-shortest`)
 
-### 2. No other files need changes
-
-- `get-video-task` edge function is working correctly (confirmed via logs)
-- `animate-bof-scene` is working correctly (tasks are being created)
-- The provider failure ("internal error") is a separate issue from the polling freeze
-- `BrollLabPipeline.tsx` and `BrollLabResults.tsx` already handle the `error` step correctly
-
-## Files modified
-- `src/pages/BrollLabPage.tsx` — rewrite `pollVideoTask` function (~lines 53-80)
+### Estado de la UI durante merge
+Se agrega un nuevo `detailState`: `"merging_audio"` con label `"Agregando audio..."` para que el usuario sepa que falta un paso despues de que Kling termine.
 
