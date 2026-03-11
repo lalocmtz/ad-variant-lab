@@ -44,6 +44,9 @@ export interface BrollLabAnalysis {
   common_hooks: string[];
   common_ctas: string[];
   visual_patterns: string[];
+  scene_structure?: string;
+  rhythm_analysis?: string;
+  reference_transcripts?: string[];
   ad_structure: string;
   scenes: ScenePrompt[];
   voice_scripts: VoiceScript[];

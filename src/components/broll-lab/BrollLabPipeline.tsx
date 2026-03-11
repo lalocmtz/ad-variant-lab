@@ -2,13 +2,13 @@ import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import type { PipelineStep } from "@/lib/broll_lab_types";
 
 const STEPS: { key: PipelineStep; label: string }[] = [
-  { key: "downloading", label: "Descargando referencias" },
-  { key: "analyzing", label: "Analizando patrones" },
-  { key: "generating_images", label: "Generando 4 imágenes" },
-  { key: "animating", label: "Animando escenas" },
-  { key: "stitching", label: "Preparando master visual" },
-  { key: "generating_voices", label: "Generando voces" },
-  { key: "merging", label: "Fusionando resultados" },
+  { key: "downloading", label: "Descargando referencias TikTok" },
+  { key: "analyzing", label: "Analizando hooks, escenas y patrones" },
+  { key: "generating_images", label: "Generando 3 escenas ultra-realistas" },
+  { key: "animating", label: "Animando escenas con Sora 2" },
+  { key: "stitching", label: "Preparando video master" },
+  { key: "generating_voices", label: "Generando 5 variantes de voz" },
+  { key: "merging", label: "Fusionando resultados finales" },
 ];
 
 function stepIndex(step: PipelineStep): number {
