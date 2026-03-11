@@ -209,7 +209,20 @@ ALLOWED & ENCOURAGED:
 Product URL: ${product_url || "N/A"}
 Language: ${lang}
 Accent: ${accentLabel}
-Voice tone: ${tone}`,
+Voice tone: ${tone}
+
+${existing_scripts && existing_scripts.length > 0 ? `
+========================
+ANTI-REPETITION CONSTRAINT (CRITICAL)
+========================
+
+The following scripts were ALREADY GENERATED for this product. You MUST generate completely DIFFERENT variants.
+Do NOT reuse any hook, angle, CTA, or phrasing from these existing scripts.
+Use different emotions, different structures, different selling angles, different urgency tactics.
+
+EXISTING SCRIPTS (DO NOT REPEAT):
+${existing_scripts.map((s: string, i: number) => `--- Script ${i + 1} ---\n${s}`).join("\n\n")}
+` : ""}`,
       },
       { type: "text", text: "=== PRODUCT IMAGE (ground truth for product appearance) ===" },
       { type: "image_url", image_url: { url: product_image_url } },
