@@ -81,6 +81,7 @@ export type PipelineStep =
   | "downloading"
   | "analyzing"
   | "generating_images"
+  | "awaiting_approval"
   | "animating"
   | "stitching"
   | "generating_voices"
@@ -93,6 +94,7 @@ export interface BrollLabState {
   stepMessage: string;
   analysis: BrollLabAnalysis | null;
   scenes: SceneResult[];
+  approvedScenes: boolean[];
   voiceVariants: VoiceVariant[];
   masterVideoUrls: string[];
   error: string | null;
