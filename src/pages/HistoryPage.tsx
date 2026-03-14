@@ -247,6 +247,7 @@ function BrollLabExpandedCard({
 
 export default function HistoryPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
