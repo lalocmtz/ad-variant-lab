@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import StaticVariants from "./pages/StaticVariants";
 import BofVideosPage from "./pages/BofVideosPage";
 import BrollLabPage from "./pages/BrollLabPage";
+import BrollLab2Page from "./pages/BrollLab2Page";
 import BrandSystemPage from "./pages/BrandSystemPage";
 import AssetsPage from "./pages/AssetsPage";
 import HistoryPage from "./pages/HistoryPage";
