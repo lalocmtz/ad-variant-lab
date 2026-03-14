@@ -59,34 +59,6 @@ export function useBofPipeline() {
     return null;
   }, []);
 
-  const generateVoice = useCallback(async (scriptText: string, language: string, accent: string, variantIndex: number): Promise<string | null> => {
-    try {
-      const voiceResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bof-voice`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ text: scriptText, language, accent }),
-        }
-      );
-      if (!voiceResponse.ok) throw new Error(`TTS failed: ${voiceResponse.status}`);
-      const audioBlob = await voiceResponse.blob();
-      const audioFileName = `bof_voice_${Date.now()}_${variantIndex}.mp3`;
-      const { error: audioUploadErr } = await supabase.storage
-        .from("videos")
-        .upload(audioFileName, audioBlob, { contentType: "audio/mpeg" });
-      if (audioUploadErr) throw new Error("Error uploading voice audio");
-      const { data: audioUrl } = supabase.storage.from("videos").getPublicUrl(audioFileName);
-      return audioUrl.publicUrl;
-    } catch (e: any) {
-      console.error("Voice error for variant", variantIndex, e);
-      return null;
-    }
-  }, []);
 
   // Build rich animation prompt using format data
   const buildAnimationPrompt = useCallback((variant: BofVariantResult, sceneIndex: number, productNameStr: string, formData: BofFormData) => {
