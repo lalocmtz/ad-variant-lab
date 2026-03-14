@@ -82,6 +82,21 @@ export default function BofAutofillPanel({ onAutofillComplete }: BofAutofillPane
         throw new Error(data?.error || error?.message || "Error en análisis");
       }
 
+      // If the backend returned a product image URL (from video cover), download it as a File
+      let autoImageFile: File | undefined = productImageFile || undefined;
+      const backendImageUrl: string = data.product_image_url || "";
+      if (backendImageUrl && !autoImageFile) {
+        try {
+          const imgResp = await fetch(backendImageUrl);
+          if (imgResp.ok) {
+            const blob = await imgResp.blob();
+            autoImageFile = new File([blob], "product_cover.jpeg", { type: blob.type || "image/jpeg" });
+          }
+        } catch (e) {
+          console.warn("Could not download cover image:", e);
+        }
+      }
+
       const result: BofAutofillResult = {
         product_name: data.product_name || "",
         current_price: data.current_price || "",
@@ -94,7 +109,8 @@ export default function BofAutofillPanel({ onAutofillComplete }: BofAutofillPane
         language: data.language || "es-MX",
         accent: data.accent || "mexicano",
         confidence: data.confidence || {},
-        product_image_file: productImageFile || undefined,
+        product_image_file: autoImageFile,
+        product_image_url: backendImageUrl,
       };
 
       const filledCount = [result.product_name, result.current_price, result.main_benefit].filter(Boolean).length;

@@ -90,4 +90,5 @@ export interface BofAutofillResult {
   accent: string;
   confidence: Partial<BofAutofillConfidence>;
   product_image_file?: File;
+  product_image_url?: string;
 }
