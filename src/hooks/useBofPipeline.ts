@@ -420,7 +420,6 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
           await supabase.from("bof_video_variants").update({
             status: v.status,
             raw_video_url: v.raw_video_url,
-            voice_audio_url: v.voice_audio_url,
             final_video_url: v.final_merged_url,
           }).eq("id", v.id);
         }
