@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Video, Clock, Loader2, ChevronDown, ChevronUp, Package, RefreshCw, Download, Play, Music } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Video, Clock, Loader2, ChevronDown, ChevronUp, Package, RefreshCw, Download, Play, Music, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,6 +34,7 @@ interface BrollLabHistoryEntry {
   voice_variants: VoiceVariant[];
   variant_count: number;
   inputs: BrollLabInputs;
+  pipeline_step: string;
 }
 
 type HistoryEntry = AnalysisHistoryEntry | BrollLabHistoryEntry;
@@ -245,6 +247,7 @@ function BrollLabExpandedCard({
 
 export default function HistoryPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -337,6 +340,20 @@ export default function HistoryPage() {
 
             if (entry.type === "broll_lab") {
               const broll = entry as BrollLabHistoryEntry;
+              const isComplete = broll.pipeline_step === "done";
+              const stepLabels: Record<string, string> = {
+                downloading: "Descargando",
+                analyzing: "Analizando",
+                generating_images: "Generando imágenes",
+                awaiting_approval: "Esperando aprobación",
+                animating: "Animando",
+                stitching: "Ensamblando",
+                generating_voices: "Generando voces",
+                merging: "Fusionando",
+                error: "Error",
+              };
+              const stepLabel = !isComplete ? stepLabels[broll.pipeline_step] || broll.pipeline_step : null;
+
               return (
                 <div key={broll.id} className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
                   <div className="flex items-center gap-4 px-5 py-4">
@@ -344,18 +361,37 @@ export default function HistoryPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">
-                          {broll.variant_count} variante{broll.variant_count !== 1 ? "s" : ""} de voz
+                          {isComplete
+                            ? `${broll.variant_count} variante${broll.variant_count !== 1 ? "s" : ""} de voz`
+                            : "Proyecto incompleto"}
                         </p>
                         <Badge variant="secondary" className="text-[10px]">B-Roll Lab</Badge>
+                        {stepLabel && (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600">
+                            {stepLabel}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {date ? date.toLocaleDateString("es-MX", { month: "short", day: "numeric", year: "numeric" }) : ""}
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => toggle(broll.id)} className="gap-1.5 text-xs">
-                      {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      {isExpanded ? "Ocultar" : "Ver proyecto"}
-                    </Button>
+                    <div className="flex gap-2">
+                      {!isComplete && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => navigate(`/create/broll-lab?resume=${broll.id}`)}
+                          className="gap-1.5 text-xs"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> Retomar
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => toggle(broll.id)} className="gap-1.5 text-xs">
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        {isExpanded ? "Ocultar" : "Ver proyecto"}
+                      </Button>
+                    </div>
                   </div>
                   {isExpanded && (
                     <BrollLabExpandedCard entry={broll} onVariantsUpdated={handleBrollVariantsUpdated} />

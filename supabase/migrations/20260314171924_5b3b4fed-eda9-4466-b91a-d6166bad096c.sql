@@ -1,0 +1,1 @@
+ALTER TABLE public.broll_lab_history ADD COLUMN pipeline_step text DEFAULT 'idle';

@@ -22,8 +22,9 @@ export default function ImageApprovalPanel({
   onContinue,
   regeneratingIndex,
 }: Props) {
-  const allApproved = approvedScenes.length > 0 && approvedScenes.every(Boolean);
   const successScenes = scenes.filter((s) => s.image_url);
+  // Check approval only for scenes that actually have images (handles 1-based scene_index)
+  const allApproved = successScenes.length > 0 && successScenes.every((s) => approvedScenes[s.scene_index]);
 
   return (
     <div className="space-y-4">
