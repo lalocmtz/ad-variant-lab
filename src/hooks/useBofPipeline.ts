@@ -14,8 +14,6 @@ const STEP_SCRIPTS = 0;
 const STEP_IMAGES = 1;
 const STEP_APPROVAL = 2; // pause here
 const STEP_ANIMATE = 3;
-const STEP_VOICE = 4;
-const STEP_MERGE = 5;
 
 function emptyVariant(id: string, batchId: string, formatId: string, scriptText: string): BofVariantResult {
   return {
