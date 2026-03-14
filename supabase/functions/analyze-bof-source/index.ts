@@ -172,13 +172,25 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
+    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     // ─── Gather all sources in parallel ───
     const metadataPromises = RAPIDAPI_KEY
       ? tiktokUrls.map((url) => fetchTikTokMetadata(url, RAPIDAPI_KEY))
       : [];
-    const productPromise = productUrl ? fetchProductPageText(productUrl) : Promise.resolve("");
+
+    // Use Firecrawl for product page (renders JS), fallback to simple fetch
+    let productPromise: Promise<string>;
+    if (productUrl && FIRECRAWL_API_KEY) {
+      productPromise = fetchProductPageFirecrawl(productUrl, FIRECRAWL_API_KEY).then(
+        (text) => text || fetchProductPageFallback(productUrl)
+      );
+    } else if (productUrl) {
+      productPromise = fetchProductPageFallback(productUrl);
+    } else {
+      productPromise = Promise.resolve("");
+    }
 
     const [videoMetadata, productText] = await Promise.all([
       Promise.all(metadataPromises),
