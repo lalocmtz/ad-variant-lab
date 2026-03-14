@@ -249,6 +249,7 @@ export type Database = {
           id: string
           inputs: Json | null
           master_video_urls: Json | null
+          pipeline_step: string | null
           product_image_url: string
           product_url: string | null
           scenes: Json | null
@@ -263,6 +264,7 @@ export type Database = {
           id?: string
           inputs?: Json | null
           master_video_urls?: Json | null
+          pipeline_step?: string | null
           product_image_url: string
           product_url?: string | null
           scenes?: Json | null
@@ -277,6 +279,7 @@ export type Database = {
           id?: string
           inputs?: Json | null
           master_video_urls?: Json | null
+          pipeline_step?: string | null
           product_image_url?: string
           product_url?: string | null
           scenes?: Json | null

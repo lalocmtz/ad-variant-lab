@@ -98,4 +98,5 @@ export interface BrollLabState {
   voiceVariants: VoiceVariant[];
   masterVideoUrls: string[];
   error: string | null;
+  historyId: string | null;
 }
