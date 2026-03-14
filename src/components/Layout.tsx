@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut, ShoppingBag, FlaskConical } from "lucide-react";
+import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut, ShoppingBag, FlaskConical, FlaskRound } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
