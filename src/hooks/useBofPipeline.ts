@@ -365,34 +365,24 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
         setVariants([...currentVariants]);
       }
 
-      // --- Launch voice + animation polling in parallel ---
-      const voicePromises = currentVariants.map((v, i) => {
-        if (v.status === "failed") return Promise.resolve(null);
-        return generateVoice(v.script_text, formData.language, formData.accent, i);
-      });
-
-      const animationPromise = (async () => {
-        if (animationTasks.length === 0) return [];
+      // --- Poll animation tasks ---
+      if (animationTasks.length > 0) {
         setStatusMessage(`Esperando ${animationTasks.length} clips de animación…`);
         const pollPromises = animationTasks.map(async (task) => {
           const clipUrl = await pollClipTask(task.taskId);
           return { ...task, clipUrl };
         });
-        return Promise.all(pollPromises);
-      })();
+        const pollResults = await Promise.all(pollPromises);
 
-      setPipelineStep(STEP_VOICE);
-
-      const [pollResults, voiceResults] = await Promise.all([animationPromise, Promise.all(voicePromises)]);
-
-      // Apply animation results
-      for (const result of pollResults) {
-        const scene = currentVariants[result.vi].scene_images[result.si];
-        if (result.clipUrl) {
-          scene.clip_url = result.clipUrl;
-          scene.clip_status = "completed";
-        } else {
-          scene.clip_status = "failed";
+        // Apply animation results
+        for (const result of pollResults) {
+          const scene = currentVariants[result.vi].scene_images[result.si];
+          if (result.clipUrl) {
+            scene.clip_url = result.clipUrl;
+            scene.clip_status = "completed";
+          } else {
+            scene.clip_status = "failed";
+          }
         }
       }
 
@@ -408,17 +398,7 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
       }
       setVariants([...currentVariants]);
 
-      // Apply voice results
-      for (let i = 0; i < currentVariants.length; i++) {
-        if (currentVariants[i].status === "failed") continue;
-        const voiceUrl = voiceResults[i];
-        if (voiceUrl) {
-          currentVariants[i] = { ...currentVariants[i], voice_audio_url: voiceUrl };
-        }
-      }
-
-      // === MERGE: Finalize ===
-      setPipelineStep(STEP_MERGE);
+      // === Finalize ===
       setStatusMessage("Finalizando videos…");
 
       for (let i = 0; i < currentVariants.length; i++) {
