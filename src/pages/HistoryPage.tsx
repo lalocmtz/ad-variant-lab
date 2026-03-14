@@ -34,6 +34,7 @@ interface BrollLabHistoryEntry {
   voice_variants: VoiceVariant[];
   variant_count: number;
   inputs: BrollLabInputs;
+  pipeline_step: string;
 }
 
 type HistoryEntry = AnalysisHistoryEntry | BrollLabHistoryEntry;
