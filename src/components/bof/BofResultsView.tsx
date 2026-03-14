@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
-import { Download, FileText, Copy, Play, AlertCircle, Film } from "lucide-react";
+import { Download, FileText, Copy, Play, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { BofVariantResult } from "@/lib/bof_types";
 import { getFormatById } from "@/lib/bof_video_formats";
-import { useRef, useEffect } from "react";
 
 interface BofResultsViewProps {
   productName: string;
@@ -20,45 +19,6 @@ function StatusBadge({ status }: { status: string }) {
   };
   const info = map[status] || { label: status, variant: "outline" as const };
   return <Badge variant={info.variant}>{info.label}</Badge>;
-}
-
-/** Synced video + audio player for variants with separate audio */
-function SyncedPlayer({ videoUrl, audioUrl }: { videoUrl: string; audioUrl?: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    const audio = audioRef.current;
-    if (!video || !audio || !audioUrl) return;
-
-    const syncPlay = () => { audio.currentTime = video.currentTime; audio.play(); };
-    const syncPause = () => { audio.pause(); };
-    const syncSeek = () => { audio.currentTime = video.currentTime; };
-
-    video.addEventListener("play", syncPlay);
-    video.addEventListener("pause", syncPause);
-    video.addEventListener("seeked", syncSeek);
-
-    return () => {
-      video.removeEventListener("play", syncPlay);
-      video.removeEventListener("pause", syncPause);
-      video.removeEventListener("seeked", syncSeek);
-    };
-  }, [audioUrl]);
-
-  return (
-    <div className="relative">
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        controls
-        className="w-full h-full object-cover rounded-lg"
-        playsInline
-      />
-      {audioUrl && <audio ref={audioRef} src={audioUrl} preload="auto" />}
-    </div>
-  );
 }
 
 export default function BofResultsView({ productName, variants, onReset }: BofResultsViewProps) {
@@ -86,7 +46,6 @@ export default function BofResultsView({ productName, variants, onReset }: BofRe
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {variants.map((variant, idx) => {
           const format = getFormatById(variant.format_id);
-          const hasClips = variant.clip_urls && variant.clip_urls.length > 0;
           const primaryVideoUrl = variant.final_merged_url || variant.clip_urls?.[0] || variant.raw_video_url;
 
           return (
@@ -109,28 +68,17 @@ export default function BofResultsView({ productName, variants, onReset }: BofRe
               {/* Video player */}
               {primaryVideoUrl ? (
                 <div className="aspect-[9/16] max-h-[420px] bg-muted overflow-hidden">
-                  <SyncedPlayer
-                    videoUrl={primaryVideoUrl}
-                    audioUrl={variant.voice_audio_url || undefined}
+                  <video
+                    src={primaryVideoUrl}
+                    controls
+                    className="w-full h-full object-cover rounded-lg"
+                    playsInline
                   />
                 </div>
               ) : variant.status === "failed" ? (
                 <div className="aspect-[9/16] max-h-80 bg-muted flex flex-col items-center justify-center text-muted-foreground">
                   <AlertCircle className="h-8 w-8 mb-2" />
                   <span className="text-xs">{variant.error_message || "Error generando video"}</span>
-                </div>
-              ) : hasClips ? (
-                <div className="p-2">
-                  <div className="px-2 pt-1 flex items-center gap-1 text-xs text-muted-foreground mb-2">
-                    <Film className="h-3 w-3" /> {variant.clip_urls.length} clips
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {variant.clip_urls.map((clipUrl, ci) => (
-                      <div key={ci} className="aspect-[9/16] bg-muted rounded-lg overflow-hidden">
-                        <video src={clipUrl} controls className="w-full h-full object-cover" playsInline />
-                      </div>
-                    ))}
-                  </div>
                 </div>
               ) : (
                 <div className="aspect-[9/16] max-h-80 bg-muted flex items-center justify-center text-muted-foreground">

@@ -433,7 +433,7 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
     } finally {
       setIsLoading(false);
     }
-  }, [variants, batchId, pollClipTask, generateVoice, buildAnimationPrompt]);
+  }, [variants, batchId, pollClipTask, buildAnimationPrompt]);
 
   const handleReset = useCallback(() => {
     setStep("input");
