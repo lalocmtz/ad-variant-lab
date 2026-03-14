@@ -14,8 +14,6 @@ const STEP_SCRIPTS = 0;
 const STEP_IMAGES = 1;
 const STEP_APPROVAL = 2; // pause here
 const STEP_ANIMATE = 3;
-const STEP_VOICE = 4;
-const STEP_MERGE = 5;
 
 function emptyVariant(id: string, batchId: string, formatId: string, scriptText: string): BofVariantResult {
   return {
@@ -61,34 +59,6 @@ export function useBofPipeline() {
     return null;
   }, []);
 
-  const generateVoice = useCallback(async (scriptText: string, language: string, accent: string, variantIndex: number): Promise<string | null> => {
-    try {
-      const voiceResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-bof-voice`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ text: scriptText, language, accent }),
-        }
-      );
-      if (!voiceResponse.ok) throw new Error(`TTS failed: ${voiceResponse.status}`);
-      const audioBlob = await voiceResponse.blob();
-      const audioFileName = `bof_voice_${Date.now()}_${variantIndex}.mp3`;
-      const { error: audioUploadErr } = await supabase.storage
-        .from("videos")
-        .upload(audioFileName, audioBlob, { contentType: "audio/mpeg" });
-      if (audioUploadErr) throw new Error("Error uploading voice audio");
-      const { data: audioUrl } = supabase.storage.from("videos").getPublicUrl(audioFileName);
-      return audioUrl.publicUrl;
-    } catch (e: any) {
-      console.error("Voice error for variant", variantIndex, e);
-      return null;
-    }
-  }, []);
 
   // Build rich animation prompt using format data
   const buildAnimationPrompt = useCallback((variant: BofVariantResult, sceneIndex: number, productNameStr: string, formData: BofFormData) => {
@@ -98,7 +68,6 @@ export function useBofPipeline() {
     const bgRules = format?.background_rules || ["casual home setting"];
 
     return `CONTEXT: This is a TikTok Shop sales video ad for "${productNameStr}".
-SCRIPT BEING NARRATED: "${variant.script_text}"
 CURRENT SCENE: ${scene?.scene_label || `Scene ${sceneIndex + 1}`}
 PRODUCT BENEFIT: ${formData.main_benefit || "great value product"}
 PRICE: ${formData.current_price || ""}${formData.old_price ? ` (antes ${formData.old_price})` : ""}
@@ -118,7 +87,13 @@ ANIMATION INSTRUCTIONS:
 - Natural lighting shifts — no studio look.
 - Duration: approximately 9 seconds.
 - No text, no overlays, no graphics, no watermarks. Clean UGC smartphone video only.
-- Vertical 9:16 format.`;
+- Vertical 9:16 format.
+
+=== GUION HABLADO ===
+El personaje o narrador en el video DEBE decir exactamente este texto en voz alta, con tono natural de creador de TikTok grabando con su teléfono:
+"${variant.script_text}"
+
+La narración debe sonar espontánea, como un review real de producto. El audio de la voz DEBE estar incluido en el video generado.`;
   }, []);
 
   // ═══════════════════════════════════
@@ -390,34 +365,24 @@ ANIMATION INSTRUCTIONS:
         setVariants([...currentVariants]);
       }
 
-      // --- Launch voice + animation polling in parallel ---
-      const voicePromises = currentVariants.map((v, i) => {
-        if (v.status === "failed") return Promise.resolve(null);
-        return generateVoice(v.script_text, formData.language, formData.accent, i);
-      });
-
-      const animationPromise = (async () => {
-        if (animationTasks.length === 0) return [];
+      // --- Poll animation tasks ---
+      if (animationTasks.length > 0) {
         setStatusMessage(`Esperando ${animationTasks.length} clips de animación…`);
         const pollPromises = animationTasks.map(async (task) => {
           const clipUrl = await pollClipTask(task.taskId);
           return { ...task, clipUrl };
         });
-        return Promise.all(pollPromises);
-      })();
+        const pollResults = await Promise.all(pollPromises);
 
-      setPipelineStep(STEP_VOICE);
-
-      const [pollResults, voiceResults] = await Promise.all([animationPromise, Promise.all(voicePromises)]);
-
-      // Apply animation results
-      for (const result of pollResults) {
-        const scene = currentVariants[result.vi].scene_images[result.si];
-        if (result.clipUrl) {
-          scene.clip_url = result.clipUrl;
-          scene.clip_status = "completed";
-        } else {
-          scene.clip_status = "failed";
+        // Apply animation results
+        for (const result of pollResults) {
+          const scene = currentVariants[result.vi].scene_images[result.si];
+          if (result.clipUrl) {
+            scene.clip_url = result.clipUrl;
+            scene.clip_status = "completed";
+          } else {
+            scene.clip_status = "failed";
+          }
         }
       }
 
@@ -433,17 +398,7 @@ ANIMATION INSTRUCTIONS:
       }
       setVariants([...currentVariants]);
 
-      // Apply voice results
-      for (let i = 0; i < currentVariants.length; i++) {
-        if (currentVariants[i].status === "failed") continue;
-        const voiceUrl = voiceResults[i];
-        if (voiceUrl) {
-          currentVariants[i] = { ...currentVariants[i], voice_audio_url: voiceUrl };
-        }
-      }
-
-      // === MERGE: Finalize ===
-      setPipelineStep(STEP_MERGE);
+      // === Finalize ===
       setStatusMessage("Finalizando videos…");
 
       for (let i = 0; i < currentVariants.length; i++) {
@@ -465,7 +420,6 @@ ANIMATION INSTRUCTIONS:
           await supabase.from("bof_video_variants").update({
             status: v.status,
             raw_video_url: v.raw_video_url,
-            voice_audio_url: v.voice_audio_url,
             final_video_url: v.final_merged_url,
           }).eq("id", v.id);
         }
@@ -479,7 +433,7 @@ ANIMATION INSTRUCTIONS:
     } finally {
       setIsLoading(false);
     }
-  }, [variants, batchId, pollClipTask, generateVoice, buildAnimationPrompt]);
+  }, [variants, batchId, pollClipTask, buildAnimationPrompt]);
 
   const handleReset = useCallback(() => {
     setStep("input");
