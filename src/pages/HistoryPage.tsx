@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Video, Clock, Loader2, ChevronDown, ChevronUp, Package, RefreshCw, Download, Play, Music } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Video, Clock, Loader2, ChevronDown, ChevronUp, Package, RefreshCw, Download, Play, Music, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
