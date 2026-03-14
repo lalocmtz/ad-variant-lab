@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Video, Clock, Loader2, ChevronDown, ChevronUp, Package, RefreshCw, Download, Play, Music, RotateCcw } from "lucide-react";
+import { Video, Clock, Loader2, ChevronDown, ChevronUp, Package, RefreshCw, Download, Play, Music, RotateCcw, ShoppingBag, FlaskConical, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,7 +37,31 @@ interface BrollLabHistoryEntry {
   pipeline_step: string;
 }
 
-type HistoryEntry = AnalysisHistoryEntry | BrollLabHistoryEntry;
+interface BofBatchHistoryEntry {
+  id: string;
+  type: "bof_batch";
+  created_at: string | null;
+  product_name: string;
+  product_image_url: string;
+  status: string;
+  selected_formats: string[];
+  metadata_json: Record<string, any>;
+  variants: BofVariantRow[];
+}
+
+interface BofVariantRow {
+  id: string;
+  format_id: string;
+  script_text: string | null;
+  generated_image_url: string | null;
+  raw_video_url: string | null;
+  voice_audio_url: string | null;
+  final_video_url: string | null;
+  status: string;
+  error_message: string | null;
+}
+
+type HistoryEntry = AnalysisHistoryEntry | BrollLabHistoryEntry | BofBatchHistoryEntry;
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -65,6 +89,121 @@ async function invokeRaw(name: string, body: Record<string, unknown>): Promise<A
   return resp.arrayBuffer();
 }
 
+function downloadFile(url: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString("es-MX", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ─── BOF Batch expanded card ─────────────────────────────────
+
+function BofBatchExpandedCard({ entry }: { entry: BofBatchHistoryEntry }) {
+  const completedVariants = entry.variants.filter(v => v.status === "completed");
+  const failedVariants = entry.variants.filter(v => v.status === "failed");
+
+  return (
+    <div className="border-t border-border bg-muted/20 px-5 py-5 space-y-5">
+      {/* Product info */}
+      <div className="flex items-center gap-3">
+        <img src={entry.product_image_url} alt={entry.product_name} className="h-16 w-16 rounded-lg object-cover" />
+        <div>
+          <p className="text-sm font-medium text-foreground">{entry.product_name}</p>
+          {entry.metadata_json?.current_price && (
+            <p className="text-xs text-muted-foreground">
+              ${entry.metadata_json.current_price}
+              {entry.metadata_json.old_price && <span className="line-through ml-1">${entry.metadata_json.old_price}</span>}
+            </p>
+          )}
+          {entry.metadata_json?.main_benefit && (
+            <p className="text-xs text-muted-foreground mt-0.5">{entry.metadata_json.main_benefit}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Variants grid */}
+      {entry.variants.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground mb-3">
+            {completedVariants.length} video{completedVariants.length !== 1 ? "s" : ""} generado{completedVariants.length !== 1 ? "s" : ""}
+            {failedVariants.length > 0 && <span className="text-destructive ml-1">({failedVariants.length} fallido{failedVariants.length !== 1 ? "s" : ""})</span>}
+          </h4>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {entry.variants.map((v, idx) => (
+              <div key={v.id} className="rounded-lg border border-border/60 bg-card/80 overflow-hidden">
+                {/* Video or image preview */}
+                {v.final_video_url || v.raw_video_url ? (
+                  <div className="relative aspect-[9/16] max-h-[240px] bg-black">
+                    <video
+                      src={v.final_video_url || v.raw_video_url || ""}
+                      className="w-full h-full object-contain"
+                      controls
+                      playsInline
+                      preload="metadata"
+                    />
+                  </div>
+                ) : v.generated_image_url ? (
+                  <img src={v.generated_image_url} alt={`Variante ${idx + 1}`} className="aspect-[9/16] max-h-[240px] object-cover w-full" />
+                ) : (
+                  <div className="aspect-[9/16] max-h-[240px] bg-muted flex items-center justify-center">
+                    <Video className="h-8 w-8 text-muted-foreground/30" />
+                  </div>
+                )}
+
+                <div className="p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="secondary" className="text-[10px]">
+                      {v.format_id}
+                    </Badge>
+                    <Badge
+                      variant={v.status === "completed" ? "default" : v.status === "failed" ? "destructive" : "outline"}
+                      className="text-[10px]"
+                    >
+                      {v.status === "completed" ? "✓ Listo" : v.status === "failed" ? "✗ Error" : v.status}
+                    </Badge>
+                  </div>
+
+                  {v.script_text && (
+                    <p className="text-[10px] text-muted-foreground line-clamp-3">{v.script_text}</p>
+                  )}
+
+                  {v.error_message && (
+                    <p className="text-[10px] text-destructive">{v.error_message}</p>
+                  )}
+
+                  <div className="flex gap-1.5">
+                    {(v.final_video_url || v.raw_video_url) && (
+                      <Button size="sm" variant="outline" className="flex-1 h-7 text-[10px]"
+                        onClick={() => downloadFile(v.final_video_url || v.raw_video_url!, `bof_${entry.product_name}_v${idx + 1}.mp4`)}>
+                        <Download className="h-3 w-3 mr-1" /> Video
+                      </Button>
+                    )}
+                    {v.generated_image_url && (
+                      <Button size="sm" variant="ghost" className="h-7 text-[10px] px-2"
+                        onClick={() => downloadFile(v.generated_image_url!, `bof_${entry.product_name}_v${idx + 1}_img.png`)}>
+                        <ImageIcon className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── B-Roll Lab expanded card ────────────────────────────────
 
 function BrollLabExpandedCard({
@@ -77,28 +216,15 @@ function BrollLabExpandedCard({
   const [generating, setGenerating] = useState(false);
   const [genMessage, setGenMessage] = useState("");
 
-  const downloadFile = (url: string, filename: string) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleGenerateNewVariants = async () => {
     setGenerating(true);
     try {
-      // Collect existing scripts to avoid duplicates
       const existingScripts = entry.voice_variants
         .filter((v) => v.status === "done")
         .map((v) => v.script.full_text);
 
       setGenMessage("Generando nuevos guiones únicos...");
 
-      // Call analyze-broll-lab with existing_scripts to get NEW scripts only
       const covers = entry.tiktok_urls.map((url) => ({ cover_url: "", title: url }));
       const newAnalysis = await invokeFn<BrollLabAnalysis>("analyze-broll-lab", {
         covers: covers.length > 0 ? covers : [{ cover_url: entry.product_image_url, title: "product" }],
@@ -115,7 +241,6 @@ function BrollLabExpandedCard({
         throw new Error("No se generaron nuevos guiones");
       }
 
-      // Generate voices for each new script
       const masterVideoUrl = entry.master_video_urls[0];
       const newVariants: VoiceVariant[] = newAnalysis.voice_scripts.map((script) => ({
         variant_index: entry.voice_variants.length + script.variant_index,
@@ -153,7 +278,6 @@ function BrollLabExpandedCard({
         if (i < newVariants.length - 1) await sleep(1000);
       }
 
-      // Merge old + new variants and persist
       const allVariants = [...entry.voice_variants, ...newVariants];
       const doneCount = allVariants.filter((v) => v.status === "done").length;
 
@@ -251,21 +375,53 @@ export default function HistoryPage() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<"all" | "analysis" | "broll_lab" | "bof_batch">("all");
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      // Fetch both tables in parallel
-      const [analysisRes, brollRes] = await Promise.all([
+      // Fetch all three tables in parallel
+      const [analysisRes, brollRes, bofBatchRes] = await Promise.all([
         supabase.from("analysis_history").select("*").order("created_at", { ascending: false }).limit(50),
         supabase.from("broll_lab_history" as any).select("*").order("created_at", { ascending: false }).limit(50),
+        supabase.from("bof_video_batches").select("*").order("created_at", { ascending: false }).limit(50),
       ]);
 
       const analysisEntries: HistoryEntry[] = (analysisRes.data || []).map((d: any) => ({ ...d, type: "analysis" as const }));
       const brollEntries: HistoryEntry[] = (brollRes.data || []).map((d: any) => ({ ...d, type: "broll_lab" as const }));
 
+      // For BOF batches, fetch their variants
+      const bofBatches = bofBatchRes.data || [];
+      let bofEntries: HistoryEntry[] = [];
+
+      if (bofBatches.length > 0) {
+        const batchIds = bofBatches.map((b: any) => b.id);
+        const { data: variantsData } = await supabase
+          .from("bof_video_variants")
+          .select("*")
+          .in("batch_id", batchIds);
+
+        const variantsByBatch: Record<string, BofVariantRow[]> = {};
+        for (const v of (variantsData || []) as any[]) {
+          if (!variantsByBatch[v.batch_id]) variantsByBatch[v.batch_id] = [];
+          variantsByBatch[v.batch_id].push(v);
+        }
+
+        bofEntries = bofBatches.map((b: any) => ({
+          id: b.id,
+          type: "bof_batch" as const,
+          created_at: b.created_at,
+          product_name: b.product_name,
+          product_image_url: b.product_image_url,
+          status: b.status,
+          selected_formats: b.selected_formats || [],
+          metadata_json: b.metadata_json || {},
+          variants: variantsByBatch[b.id] || [],
+        }));
+      }
+
       // Merge and sort by date descending
-      const all = [...analysisEntries, ...brollEntries].sort((a, b) => {
+      const all = [...analysisEntries, ...brollEntries, ...bofEntries].sort((a, b) => {
         const da = a.created_at ? new Date(a.created_at).getTime() : 0;
         const db = b.created_at ? new Date(b.created_at).getTime() : 0;
         return db - da;
@@ -289,7 +445,6 @@ export default function HistoryPage() {
     );
   }, []);
 
-  // Persist variant video state changes back to analysis_history
   const handleVideoStateChange = useCallback(async (
     entryId: string,
     variantIndex: number,
@@ -314,30 +469,119 @@ export default function HistoryPage() {
       .eq("id", entryId);
   }, [entries]);
 
+  // Filter entries
+  const filteredEntries = filterType === "all" ? entries : entries.filter(e => e.type === filterType);
+
+  // Count by type
+  const countByType = {
+    all: entries.length,
+    analysis: entries.filter(e => e.type === "analysis").length,
+    broll_lab: entries.filter(e => e.type === "broll_lab").length,
+    bof_batch: entries.filter(e => e.type === "bof_batch").length,
+  };
+
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">History</h1>
         <p className="text-sm text-muted-foreground">
-          Todos tus proyectos generados. Puedes regenerar variantes sin empezar de cero.
+          Todos tus proyectos generados. Videos, imágenes y variantes — todo en un solo lugar.
         </p>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { key: "all", label: "Todo", icon: Clock },
+          { key: "analysis", label: "Video Variants", icon: Video },
+          { key: "bof_batch", label: "BOF Videos", icon: ShoppingBag },
+          { key: "broll_lab", label: "B-Roll Lab", icon: FlaskConical },
+        ] as const).map(({ key, label, icon: Icon }) => (
+          <Button
+            key={key}
+            variant={filterType === key ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilterType(key)}
+            className="gap-1.5 text-xs"
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+            {countByType[key] > 0 && (
+              <Badge variant={filterType === key ? "secondary" : "outline"} className="text-[9px] ml-1 px-1.5 py-0">
+                {countByType[key]}
+              </Badge>
+            )}
+          </Button>
+        ))}
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : entries.length === 0 ? (
+      ) : filteredEntries.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-16 text-center">
           <Clock className="h-8 w-8 mx-auto text-muted-foreground/30 mb-3" />
-          <p className="text-sm text-muted-foreground">Sin historial aún. Genera variantes para verlas aquí.</p>
+          <p className="text-sm text-muted-foreground">
+            {filterType === "all"
+              ? "Sin historial aún. Genera variantes para verlas aquí."
+              : `Sin proyectos de ${filterType === "analysis" ? "Video Variants" : filterType === "bof_batch" ? "BOF Videos" : "B-Roll Lab"} aún.`}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {entries.map((entry) => {
+          {filteredEntries.map((entry) => {
             const isExpanded = expandedId === entry.id;
-            const date = entry.created_at ? new Date(entry.created_at) : null;
 
+            // ─── BOF Batch ───
+            if (entry.type === "bof_batch") {
+              const bof = entry as BofBatchHistoryEntry;
+              const completedCount = bof.variants.filter(v => v.status === "completed").length;
+              const totalCount = bof.variants.length;
+              const isComplete = bof.status === "completed";
+              const statusLabels: Record<string, string> = {
+                pending: "Pendiente",
+                generating_scripts: "Generando scripts",
+                generating_images: "Generando imágenes",
+                awaiting_approval: "Aprobación",
+                animating_scenes: "Animando",
+                completed: "Completado",
+                failed: "Error",
+              };
+
+              return (
+                <div key={bof.id} className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+                  <div className="flex items-center gap-4 px-5 py-4">
+                    <img src={bof.product_image_url} alt={bof.product_name} className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {bof.product_name}
+                        </p>
+                        <Badge variant="secondary" className="text-[10px]">
+                          <ShoppingBag className="h-2.5 w-2.5 mr-0.5" /> BOF Videos
+                        </Badge>
+                        {!isComplete && (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600">
+                            {statusLabels[bof.status] || bof.status}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {completedCount}/{totalCount} videos · {formatDate(bof.created_at)}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => toggle(bof.id)} className="gap-1.5 text-xs">
+                      {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      {isExpanded ? "Ocultar" : "Ver proyecto"}
+                    </Button>
+                  </div>
+                  {isExpanded && <BofBatchExpandedCard entry={bof} />}
+                </div>
+              );
+            }
+
+            // ─── B-Roll Lab ───
             if (entry.type === "broll_lab") {
               const broll = entry as BrollLabHistoryEntry;
               const isComplete = broll.pipeline_step === "done";
@@ -365,16 +609,16 @@ export default function HistoryPage() {
                             ? `${broll.variant_count} variante${broll.variant_count !== 1 ? "s" : ""} de voz`
                             : "Proyecto incompleto"}
                         </p>
-                        <Badge variant="secondary" className="text-[10px]">B-Roll Lab</Badge>
+                        <Badge variant="secondary" className="text-[10px]">
+                          <FlaskConical className="h-2.5 w-2.5 mr-0.5" /> B-Roll Lab
+                        </Badge>
                         {stepLabel && (
                           <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600">
                             {stepLabel}
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {date ? date.toLocaleDateString("es-MX", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{formatDate(broll.created_at)}</p>
                     </div>
                     <div className="flex gap-2">
                       {!isComplete && (
@@ -400,7 +644,7 @@ export default function HistoryPage() {
               );
             }
 
-            // Analysis history entry
+            // ─── Analysis (Video Variants) ───
             const analysis = entry as AnalysisHistoryEntry;
             const variants = (analysis.results?.variants || []) as VariantResult[];
             const coverUrl = variants[0]?.generated_image_url;
@@ -417,12 +661,15 @@ export default function HistoryPage() {
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {variantCount} variant{variantCount !== 1 ? "s" : ""} generated
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {date ? date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {variantCount} variant{variantCount !== 1 ? "es" : "e"} generada{variantCount !== 1 ? "s" : ""}
+                      </p>
+                      <Badge variant="secondary" className="text-[10px]">
+                        <Video className="h-2.5 w-2.5 mr-0.5" /> Video Variants
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{formatDate(analysis.created_at)}</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => toggle(analysis.id)} className="gap-1.5 text-xs">
                     {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
