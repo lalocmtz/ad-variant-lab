@@ -476,7 +476,7 @@ const Index = () => {
           const { data: imageData, error: imageError } = await Promise.race([imagePromise, timeoutPromise]);
           const builtVariant: VariantResult = {
             ...variant,
-            status: variant.status || "ready",
+            status: "ready",
             generation_attempt: variant.generation_attempt || 1,
             generated_image_url: imageError || imageData?.error ? "" : imageData.image_url,
           };
