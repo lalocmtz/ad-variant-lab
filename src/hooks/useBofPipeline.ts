@@ -68,7 +68,6 @@ export function useBofPipeline() {
     const bgRules = format?.background_rules || ["casual home setting"];
 
     return `CONTEXT: This is a TikTok Shop sales video ad for "${productNameStr}".
-SCRIPT BEING NARRATED: "${variant.script_text}"
 CURRENT SCENE: ${scene?.scene_label || `Scene ${sceneIndex + 1}`}
 PRODUCT BENEFIT: ${formData.main_benefit || "great value product"}
 PRICE: ${formData.current_price || ""}${formData.old_price ? ` (antes ${formData.old_price})` : ""}
@@ -88,7 +87,13 @@ ANIMATION INSTRUCTIONS:
 - Natural lighting shifts — no studio look.
 - Duration: approximately 9 seconds.
 - No text, no overlays, no graphics, no watermarks. Clean UGC smartphone video only.
-- Vertical 9:16 format.`;
+- Vertical 9:16 format.
+
+=== GUION HABLADO ===
+El personaje o narrador en el video DEBE decir exactamente este texto en voz alta, con tono natural de creador de TikTok grabando con su teléfono:
+"${variant.script_text}"
+
+La narración debe sonar espontánea, como un review real de producto. El audio de la voz DEBE estar incluido en el video generado.`;
   }, []);
 
   // ═══════════════════════════════════
