@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +15,7 @@ const BOF_FORMAT_IDS = [
   "05_FOMO_RESTOCK",
 ];
 
-/* ─── TikTok metadata via RapidAPI (same endpoint as download-tiktok) ─── */
+/* ─── TikTok metadata via RapidAPI ─── */
 interface TikTokMeta {
   url: string;
   title: string;
@@ -23,6 +24,7 @@ interface TikTokMeta {
   music: string;
   hashtags: string[];
   duration: number;
+  cover_url: string; // origin_cover or cover from the video
 }
 
 async function fetchTikTokMetadata(url: string, rapidApiKey: string): Promise<TikTokMeta> {
@@ -37,13 +39,17 @@ async function fetchTikTokMetadata(url: string, rapidApiKey: string): Promise<Ti
     });
     if (!resp.ok) {
       console.error("RapidAPI error for", url, resp.status);
-      return { url, title: "", description: "", author: "", music: "", hashtags: [], duration: 0 };
+      return { url, title: "", description: "", author: "", music: "", hashtags: [], duration: 0, cover_url: "" };
     }
     const data = await resp.json();
     const d = data?.data || data || {};
     const title = d.title || d.desc || "";
-    // Extract hashtags from title
     const hashtagMatches = title.match(/#[\w\u00C0-\u024F]+/g) || [];
+    
+    // Extract cover image URL
+    const coverUrl = d.origin_cover || d.cover || d.dynamic_cover || "";
+    console.log("TikTok cover URL found:", coverUrl ? "yes" : "no");
+
     return {
       url,
       title,
@@ -52,75 +58,73 @@ async function fetchTikTokMetadata(url: string, rapidApiKey: string): Promise<Ti
       music: d.music_info?.title || d.music || "",
       hashtags: hashtagMatches.map((h: string) => h.replace("#", "")),
       duration: d.duration || 0,
+      cover_url: coverUrl,
     };
   } catch (e) {
     console.error("Failed to fetch TikTok metadata for", url, e);
-    return { url, title: "", description: "", author: "", music: "", hashtags: [], duration: 0 };
+    return { url, title: "", description: "", author: "", music: "", hashtags: [], duration: 0, cover_url: "" };
   }
 }
 
-/* ─── Product page scraping via Firecrawl (renders JS) ─── */
-async function fetchProductPageFirecrawl(url: string, firecrawlKey: string): Promise<string> {
+/* ─── Product data via Firecrawl SEARCH (scrape blocked for TikTok Shop) ─── */
+async function searchProductData(productUrl: string, firecrawlKey: string): Promise<string> {
   try {
-    console.log("Scraping product page via Firecrawl:", url);
-    const resp = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    // Extract product ID or name from URL for better search
+    const productIdMatch = productUrl.match(/product\/(\d+)/);
+    const productId = productIdMatch?.[1] || "";
+    
+    // Build search query from the URL
+    const searchQuery = productId
+      ? `TikTok Shop producto ${productId} precio`
+      : `site:shop.tiktok.com ${productUrl.split("/").pop() || "producto"} precio`;
+
+    console.log("Firecrawl SEARCH query:", searchQuery);
+
+    const resp = await fetch("https://api.firecrawl.dev/v1/search", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${firecrawlKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        url,
-        formats: [
-          "markdown",
-          {
-            type: "json",
-            schema: {
-              type: "object",
-              properties: {
-                product_name: { type: "string" },
-                current_price: { type: "string" },
-                original_price: { type: "string" },
-                description: { type: "string" },
-                rating: { type: "string" },
-                units_sold: { type: "string" },
-                features: { type: "array", items: { type: "string" } },
-              },
-            },
-          },
-        ],
-        waitFor: 3000,
+        query: searchQuery,
+        limit: 5,
+        lang: "es",
+        country: "MX",
+        scrapeOptions: { formats: ["markdown"] },
       }),
     });
 
     if (!resp.ok) {
       const errText = await resp.text();
-      console.error("Firecrawl error:", resp.status, errText);
+      console.error("Firecrawl search error:", resp.status, errText);
       return "";
     }
 
     const data = await resp.json();
+    const results = data?.data || [];
+    
+    if (results.length === 0) {
+      console.log("Firecrawl search returned no results");
+      return "";
+    }
+
     const parts: string[] = [];
-
-    // Structured JSON extraction (most reliable for prices)
-    const jsonData = data?.data?.json || data?.json;
-    if (jsonData) {
-      parts.push("=== STRUCTURED PRODUCT DATA (Firecrawl) ===\n" + JSON.stringify(jsonData, null, 2));
+    for (const result of results.slice(0, 3)) {
+      const chunk = [
+        `Title: ${result.title || ""}`,
+        `URL: ${result.url || ""}`,
+        `Description: ${result.description || ""}`,
+        result.markdown ? `Content:\n${result.markdown.slice(0, 3000)}` : "",
+      ].filter(Boolean).join("\n");
+      parts.push(chunk);
     }
 
-    // Markdown content as backup
-    const markdown = data?.data?.markdown || data?.markdown;
-    if (markdown) {
-      parts.push("=== PAGE CONTENT (Markdown) ===\n" + markdown.slice(0, 6000));
-    }
-
-    if (parts.length > 0) {
-      console.log("Firecrawl extraction successful");
-      return parts.join("\n\n");
-    }
-    return "";
+    const combined = parts.join("\n\n---\n\n");
+    console.log("Firecrawl search returned", results.length, "results");
+    return `=== PRODUCT SEARCH RESULTS ===\n${combined}`;
   } catch (e) {
-    console.error("Firecrawl fetch failed:", e);
+    console.error("Firecrawl search failed:", e);
     return "";
   }
 }
@@ -151,6 +155,43 @@ async function fetchProductPageFallback(url: string): Promise<string> {
   }
 }
 
+/* ─── Upload cover image to storage ─── */
+async function uploadCoverToStorage(coverUrl: string): Promise<string> {
+  try {
+    console.log("Downloading cover image from:", coverUrl.slice(0, 80));
+    const resp = await fetch(coverUrl);
+    if (!resp.ok) {
+      console.error("Failed to download cover:", resp.status);
+      return "";
+    }
+    
+    const blob = await resp.arrayBuffer();
+    const contentType = resp.headers.get("content-type") || "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : "jpeg";
+    const fileName = `bof_cover_${Date.now()}.${ext}`;
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const { error } = await supabase.storage
+      .from("videos")
+      .upload(fileName, new Uint8Array(blob), { contentType });
+
+    if (error) {
+      console.error("Storage upload error:", error.message);
+      return "";
+    }
+
+    const { data } = supabase.storage.from("videos").getPublicUrl(fileName);
+    console.log("Cover uploaded to storage:", data.publicUrl);
+    return data.publicUrl;
+  } catch (e) {
+    console.error("Cover upload failed:", e);
+    return "";
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -158,7 +199,6 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    // Support both old single URL and new array format
     const tiktokUrls: string[] = body.tiktok_urls || (body.tiktok_url ? [body.tiktok_url] : []);
     const productUrl: string = body.product_url || "";
     const productImageUrl: string = body.product_image_url || "";
@@ -180,10 +220,10 @@ serve(async (req) => {
       ? tiktokUrls.map((url) => fetchTikTokMetadata(url, RAPIDAPI_KEY))
       : [];
 
-    // Use Firecrawl for product page (renders JS), fallback to simple fetch
+    // Use Firecrawl SEARCH instead of scrape (TikTok Shop blocks scraping)
     let productPromise: Promise<string>;
     if (productUrl && FIRECRAWL_API_KEY) {
-      productPromise = fetchProductPageFirecrawl(productUrl, FIRECRAWL_API_KEY).then(
+      productPromise = searchProductData(productUrl, FIRECRAWL_API_KEY).then(
         (text) => text || fetchProductPageFallback(productUrl)
       );
     } else if (productUrl) {
@@ -196,6 +236,16 @@ serve(async (req) => {
       Promise.all(metadataPromises),
       productPromise,
     ]);
+
+    // ─── Extract & upload cover image ───
+    let resolvedProductImageUrl = productImageUrl;
+    if (!resolvedProductImageUrl) {
+      // Find first available cover from video metadata
+      const coverUrl = videoMetadata.find((v) => v.cover_url)?.cover_url || "";
+      if (coverUrl) {
+        resolvedProductImageUrl = await uploadCoverToStorage(coverUrl);
+      }
+    }
 
     // ─── Build source context for AI ───
     const sources: string[] = [];
@@ -218,7 +268,6 @@ serve(async (req) => {
         }
       }
     } else if (tiktokUrls.length > 0 && !RAPIDAPI_KEY) {
-      // Fallback: just include URLs without metadata
       tiktokUrls.forEach((url, i) => {
         sources.push(`=== TIKTOK VIDEO ${i + 1} ===\nURL: ${url}\n(RapidAPI key not configured — limited extraction)`);
       });
@@ -230,28 +279,29 @@ serve(async (req) => {
       sources.push(`=== PRODUCT URL ===\n${productUrl}\n(Could not fetch page content)`);
     }
 
-    if (productImageUrl) {
-      sources.push(`=== PRODUCT IMAGE URL ===\n${productImageUrl}`);
+    if (resolvedProductImageUrl) {
+      sources.push(`=== PRODUCT IMAGE URL ===\n${resolvedProductImageUrl}`);
     }
 
     const systemPrompt = `You are a product data extraction specialist for TikTok Shop BOF (Bottom of Funnel) ads.
 
-You receive metadata from WINNING TikTok videos promoting a product, plus optionally the product page data. Your task: cross-reference ALL sources to extract accurate PRODUCT information.
+You receive metadata from WINNING TikTok videos promoting a product, plus optionally product page search results or the product URL. Your task: cross-reference ALL sources to extract accurate PRODUCT information.
 
 CRITICAL RULES:
 - Extract PRODUCT information (name, price, benefits), NOT video metadata
 - Cross-reference multiple video titles/descriptions to identify the real product name, benefits, and selling angles
 - From video titles, extract: hooks used, pain points addressed, offers mentioned, urgency angles
-- From the product page (if available): extract exact prices, product name, features
+- From search results (if available): extract exact prices, product name, features. These are the MOST RELIABLE source for prices.
 - Set confidence 0.0-1.0 for each field (0 = could not determine, 1 = clearly stated in sources)
 - If a field cannot be determined, return empty string and confidence 0
-- Prices should include currency symbol (usually MXN $ for TikTok Shop Mexico)
+- Prices should include currency symbol (usually MXN $ for TikTok Shop Mexico). Be very careful with prices — only use prices explicitly found in the sources, NEVER invent prices.
 - All text output MUST be in Spanish (Mexican Spanish)
 - For suggested_formats, choose from ONLY these IDs: ${BOF_FORMAT_IDS.join(", ")}
 - Suggest formats that best match the product type and the selling angles found in the winning videos
 - Do NOT invent data that isn't supported by the sources
 - The "offer" field should capture urgency/discount angles found in the videos
 - The "pain_point" field should capture customer problems mentioned in the video hooks
+- The "main_benefit" field should be a compelling, specific benefit extracted from the video descriptions
 
 You MUST respond using the extract_product_data tool.`;
 
@@ -279,8 +329,8 @@ You MUST respond using the extract_product_data tool.`;
                 type: "object",
                 properties: {
                   product_name: { type: "string", description: "Product name in Spanish" },
-                  current_price: { type: "string", description: "Current price with currency" },
-                  old_price: { type: "string", description: "Previous/original price if found" },
+                  current_price: { type: "string", description: "Current price with currency symbol. ONLY from sources, never invented." },
+                  old_price: { type: "string", description: "Previous/original price if found in sources" },
                   main_benefit: { type: "string", description: "Main product benefit in Spanish" },
                   offer: { type: "string", description: "Current offer or urgency angle found in winning videos, in Spanish" },
                   pain_point: { type: "string", description: "Customer pain point from video hooks, in Spanish" },
@@ -358,6 +408,11 @@ You MUST respond using the extract_product_data tool.`;
 
     if (!extracted.language) extracted.language = "es-MX";
     if (!extracted.accent) extracted.accent = "mexicano";
+
+    // Add product_image_url to response
+    if (resolvedProductImageUrl) {
+      extracted.product_image_url = resolvedProductImageUrl;
+    }
 
     console.log("BOF autofill extraction complete:", JSON.stringify(extracted));
 
