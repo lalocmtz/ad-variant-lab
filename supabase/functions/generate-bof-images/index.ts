@@ -83,7 +83,7 @@ NEGATIVE: No text overlays, no UI elements, no watermarks, no subtitles, no capt
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
+        model: "google/gemini-3.1-flash-image-preview",
         messages: [{ role: "user", content }],
         modalities: ["image", "text"],
       }),
@@ -96,9 +96,42 @@ NEGATIVE: No text overlays, no UI elements, no watermarks, no subtitles, no capt
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+    console.log("BOF image response keys:", JSON.stringify({
+      hasChoices: !!data.choices,
+      choiceCount: data.choices?.length,
+      messageKeys: data.choices?.[0]?.message ? Object.keys(data.choices[0].message) : [],
+      hasImages: !!data.choices?.[0]?.message?.images,
+      imageCount: data.choices?.[0]?.message?.images?.length,
+      contentPreview: typeof data.choices?.[0]?.message?.content === "string" 
+        ? data.choices[0].message.content.substring(0, 200) 
+        : "non-string",
+    }));
 
-    if (!imageUrl) throw new Error("No image generated");
+    // Try multiple extraction paths
+    let imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+    
+    // Fallback: check if image is inline in content as base64
+    if (!imageUrl) {
+      const msgContent = data.choices?.[0]?.message?.content;
+      if (typeof msgContent === "string" && msgContent.includes("data:image")) {
+        const match = msgContent.match(/(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/);
+        if (match) imageUrl = match[1];
+      }
+      // Check if content is array with image parts
+      if (Array.isArray(msgContent)) {
+        for (const part of msgContent) {
+          if (part?.type === "image_url" && part?.image_url?.url) {
+            imageUrl = part.image_url.url;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      console.error("No image in response. Full response:", JSON.stringify(data).substring(0, 2000));
+      throw new Error("No image generated");
+    }
 
     return new Response(JSON.stringify({ image_url: imageUrl, visual_prompt: prompt }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
