@@ -1,24 +1,21 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import type { BofFormData, BofVariantResult, BofSceneImage } from "@/lib/bof_types";
+import type { BofFormData, BofVariantResult, BofSceneImage, BofStep } from "@/lib/bof_types";
 import { getFormatById } from "@/lib/bof_video_formats";
-
-type BofStep = "input" | "processing" | "results";
 
 const SCENES_PER_VARIANT = 3;
 const POLL_INTERVAL = 8000;
-const MAX_POLLS = 60; // ~8 min max
+const MAX_POLLS = 60;
 
-// Pipeline step indices (matches BofPipeline.tsx order)
+// Pipeline step indices (matches BofPipeline.tsx PIPELINE_STEPS order)
 const STEP_SCRIPTS = 0;
-const STEP_SCENES = 1;
-const STEP_IMAGES = 2;
+const STEP_IMAGES = 1;
+const STEP_APPROVAL = 2; // pause here
 const STEP_ANIMATE = 3;
-const STEP_STITCH = 4;
-const STEP_VOICE = 5;
-const STEP_MERGE = 6;
+const STEP_VOICE = 4;
+const STEP_MERGE = 5;
 
 function emptyVariant(id: string, batchId: string, formatId: string, scriptText: string): BofVariantResult {
   return {
@@ -26,6 +23,7 @@ function emptyVariant(id: string, batchId: string, formatId: string, scriptText:
     format_name: getFormatById(formatId)?.format_name || formatId,
     script_text: scriptText, visual_prompt: "", generated_image_url: "",
     raw_video_url: "", voice_audio_url: "", final_video_url: "",
+    final_merged_url: "",
     status: "script_ready", error_message: "",
     scene_images: [], clip_urls: [],
   };
@@ -42,8 +40,12 @@ export function useBofPipeline() {
   const [variants, setVariants] = useState<BofVariantResult[]>([]);
   const [productName, setProductName] = useState("");
   const [batchId, setBatchId] = useState<string | null>(null);
+  const [regeneratingScenes, setRegeneratingScenes] = useState<Set<string>>(new Set());
 
-  // Poll a single animation task until complete
+  // Store form data for phase 2
+  const formDataRef = useRef<BofFormData | null>(null);
+  const productImageUrlRef = useRef<string>("");
+
   const pollClipTask = useCallback(async (taskId: string): Promise<string | null> => {
     for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
       await sleep(POLL_INTERVAL);
@@ -53,16 +55,12 @@ export function useBofPipeline() {
         });
         if (error) { console.error("Poll error:", error); continue; }
         if (data?.status === "completed" && data?.videoUrl) return data.videoUrl;
-        if (data?.shouldStopPolling) {
-          console.error("Clip failed:", data?.error);
-          return null;
-        }
+        if (data?.shouldStopPolling) { console.error("Clip failed:", data?.error); return null; }
       } catch (e) { console.error("Poll exception:", e); }
     }
     return null;
   }, []);
 
-  // Generate voice for a single variant (returns audio URL or null)
   const generateVoice = useCallback(async (scriptText: string, language: string, accent: string, variantIndex: number): Promise<string | null> => {
     try {
       const voiceResponse = await fetch(
@@ -92,6 +90,40 @@ export function useBofPipeline() {
     }
   }, []);
 
+  // Build rich animation prompt using format data
+  const buildAnimationPrompt = useCallback((variant: BofVariantResult, sceneIndex: number, productNameStr: string, formData: BofFormData) => {
+    const format = getFormatById(variant.format_id);
+    const scene = variant.scene_images[sceneIndex];
+    const cameraRules = format?.camera_rules || ["handheld", "phone aesthetic"];
+    const bgRules = format?.background_rules || ["casual home setting"];
+
+    return `CONTEXT: This is a TikTok Shop sales video ad for "${productNameStr}".
+SCRIPT BEING NARRATED: "${variant.script_text}"
+CURRENT SCENE: ${scene?.scene_label || `Scene ${sceneIndex + 1}`}
+PRODUCT BENEFIT: ${formData.main_benefit || "great value product"}
+PRICE: ${formData.current_price || ""}${formData.old_price ? ` (antes ${formData.old_price})` : ""}
+
+CAMERA DIRECTION:
+${cameraRules.map(r => `- ${r}`).join("\n")}
+
+ENVIRONMENT:
+${bgRules.map(r => `- ${r}`).join("\n")}
+
+ANIMATION INSTRUCTIONS:
+- Animate with realistic handheld smartphone motion — subtle drift, breathing shake, natural imperfection.
+- ${sceneIndex === 0 ? "Slow zoom in to build attention. Hook moment — dramatic and eye-catching." : ""}
+- ${sceneIndex === 1 ? "Gentle pan or reveal movement. Show the product in context. Demonstrate value." : ""}
+- ${sceneIndex === 2 ? "Push in for urgency. CTA energy — make the viewer want to buy NOW." : ""}
+- Keep the product sharp and clearly visible at all times.
+- Natural lighting shifts — no studio look.
+- Duration: approximately 9 seconds.
+- No text, no overlays, no graphics, no watermarks. Clean UGC smartphone video only.
+- Vertical 9:16 format.`;
+  }, []);
+
+  // ═══════════════════════════════════
+  // PHASE 1: Scripts → Images → Approval
+  // ═══════════════════════════════════
   const handleSubmit = useCallback(async (formData: BofFormData) => {
     if (!user) { toast.error("Inicia sesión primero"); return; }
     setIsLoading(true);
@@ -99,9 +131,10 @@ export function useBofPipeline() {
     setPipelineStep(STEP_SCRIPTS);
     setStatusMessage("Preparando pipeline…");
     setProductName(formData.product_name);
+    formDataRef.current = formData;
 
     try {
-      // === STEP 0: Upload product image ===
+      // Upload product image
       const ext = formData.product_image!.name.split(".").pop() || "png";
       const fileName = `bof_product_${Date.now()}.${ext}`;
       const { error: uploadErr } = await supabase.storage
@@ -110,6 +143,7 @@ export function useBofPipeline() {
       if (uploadErr) throw new Error("Error subiendo imagen del producto");
       const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(fileName);
       const productImageUrl = pubUrl.publicUrl;
+      productImageUrlRef.current = productImageUrl;
 
       // Create batch
       const { data: batchData, error: batchErr } = await supabase.from("bof_video_batches").insert([{
@@ -144,8 +178,6 @@ export function useBofPipeline() {
       if (scriptsErr || scriptsData?.error) throw new Error(scriptsData?.error || scriptsErr?.message || "Error generando scripts");
 
       const scripts = scriptsData.scripts || [];
-
-      // Create variant DB records
       const variantInserts = scripts.map((s: any) => ({
         batch_id: batchData.id, user_id: user.id,
         format_id: s.format_id, script_text: s.script_text, status: "script_ready",
@@ -158,7 +190,7 @@ export function useBofPipeline() {
       );
       setVariants([...currentVariants]);
 
-      // === STEP 2: Generate scene images (3 per variant) ===
+      // === STEP 2: Generate scene images ===
       setPipelineStep(STEP_IMAGES);
       setStatusMessage("Generando imágenes de escenas…");
 
@@ -183,27 +215,24 @@ export function useBofPipeline() {
               },
             });
             if (imgErr || imgData?.error) {
-              console.error(`Scene ${si} image failed:`, imgData?.error || imgErr);
               sceneImages.push({
                 scene_index: si, scene_label: scenePlan[si],
                 image_url: "", public_url: "", clip_task_id: "", clip_url: "",
-                clip_status: "failed",
+                clip_status: "failed", approved: false,
               });
             } else {
               sceneImages.push({
                 scene_index: si, scene_label: scenePlan[si],
                 image_url: imgData.image_url || "",
-                public_url: "",
-                clip_task_id: "", clip_url: "",
-                clip_status: "pending",
+                public_url: "", clip_task_id: "", clip_url: "",
+                clip_status: "pending", approved: false,
               });
             }
           } catch (e: any) {
-            console.error(`Scene ${si} error:`, e);
             sceneImages.push({
               scene_index: si, scene_label: scenePlan[si],
               image_url: "", public_url: "", clip_task_id: "", clip_url: "",
-              clip_status: "failed",
+              clip_status: "failed", approved: false,
             });
           }
         }
@@ -216,17 +245,113 @@ export function useBofPipeline() {
           error_message: sceneImages.every(s => !s.image_url) ? "No se pudieron generar imágenes" : "",
         };
         setVariants([...currentVariants]);
-
-        await supabase.from("bof_video_variants").update({
-          generated_image_url: currentVariants[vi].generated_image_url,
-          status: currentVariants[vi].status,
-          error_message: currentVariants[vi].error_message,
-        }).eq("id", currentVariants[vi].id);
       }
 
-      // === STEP 3+5: Animate scenes + Generate voice IN PARALLEL ===
-      setPipelineStep(STEP_ANIMATE);
-      setStatusMessage("Animando escenas y generando voz en paralelo…");
+      // Update batch status
+      await supabase.from("bof_video_batches").update({ status: "awaiting_approval" }).eq("id", batchData.id);
+
+      // === PAUSE: Go to approval ===
+      setStep("approval");
+      setIsLoading(false);
+      toast.success("Imágenes generadas — revisa y aprueba antes de animar");
+    } catch (e: any) {
+      console.error("BOF pipeline phase 1 error:", e);
+      toast.error(e.message || "Error en el pipeline BOF");
+      setStep("input");
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // ═══════════════════════════════════
+  // APPROVAL HANDLERS
+  // ═══════════════════════════════════
+  const handleApproveScene = useCallback((variantIndex: number, sceneIndex: number) => {
+    setVariants(prev => {
+      const updated = [...prev];
+      if (updated[variantIndex]?.scene_images[sceneIndex]) {
+        updated[variantIndex] = { ...updated[variantIndex] };
+        updated[variantIndex].scene_images = [...updated[variantIndex].scene_images];
+        updated[variantIndex].scene_images[sceneIndex] = {
+          ...updated[variantIndex].scene_images[sceneIndex],
+          approved: true,
+        };
+      }
+      return updated;
+    });
+  }, []);
+
+  const handleRegenerateScene = useCallback(async (variantIndex: number, sceneIndex: number) => {
+    const formData = formDataRef.current;
+    if (!formData) return;
+
+    const key = `${variantIndex}-${sceneIndex}`;
+    setRegeneratingScenes(prev => new Set(prev).add(key));
+
+    try {
+      const variant = variants[variantIndex];
+      const format = getFormatById(variant.format_id);
+      const scenePlan = format?.scene_plan || ["Product close-up", "Product in use", "CTA moment"];
+
+      const { data: imgData, error: imgErr } = await supabase.functions.invoke("generate-bof-images", {
+        body: {
+          product_image_url: productImageUrlRef.current,
+          product_name: formData.product_name,
+          script_text: variant.script_text,
+          format_id: variant.format_id,
+          scene_plan: [scenePlan[sceneIndex]],
+          camera_rules: format?.camera_rules,
+          background_rules: format?.background_rules,
+        },
+      });
+
+      if (imgErr || imgData?.error) throw new Error(imgData?.error || "Error regenerando");
+
+      setVariants(prev => {
+        const updated = [...prev];
+        updated[variantIndex] = { ...updated[variantIndex] };
+        updated[variantIndex].scene_images = [...updated[variantIndex].scene_images];
+        updated[variantIndex].scene_images[sceneIndex] = {
+          ...updated[variantIndex].scene_images[sceneIndex],
+          image_url: imgData.image_url || "",
+          clip_status: "pending",
+          approved: false,
+        };
+        return updated;
+      });
+      toast.success(`Escena ${sceneIndex + 1} regenerada`);
+    } catch (e: any) {
+      toast.error(e.message || "Error regenerando escena");
+    } finally {
+      setRegeneratingScenes(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }, [variants]);
+
+  // ═══════════════════════════════════
+  // PHASE 2: Animate + Voice + Merge
+  // ═══════════════════════════════════
+  const handleContinueAfterApproval = useCallback(async () => {
+    const formData = formDataRef.current;
+    if (!formData) return;
+
+    setStep("processing_phase2");
+    setIsLoading(true);
+    setPipelineStep(STEP_ANIMATE);
+    setStatusMessage("Animando escenas y generando voz en paralelo…");
+
+    try {
+      let currentVariants = [...variants];
+
+      // Mark approved variants
+      for (let vi = 0; vi < currentVariants.length; vi++) {
+        if (currentVariants[vi].status !== "failed") {
+          currentVariants[vi] = { ...currentVariants[vi], status: "approved" };
+        }
+      }
+      setVariants([...currentVariants]);
 
       // --- Start all animation tasks ---
       const animationTasks: { vi: number; si: number; taskId: string }[] = [];
@@ -236,24 +361,20 @@ export function useBofPipeline() {
         const scenes = currentVariants[vi].scene_images;
 
         for (let si = 0; si < scenes.length; si++) {
-          if (!scenes[si].image_url || scenes[si].clip_status === "failed") continue;
+          if (!scenes[si].image_url || scenes[si].clip_status === "failed" || !scenes[si].approved) continue;
 
-          const motionPrompts = [
-            "Slow zoom in with subtle handheld drift. Natural breathing motion. Keep product sharp and centered.",
-            "Gentle pan left to right revealing the product. Smooth cinematic movement. Soft focus shift.",
-            "Slow push in with slight perspective rotation. Intimate close-up feel. Warm natural lighting.",
-          ];
+          const motionPrompt = buildAnimationPrompt(currentVariants[vi], si, formData.product_name, formData);
 
           try {
-              const { data: animData, error: animErr } = await supabase.functions.invoke("animate-bof-scene", {
+            const { data: animData, error: animErr } = await supabase.functions.invoke("animate-bof-scene", {
               body: {
                 image_url: scenes[si].image_url,
-                motion_prompt: motionPrompts[si % motionPrompts.length],
+                motion_prompt: motionPrompt,
                 scene_index: si,
               },
             });
             if (animErr || animData?.error) {
-              console.error(`Animation failed for V${vi} S${si}:`, animData?.error || animErr);
+              console.error(`Animation failed V${vi} S${si}:`, animData?.error || animErr);
               currentVariants[vi].scene_images[si].clip_status = "failed";
             } else {
               currentVariants[vi].scene_images[si].clip_task_id = animData.taskId;
@@ -262,22 +383,19 @@ export function useBofPipeline() {
               animationTasks.push({ vi, si, taskId: animData.taskId });
             }
           } catch (e: any) {
-            console.error(`Animation error V${vi} S${si}:`, e);
             currentVariants[vi].scene_images[si].clip_status = "failed";
           }
         }
-
         currentVariants[vi] = { ...currentVariants[vi], status: "animating" };
         setVariants([...currentVariants]);
       }
 
-      // --- Launch voice generation for all variants (parallel with animation polling) ---
+      // --- Launch voice + animation polling in parallel ---
       const voicePromises = currentVariants.map((v, i) => {
         if (v.status === "failed") return Promise.resolve(null);
         return generateVoice(v.script_text, formData.language, formData.accent, i);
       });
 
-      // --- Poll all animation tasks (parallel with voice) ---
       const animationPromise = (async () => {
         if (animationTasks.length === 0) return [];
         setStatusMessage(`Esperando ${animationTasks.length} clips de animación…`);
@@ -288,10 +406,11 @@ export function useBofPipeline() {
         return Promise.all(pollPromises);
       })();
 
-      // Wait for BOTH animation polling and voice generation to finish
+      setPipelineStep(STEP_VOICE);
+
       const [pollResults, voiceResults] = await Promise.all([animationPromise, Promise.all(voicePromises)]);
 
-      // --- Apply animation results ---
+      // Apply animation results
       for (const result of pollResults) {
         const scene = currentVariants[result.vi].scene_images[result.si];
         if (result.clipUrl) {
@@ -302,89 +421,65 @@ export function useBofPipeline() {
         }
       }
 
-      // === STEP 4: Stitch clips ===
-      setPipelineStep(STEP_STITCH);
-      setStatusMessage("Organizando clips…");
-
+      // Organize clips
       for (let vi = 0; vi < currentVariants.length; vi++) {
         const scenes = currentVariants[vi].scene_images;
         const completedClips = scenes.filter(s => s.clip_status === "completed").map(s => s.clip_url);
         currentVariants[vi].clip_urls = completedClips;
-
         if (completedClips.length > 0) {
-          currentVariants[vi].raw_video_url = completedClips[0]; // First clip as preview
+          currentVariants[vi].raw_video_url = completedClips[0];
           currentVariants[vi].status = "clips_ready";
-        } else if (currentVariants[vi].status === "animating") {
-          currentVariants[vi].status = "image_ready";
         }
       }
       setVariants([...currentVariants]);
 
-      // --- Apply voice results ---
-      setPipelineStep(STEP_VOICE);
-      setStatusMessage("Aplicando locuciones…");
-
+      // Apply voice results
       for (let i = 0; i < currentVariants.length; i++) {
         if (currentVariants[i].status === "failed") continue;
         const voiceUrl = voiceResults[i];
         if (voiceUrl) {
-          currentVariants[i] = { ...currentVariants[i], voice_audio_url: voiceUrl, status: "voice_ready" };
-        } else {
-          currentVariants[i] = { ...currentVariants[i], status: "voice_ready" }; // Voice optional
+          currentVariants[i] = { ...currentVariants[i], voice_audio_url: voiceUrl };
         }
-        setVariants([...currentVariants]);
-
-        await supabase.from("bof_video_variants").update({
-          voice_audio_url: currentVariants[i].voice_audio_url,
-          status: currentVariants[i].status,
-        }).eq("id", currentVariants[i].id);
       }
 
-      // === STEP 6: Merge / Finalize ===
+      // === MERGE: Finalize ===
       setPipelineStep(STEP_MERGE);
-      setStatusMessage("Finalizando…");
+      setStatusMessage("Finalizando videos…");
 
       for (let i = 0; i < currentVariants.length; i++) {
         if (currentVariants[i].status !== "failed") {
-          currentVariants[i] = { ...currentVariants[i], status: "completed" };
+          // The first clip serves as the primary video; voice_audio_url syncs in player
+          currentVariants[i] = {
+            ...currentVariants[i],
+            status: "completed",
+            final_merged_url: currentVariants[i].clip_urls?.[0] || "",
+          };
         }
       }
       setVariants([...currentVariants]);
 
-      await supabase.from("bof_video_batches").update({ status: "completed" }).eq("id", batchData.id);
-      for (const v of currentVariants) {
-        await supabase.from("bof_video_variants").update({
-          status: v.status,
-          raw_video_url: v.raw_video_url,
-        }).eq("id", v.id);
+      // Update DB
+      if (batchId) {
+        await supabase.from("bof_video_batches").update({ status: "completed" }).eq("id", batchId);
+        for (const v of currentVariants) {
+          await supabase.from("bof_video_variants").update({
+            status: v.status,
+            raw_video_url: v.raw_video_url,
+            voice_audio_url: v.voice_audio_url,
+            final_video_url: v.final_merged_url,
+          }).eq("id", v.id);
+        }
       }
 
       setStep("results");
-      toast.success(`${currentVariants.filter(v => v.status === "completed").length} variantes BOF generadas`);
+      toast.success(`${currentVariants.filter(v => v.status === "completed").length} videos BOF generados`);
     } catch (e: any) {
-      console.error("BOF pipeline error:", e);
-      toast.error(e.message || "Error en el pipeline BOF");
-      setStep("input");
+      console.error("BOF pipeline phase 2 error:", e);
+      toast.error(e.message || "Error en fase de animación");
     } finally {
       setIsLoading(false);
     }
-  }, [user, pollClipTask, generateVoice]);
-
-  const handleRegenerateVariant = useCallback(async (index: number) => {
-    toast.info("La regeneración individual estará disponible pronto.");
-  }, []);
-
-  const handleDuplicateStyle = useCallback((index: number) => {
-    const variant = variants[index];
-    if (!variant) return;
-    navigator.clipboard.writeText(JSON.stringify({
-      format_id: variant.format_id,
-      script_text: variant.script_text,
-      visual_prompt: variant.visual_prompt,
-      scene_images: variant.scene_images.map(s => ({ label: s.scene_label, clip_url: s.clip_url })),
-    }, null, 2));
-    toast.success("Estilo copiado al clipboard");
-  }, [variants]);
+  }, [variants, batchId, pollClipTask, generateVoice, buildAnimationPrompt]);
 
   const handleReset = useCallback(() => {
     setStep("input");
@@ -393,11 +488,15 @@ export function useBofPipeline() {
     setIsLoading(false);
     setPipelineStep(0);
     setStatusMessage("");
+    setRegeneratingScenes(new Set());
+    formDataRef.current = null;
+    productImageUrlRef.current = "";
   }, []);
 
   return {
     step, pipelineStep, statusMessage, isLoading, variants,
-    productName, batchId,
-    handleSubmit, handleRegenerateVariant, handleDuplicateStyle, handleReset,
+    productName, batchId, regeneratingScenes,
+    handleSubmit, handleApproveScene, handleRegenerateScene,
+    handleContinueAfterApproval, handleReset,
   };
 }

@@ -1,5 +1,6 @@
-export type BofBatchStatus = "pending" | "generating_scripts" | "generating_scenes" | "generating_images" | "animating_scenes" | "animating_clips" | "stitching_video" | "generating_voice" | "merging_audio_video" | "merging" | "completed" | "failed";
-export type BofVariantStatus = "pending" | "script_ready" | "scenes_ready" | "image_ready" | "animating" | "clips_ready" | "voice_ready" | "completed" | "failed";
+export type BofBatchStatus = "pending" | "generating_scripts" | "generating_scenes" | "generating_images" | "awaiting_approval" | "animating_scenes" | "animating_clips" | "stitching_video" | "generating_voice" | "merging_audio_video" | "merging" | "completed" | "failed";
+export type BofVariantStatus = "pending" | "script_ready" | "scenes_ready" | "image_ready" | "approved" | "animating" | "clips_ready" | "voice_ready" | "completed" | "failed";
+export type BofStep = "input" | "processing" | "approval" | "processing_phase2" | "results";
 
 export interface BofFormData {
   product_name: string;
@@ -39,6 +40,7 @@ export interface BofSceneImage {
   clip_task_id: string;     // KIE task ID for animation
   clip_url: string;         // final animated clip URL
   clip_status: "pending" | "animating" | "completed" | "failed";
+  approved: boolean;        // user approved this scene
 }
 
 export interface BofVariantResult {
@@ -52,6 +54,7 @@ export interface BofVariantResult {
   raw_video_url: string;
   voice_audio_url: string;
   final_video_url: string;
+  final_merged_url: string;  // final video with audio baked in
   status: BofVariantStatus;
   error_message: string;
   // Multi-scene fields
