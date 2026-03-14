@@ -384,6 +384,45 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
             scene.clip_status = "failed";
           }
         }
+
+        // --- Retry failed scenes (the edge function handles KIE→fal.ai fallback) ---
+        const failedScenes = pollResults.filter(r => !r.clipUrl);
+        if (failedScenes.length > 0) {
+          setStatusMessage(`Reintentando ${failedScenes.length} escenas fallidas con proveedor alternativo…`);
+          const retryTasks: { vi: number; si: number; taskId: string }[] = [];
+
+          for (const failed of failedScenes) {
+            const scene = currentVariants[failed.vi].scene_images[failed.si];
+            if (!scene.image_url) continue;
+            try {
+              const motionPrompt = buildAnimationPrompt(currentVariants[failed.vi], failed.si, formData.product_name, formData);
+              const { data: retryData, error: retryErr } = await supabase.functions.invoke("animate-bof-scene", {
+                body: { image_url: scene.image_url, motion_prompt: motionPrompt, scene_index: failed.si },
+              });
+              if (!retryErr && retryData?.taskId) {
+                scene.clip_task_id = retryData.taskId;
+                scene.clip_status = "animating";
+                retryTasks.push({ vi: failed.vi, si: failed.si, taskId: retryData.taskId });
+              }
+            } catch { /* skip */ }
+          }
+
+          if (retryTasks.length > 0) {
+            const retryResults = await Promise.all(
+              retryTasks.map(async (task) => {
+                const clipUrl = await pollClipTask(task.taskId);
+                return { ...task, clipUrl };
+              })
+            );
+            for (const result of retryResults) {
+              const scene = currentVariants[result.vi].scene_images[result.si];
+              if (result.clipUrl) {
+                scene.clip_url = result.clipUrl;
+                scene.clip_status = "completed";
+              }
+            }
+          }
+        }
       }
 
       // Organize clips
