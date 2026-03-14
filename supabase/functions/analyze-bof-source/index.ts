@@ -59,8 +59,74 @@ async function fetchTikTokMetadata(url: string, rapidApiKey: string): Promise<Ti
   }
 }
 
-/* ─── Product page scraping with better headers ─── */
-async function fetchProductPageText(url: string): Promise<string> {
+/* ─── Product page scraping via Firecrawl (renders JS) ─── */
+async function fetchProductPageFirecrawl(url: string, firecrawlKey: string): Promise<string> {
+  try {
+    console.log("Scraping product page via Firecrawl:", url);
+    const resp = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        formats: [
+          "markdown",
+          {
+            type: "json",
+            schema: {
+              type: "object",
+              properties: {
+                product_name: { type: "string" },
+                current_price: { type: "string" },
+                original_price: { type: "string" },
+                description: { type: "string" },
+                rating: { type: "string" },
+                units_sold: { type: "string" },
+                features: { type: "array", items: { type: "string" } },
+              },
+            },
+          },
+        ],
+        waitFor: 3000,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error("Firecrawl error:", resp.status, errText);
+      return "";
+    }
+
+    const data = await resp.json();
+    const parts: string[] = [];
+
+    // Structured JSON extraction (most reliable for prices)
+    const jsonData = data?.data?.json || data?.json;
+    if (jsonData) {
+      parts.push("=== STRUCTURED PRODUCT DATA (Firecrawl) ===\n" + JSON.stringify(jsonData, null, 2));
+    }
+
+    // Markdown content as backup
+    const markdown = data?.data?.markdown || data?.markdown;
+    if (markdown) {
+      parts.push("=== PAGE CONTENT (Markdown) ===\n" + markdown.slice(0, 6000));
+    }
+
+    if (parts.length > 0) {
+      console.log("Firecrawl extraction successful");
+      return parts.join("\n\n");
+    }
+    return "";
+  } catch (e) {
+    console.error("Firecrawl fetch failed:", e);
+    return "";
+  }
+}
+
+/* ─── Fallback: simple fetch for product page ─── */
+async function fetchProductPageFallback(url: string): Promise<string> {
   try {
     const resp = await fetch(url, {
       headers: {
@@ -72,35 +138,6 @@ async function fetchProductPageText(url: string): Promise<string> {
     });
     if (!resp.ok) return "";
     const html = await resp.text();
-
-    // Try to extract JSON-LD structured data first (most reliable)
-    const jsonLdMatches = html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
-    let structuredData = "";
-    if (jsonLdMatches) {
-      for (const match of jsonLdMatches) {
-        const json = match.replace(/<\/?script[^>]*>/gi, "").trim();
-        structuredData += json + "\n";
-      }
-    }
-
-    // Also extract meta tags
-    const metaTags: string[] = [];
-    const metaRegex = /<meta[^>]*(?:name|property|content)=[^>]*>/gi;
-    let m;
-    while ((m = metaRegex.exec(html)) !== null) {
-      const tag = m[0];
-      if (
-        tag.includes("og:") ||
-        tag.includes("product") ||
-        tag.includes("price") ||
-        tag.includes("description") ||
-        tag.includes("title")
-      ) {
-        metaTags.push(tag);
-      }
-    }
-
-    // Fallback: strip HTML to plain text
     const plainText = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
@@ -108,13 +145,7 @@ async function fetchProductPageText(url: string): Promise<string> {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 4000);
-
-    const parts: string[] = [];
-    if (structuredData) parts.push("=== JSON-LD DATA ===\n" + structuredData.slice(0, 3000));
-    if (metaTags.length) parts.push("=== META TAGS ===\n" + metaTags.join("\n").slice(0, 1000));
-    parts.push("=== PAGE TEXT ===\n" + plainText);
-
-    return parts.join("\n\n");
+    return "=== PAGE TEXT (fallback) ===\n" + plainText;
   } catch {
     return "";
   }
