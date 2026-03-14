@@ -1,53 +1,55 @@
 
 
-## Plan: Rediseñar BOF Videos como máquina de videos ganadores
+## Plan: Eliminar timeout + Garantizar audio en videos generados
 
-### Resumen
-Reestructurar el pipeline BOF para que: (1) genere imágenes de escenas primero y las muestre para aprobación/regeneración, (2) después de aprobar, anime con Sora 2 usando prompts ricos y en paralelo genere voz, (3) fusione video + audio automáticamente para entregar un video final con locución incluida y descargable. Eliminar botones de "Duplicar estilo" y "Regenerar" del resultado final.
+### Problema 1: Timeout de 10 minutos mata tareas validas
+La tarea de Kling sigue procesandose en el servidor pero el frontend la marca como "fallida" a los 10 minutos y deja de hacer polling.
 
-### Nuevo flujo del pipeline
+**Solucion:** Eliminar el timeout completamente. El polling continua indefinidamente hasta que KIE devuelva `success` o `fail`. La UI muestra solo el tiempo transcurrido sin limite maximo.
 
-```text
-Scripts → Imágenes de escenas → PAUSA: Aprobación por variante
-                                  ├── Aprobar ✓
-                                  └── Regenerar ↻ (escena individual)
-                                        │
-                                  Usuario aprueba todas
-                                        │
-                                        ▼
-                          Animar escenas (Sora 2) + Voz (ElevenLabs) en paralelo
-                                        │
-                                        ▼
-                          Merge audio + video (por variante) → Video final descargable
-```
+**Archivo:** `src/components/KlingAnimationPanel.tsx`
+- Eliminar la constante `TIMEOUT_MS` y toda la logica de timeout en `pollTask` (lineas 82-94)
+- Cambiar la barra de progreso para que sea una animacion pulsante (indeterminada) en vez de basada en tiempo
+- Cambiar el timer de `"2:30 / 10:00"` a solo `"2:30"` (tiempo transcurrido sin limite)
 
-### Cambios por archivo
+### Problema 2: Videos entregados sin audio
+Kling Motion Control genera video **sin audio** por diseno — solo anima la imagen con el movimiento del video de referencia. El audio del TikTok original se pierde.
+
+**Solucion:** Crear una edge function `merge-audio` que use ffmpeg-wasm para combinar el video de Kling (sin audio) con el audio extraido del video original de TikTok. Cuando el polling detecta que un video esta listo, automaticamente llama a `merge-audio` antes de mostrarlo al usuario.
+
+**Archivos nuevos/modificados:**
 
 | Archivo | Cambio |
 |---|---|
-| `src/hooks/useBofPipeline.ts` | Dividir pipeline en 2 fases: Fase 1 (scripts + imágenes → pausa), Fase 2 (animar + voz + merge). Agregar estado `"approval"` entre `"processing"` y `"results"`. Agregar funciones `handleApproveScene`, `handleRegenerateScene`, `handleContinueAfterApproval`. Eliminar `handleDuplicateStyle` y `handleRegenerateVariant`. |
-| `src/pages/BofVideosPage.tsx` | Agregar paso `"approval"` que muestra un nuevo componente de aprobación de imágenes BOF. |
-| `src/components/bof/BofImageApproval.tsx` | **Nuevo** — Panel de aprobación estilo B-Roll Lab pero para BOF: muestra las 3 escenas por variante con botón aprobar/regenerar. Botón "Continuar" solo activo cuando todas las escenas de todas las variantes están aprobadas. |
-| `src/components/bof/BofResultsView.tsx` | Simplificar: eliminar botones "Regenerar" y "Duplicar estilo". Mostrar solo video final (no clips sueltos ni audio separado). Agregar botón de descarga prominente. |
-| `src/components/bof/BofPipeline.tsx` | Actualizar pasos del pipeline: Scripts → Imágenes → Aprobación → Animación → Voz → Merge → Listo. |
-| `src/lib/bof_types.ts` | Agregar `"approval"` a `BofStep`. Agregar campo `final_merged_url` a `BofVariantResult`. |
+| `src/components/KlingAnimationPanel.tsx` | Eliminar timeout, cambiar progreso a indeterminado, agregar paso de merge post-completado |
+| `supabase/functions/merge-audio/index.ts` | **Nuevo** — Descarga video Kling + video original, extrae audio del original, los combina con ffmpeg-wasm, sube resultado a storage |
+| `supabase/config.toml` | Agregar entrada para `merge-audio` |
 
-### Detalle técnico del merge automático
+### Flujo actualizado post-Kling
+```text
+Kling completa video (sin audio)
+        │
+        ▼
+Estado UI: "Agregando audio del video original..."
+        │
+        ▼
+Edge function merge-audio:
+  1. Descarga video Kling (solo video)
+  2. Descarga video TikTok original (tiene audio)
+  3. ffmpeg: combina video de Kling + audio de TikTok
+  4. Sube MP4 final a storage
+  5. Devuelve URL publica
+        │
+        ▼
+UI muestra video final CON audio
+```
 
-Después de que el polling confirma que los 3 clips de Sora 2 están listos y la voz de ElevenLabs se generó:
-1. Subir audio MP3 al storage
-2. Tomar el primer clip completado como video base
-3. Llamar a la edge function `merge-audio` existente (o una variante que acepte video_url + audio_url) para combinar video Sora + audio ElevenLabs
-4. El resultado es un MP4 final con locución incluida → `final_merged_url`
-5. Ese URL es lo que se muestra y se descarga
+### Detalle tecnico de merge-audio
+- Usa `@ffmpeg/ffmpeg` (version WASM que corre en Deno edge functions)
+- Comando equivalente: `ffmpeg -i kling.mp4 -i tiktok.mp4 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output.mp4`
+- Solo remuxea (no re-encoda video), por lo que es rapido
+- Si el audio es mas largo que el video, se corta al largo del video (`-shortest`)
 
-### Prompts de animación enriquecidos
-
-En lugar de 3 prompts genéricos, los prompts de Sora 2 se construirán usando:
-- El `script_text` de la variante (para contexto de lo que se está vendiendo)
-- El `scene_label` del formato (para el tipo de toma)
-- Las `camera_rules` del formato
-- El `product_name` y `main_benefit`
-
-Esto genera videos más realistas y orientados a venta.
+### Estado de la UI durante merge
+Se agrega un nuevo `detailState`: `"merging_audio"` con label `"Agregando audio..."` para que el usuario sepa que falta un paso despues de que Kling termine.
 
