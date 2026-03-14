@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import StaticVariants from "./pages/StaticVariants";
 import BofVideosPage from "./pages/BofVideosPage";
 import BrollLabPage from "./pages/BrollLabPage";
+import BrollLab2Page from "./pages/BrollLab2Page";
 import BrandSystemPage from "./pages/BrandSystemPage";
 import AssetsPage from "./pages/AssetsPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -39,6 +40,7 @@ const AppRoutes = () => (
     <Route path="/create/static" element={<AppLayout><StaticVariants /></AppLayout>} />
     <Route path="/create/bof" element={<AppLayout><BofVideosPage /></AppLayout>} />
     <Route path="/create/broll-lab" element={<AppLayout><BrollLabPage /></AppLayout>} />
+    <Route path="/create/broll-lab-2" element={<AppLayout><BrollLab2Page /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
     <Route path="/library/assets" element={<AppLayout><AssetsPage /></AppLayout>} />
     <Route path="/library/history" element={<AppLayout><HistoryPage /></AppLayout>} />

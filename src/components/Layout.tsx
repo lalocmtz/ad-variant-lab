@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut, ShoppingBag, FlaskConical } from "lucide-react";
+import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut, ShoppingBag, FlaskConical, FlaskRound } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +23,7 @@ const createItems = [
   { title: "BOF Videos", url: "/create/bof", icon: ShoppingBag },
   { title: "Static Variants", url: "/create/static", icon: Image },
   { title: "B-Roll Lab", url: "/create/broll-lab", icon: FlaskConical },
+  { title: "B-Roll Lab 2.0", url: "/create/broll-lab-2", icon: FlaskRound },
 ];
 
 const libraryItems = [
