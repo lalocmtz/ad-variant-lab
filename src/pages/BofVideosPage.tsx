@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import BofInputForm from "@/components/bof/BofInputForm";
 import BofPipeline from "@/components/bof/BofPipeline";
@@ -6,12 +8,21 @@ import BofResultsView from "@/components/bof/BofResultsView";
 import { useBofPipeline } from "@/hooks/useBofPipeline";
 
 export default function BofVideosPage() {
+  const [searchParams] = useSearchParams();
   const {
     step, pipelineStep, statusMessage, isLoading, variants,
     productName, regeneratingScenes,
     handleSubmit, handleApproveScene, handleRegenerateScene,
-    handleContinueAfterApproval, handleReset,
+    handleContinueAfterApproval, handleReset, loadFromHistory,
   } = useBofPipeline();
+
+  // Resume from history via ?resume=<batchId>
+  useEffect(() => {
+    const resumeId = searchParams.get("resume");
+    if (resumeId && step === "input") {
+      loadFromHistory(resumeId);
+    }
+  }, [searchParams, step, loadFromHistory]);
 
   return (
     <div className="bg-background">

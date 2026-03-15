@@ -504,10 +504,89 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
     productImageUrlRef.current = "";
   }, []);
 
+  // ═══════════════════════════════════
+  // LOAD FROM HISTORY (Resume approval)
+  // ═══════════════════════════════════
+  const loadFromHistory = useCallback(async (historyBatchId: string) => {
+    if (!user) return;
+    setIsLoading(true);
+    setStatusMessage("Restaurando proyecto…");
+
+    try {
+      const [{ data: batch, error: batchErr }, { data: variantRows, error: varErr }] = await Promise.all([
+        supabase.from("bof_video_batches").select("*").eq("id", historyBatchId).single(),
+        supabase.from("bof_video_variants").select("*").eq("batch_id", historyBatchId),
+      ]);
+
+      if (batchErr || !batch) throw new Error("No se encontró el proyecto");
+      if (varErr) throw new Error("Error cargando variantes");
+
+      const batchData = batch as any;
+      setBatchId(batchData.id);
+      setProductName(batchData.product_name);
+      productImageUrlRef.current = batchData.product_image_url;
+
+      // Reconstruct formData from metadata
+      const meta = batchData.metadata_json || {};
+      formDataRef.current = {
+        product_name: batchData.product_name,
+        product_image: null,
+        current_price: meta.current_price || "",
+        old_price: meta.old_price || "",
+        main_benefit: meta.main_benefit || "",
+        offer: meta.offer || "",
+        pain_point: meta.pain_point || "",
+        audience: meta.audience || "",
+        variants_count: (variantRows || []).length,
+        selected_formats: batchData.selected_formats || [],
+        language: meta.language || "es-MX",
+        accent: meta.accent || "mexicano",
+      };
+
+      // Build variant results from DB rows
+      const restoredVariants: BofVariantResult[] = (variantRows || []).map((v: any) => ({
+        id: v.id,
+        batch_id: v.batch_id,
+        format_id: v.format_id,
+        format_name: getFormatById(v.format_id)?.format_name || v.format_id,
+        script_text: v.script_text || "",
+        visual_prompt: v.visual_prompt || "",
+        generated_image_url: v.generated_image_url || "",
+        raw_video_url: v.raw_video_url || "",
+        voice_audio_url: v.voice_audio_url || "",
+        final_video_url: v.final_video_url || "",
+        final_merged_url: v.final_video_url || "",
+        status: v.generated_image_url ? "image_ready" as const : "script_ready" as const,
+        error_message: v.error_message || "",
+        scene_images: v.generated_image_url ? [{
+          scene_index: 0,
+          scene_label: "Escena principal",
+          image_url: v.generated_image_url,
+          public_url: v.generated_image_url,
+          clip_task_id: "",
+          clip_url: v.raw_video_url || "",
+          clip_status: (v.raw_video_url ? "completed" : "pending") as "completed" | "pending",
+          approved: true,
+        }] : [],
+        clip_urls: v.raw_video_url ? [v.raw_video_url] : [],
+      }));
+
+      setVariants(restoredVariants);
+      setStep("approval");
+      toast.success("Proyecto restaurado — revisa y aprueba las imágenes");
+    } catch (e: any) {
+      console.error("loadFromHistory error:", e);
+      toast.error(e.message || "Error restaurando proyecto");
+      setStep("input");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
   return {
     step, pipelineStep, statusMessage, isLoading, variants,
     productName, batchId, regeneratingScenes,
     handleSubmit, handleApproveScene, handleRegenerateScene,
-    handleContinueAfterApproval, handleReset,
+    handleContinueAfterApproval, handleReset, loadFromHistory,
   };
 }
