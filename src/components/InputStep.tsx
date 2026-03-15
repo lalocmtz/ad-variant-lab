@@ -17,6 +17,8 @@ interface InputStepProps {
     language: string;
     accent: string;
     diversity_intensity: string;
+    tiktok_compliance?: boolean;
+    additional_images?: File[];
   }) => void;
 }
 
