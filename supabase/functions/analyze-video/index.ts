@@ -88,9 +88,9 @@ For each variant, generate an animation_prompt_json object containing:
 - sujeto_principal (tipo_persona, edad_aproximada, genero, apariencia_general, energia, estilo_comunicacion, contexto_de_mercado, rol_del_creador, perfil_de_confianza)
 - guion_original_completo
 - estructura_del_guion (hook, contexto, demostracion, beneficio, manejo_objecion, cta)
-- guion_variante_para_esta_imagen (hook, body, cta, guion_completo — compressed for 15s)
+- guion_variante_para_esta_imagen (hook, body, cta, guion_completo — compressed for 9s)
 - instrucciones_para_recrear_el_video (objetivo, ritmo_actuacion, estilo_entrega, energia, pace, delivery_style, facial_expression, gesture_style)
-- linea_de_tiempo_15s (5 segments covering 0.0-15.0 seconds with marca_de_tiempo, accion_fisica, gestos, expresion, guion_hablado, objetivo_persuasivo, prompt_de_animacion)
+- linea_de_tiempo_9s (5 segments covering 0.0-9.0 seconds with marca_de_tiempo, accion_fisica, gestos, expresion, guion_hablado, objetivo_persuasivo, prompt_de_animacion)
 - plantilla_replicable_del_anuncio (descripcion_estructura, patron_creativo, por_que_funciona)
 - restricciones_de_generacion (all boolean flags for product lock, mechanics, no text, 15s duration, etc.)
 
