@@ -16,6 +16,32 @@ import type { BrollResults, BrollVariant } from "@/components/BrollResultsView";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
+// Re-export types from canonical location for backward compatibility
+export type {
+  AppStep,
+  SceneGeometry,
+  ActorVisualDirection,
+  ScriptVariant,
+  HeygenReadyBrief,
+  SimilarityCheckResult,
+  AnimationPromptPackage,
+  WinnerBlueprint,
+  VariantStatus,
+  VideoGenerationStatus,
+  VariantResult,
+  AnalysisResult,
+} from "@/lib/videoVariantTypes";
+
+import type {
+  AppStep,
+  VariantResult,
+  VariantStatus,
+  VideoGenerationStatus,
+  WinnerBlueprint,
+  AnimationPromptPackage,
+  AnalysisResult,
+} from "@/lib/videoVariantTypes";
+
 export type AppStep = "input" | "downloading" | "preview" | "classifying" | "mode_select" | "broll_config" | "broll_processing" | "broll_results" | "processing" | "results";
 
 export interface SceneGeometry {
