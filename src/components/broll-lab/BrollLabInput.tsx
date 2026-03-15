@@ -226,6 +226,18 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
         </CardContent>
       </Card>
 
+      {/* Product Lock Toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 p-4">
+        <div className="flex items-center gap-3">
+          <Lock className="h-5 w-5 text-primary" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Respetar producto exacto</p>
+            <p className="text-xs text-muted-foreground">La imagen del producto es la verdad absoluta. Si la escena cambia color, forma, empaque o branding, se rechaza automáticamente.</p>
+          </div>
+        </div>
+        <Switch checked={productLock} onCheckedChange={setProductLock} />
+      </div>
+
       {/* TikTok Compliance Toggle */}
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-3">
