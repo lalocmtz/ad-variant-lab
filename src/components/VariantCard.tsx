@@ -250,6 +250,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
             language: language || "es-MX",
             accent: accent || "mexicano",
             provider_order: ["sora", "fal", "kling"],
+            user_id: user?.id,
           },
         });
 

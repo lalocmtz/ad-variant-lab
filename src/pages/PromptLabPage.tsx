@@ -110,21 +110,21 @@ const PromptLabPage = () => {
 
       // Master recreation prompt
       allPrompts.push(
-        buildPrompt(jobId, "prompt_lab" as any, "master_recreation_prompt" as any, {
+        buildPrompt(jobId, "prompt_lab", "master_recreation_prompt", {
           prompt_text: bd.master_prompt,
         }, "Gemini")
       );
 
       // Scene extraction prompt
       allPrompts.push(
-        buildPrompt(jobId, "prompt_lab" as any, "scene_extraction_prompt" as any, {
+        buildPrompt(jobId, "prompt_lab", "scene_extraction_prompt", {
           prompt_text: bd.scene_prompts?.join("\n\n") || "",
         }, "Gemini")
       );
 
       // Breakdown prompt (raw analysis)
       allPrompts.push(
-        buildPrompt(jobId, "prompt_lab" as any, "breakdown_prompt" as any, {
+        buildPrompt(jobId, "prompt_lab", "breakdown_prompt", {
           prompt_text: JSON.stringify(analysis, null, 2).slice(0, 2000),
         }, "Gemini")
       );
