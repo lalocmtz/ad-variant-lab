@@ -43,7 +43,7 @@ FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO — CUMPLIR AL 100%):
 
     const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine for 15-Second Reconstruction.
 
-Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different actor in EXACTLY 15 SECONDS.
+Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different actor in EXACTLY 9 SECONDS.
 ${compressionNote}
 
 The analysis must capture BOTH:
