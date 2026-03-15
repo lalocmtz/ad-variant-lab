@@ -351,6 +351,22 @@ const Index = () => {
         productImageUrl = pubUrl.publicUrl;
       }
 
+      // Upload additional images
+      const additionalImageUrls: string[] = [];
+      if (formData.additional_images && formData.additional_images.length > 0) {
+        for (const addImg of formData.additional_images.slice(0, 3)) {
+          const addExt = addImg.name.split(".").pop() || "png";
+          const addFileName = `additional_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${addExt}`;
+          const { error: addUploadErr } = await supabase.storage
+            .from("videos")
+            .upload(addFileName, addImg, { contentType: addImg.type });
+          if (!addUploadErr) {
+            const { data: addPubUrl } = supabase.storage.from("videos").getPublicUrl(addFileName);
+            additionalImageUrls.push(addPubUrl.publicUrl);
+          }
+        }
+      }
+
       setDownloadedData({
         video_url: downloadData.video_url,
         cover_url: downloadData.cover_url || "",
@@ -362,6 +378,8 @@ const Index = () => {
         language: formData.language,
         accent: formData.accent,
         diversity_intensity: formData.diversity_intensity,
+        tiktok_compliance: formData.tiktok_compliance,
+        additional_image_urls: additionalImageUrls,
       });
       setStep("preview");
     } catch (e) {
