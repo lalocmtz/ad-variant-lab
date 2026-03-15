@@ -83,6 +83,16 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
       additionalImageUrls: additionalUrls,
     });
   };
+
+  const canSubmit = inputs.tiktokUrl1.trim() !== "" && inputs.productImageUrl !== "";
+
+  return (
+    <div className="space-y-6">
+      {/* TikTok URLs */}
+      <Card className="border-border/60 bg-card/80">
+        <CardContent className="pt-5 space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Link className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium text-foreground">Videos de referencia TikTok</span>
           </div>
 
