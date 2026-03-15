@@ -32,6 +32,9 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
   const [language, setLanguage] = useState("es-MX");
   const [accent, setAccent] = useState("mexicano");
   const [autofillFields, setAutofillFields] = useState<Set<string>>(new Set());
+  const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
