@@ -177,7 +177,7 @@ const PromptLabPage = () => {
       </div>
 
       {/* Input */}
-      {(step === "input" || step === "results") && (
+      {step !== "analyzing" && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">URL del video *</label>
@@ -185,7 +185,6 @@ const PromptLabPage = () => {
               value={videoUrl}
               onChange={e => setVideoUrl(e.target.value)}
               placeholder="https://www.tiktok.com/@user/video/..."
-              disabled={step === "analyzing"}
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
