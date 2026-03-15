@@ -27,6 +27,24 @@ serve(async (req) => {
 
 This must look indistinguishable from a real smartphone video frame.
 
+============================
+ABSOLUTE PRIORITY ORDER
+============================
+1. EXACT PRODUCT IDENTITY LOCK — the product must be pixel-accurate to the reference
+2. PRODUCT SILHOUETTE CONSISTENCY — same outline, same shape, same proportions
+3. PRODUCT PACKAGING / BRANDING CONSISTENCY — same labels, logos, text, colors
+4. PRODUCT COLOR / MATERIAL CONSISTENCY — same color palette, same materials
+5. SCENE REALISM — UGC smartphone quality
+6. UGC FRAMING — casual, imperfect, authentic
+
+The uploaded product image is the SINGLE SOURCE OF TRUTH.
+Do NOT reinterpret the product.
+Do NOT redesign the product.
+Do NOT simplify the product.
+Do NOT approximate the product.
+Match the EXACT silhouette, proportions, packaging geometry, color palette, label layout, and visible branding.
+If you cannot match the product exactly, generate a scene where the product is MORE visible and accurate rather than less.
+
 SCENE CONTEXT:
 ${image_prompt}
 
