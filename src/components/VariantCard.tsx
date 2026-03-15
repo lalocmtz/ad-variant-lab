@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
+import ExecutionTimeline from "@/components/debug/ExecutionTimeline";
+
+const USE_ORCHESTRATOR = import.meta.env.VITE_USE_VIDEO_ORCHESTRATOR === "true";
 
 interface VariantCardProps {
   variant: VariantResult;
