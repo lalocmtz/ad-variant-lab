@@ -381,8 +381,13 @@ serve(async (req) => {
       // Keep product reference as URL to avoid multi-megabyte base64 payloads that can break image generation.
       content.push({ type: "image_url", image_url: { url: product_image_url } });
     }
+    if (Array.isArray(additional_image_urls)) {
+      for (const imgUrl of additional_image_urls.slice(0, 3)) {
+        content.push({ type: "text", text: "Additional product reference — use for size, texture, and appearance context:" });
+        content.push({ type: "image_url", image_url: { url: imgUrl } });
+      }
+    }
 
-    console.log("Generating variant image:", {
       variantIndex: variant_index,
       totalVariants: total_variants,
       videoMode: mode,
