@@ -1,9 +1,11 @@
-import { useState, useCallback } from "react";
-import { Loader2, Play, Upload, AlertCircle, RotateCcw } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Loader2, Play, RotateCcw, ChevronDown, ChevronUp, Download, AlertCircle, Sparkles, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,90 +17,187 @@ import { saveDraft, clearDraft } from "@/lib/promptDraftStore";
 import { createHistoryRecord, updateHistoryRecord } from "@/lib/historyService";
 import type { GenerationPrompt } from "@/lib/promptTypes";
 
-type ArcadeStep = "input" | "generating_script" | "review_prompts" | "generating_video" | "done";
+type ArcadePhase = "idle" | "preparing" | "generating" | "polling" | "done" | "error";
 
 const UGC_DEFAULTS = {
-  style: "handheld, realistic UGC feel, natural speech, micro-imperfections, shot variation, believable product handling",
+  style: "handheld, realistic UGC feel, natural speech, micro-imperfections, shot variation, believable product handling, vertical 9:16, smartphone aesthetic, natural lighting, casual tone",
 };
+
+const LANGUAGES = [
+  { value: "es-MX", label: "Español (MX)" },
+  { value: "es-US", label: "Español (US)" },
+  { value: "es-CO", label: "Español (CO)" },
+  { value: "en-US", label: "English (US)" },
+];
 
 const UgcArcadePage = () => {
   const { user } = useAuth();
-  const [step, setStep] = useState<ArcadeStep>("input");
+
+  // ── Inputs ──
   const [sourceImageUrl, setSourceImageUrl] = useState("");
-  const [instruction, setInstruction] = useState("");
   const [productImageUrl, setProductImageUrl] = useState("");
+  const [instruction, setInstruction] = useState("");
   const [language, setLanguage] = useState("es-MX");
   const [providerPref, setProviderPref] = useState("");
   const [notes, setNotes] = useState("");
-  const [prompts, setPrompts] = useState<GenerationPrompt[]>([]);
-  const [generatedScript, setGeneratedScript] = useState("");
-  const [generatedShotlist, setGeneratedShotlist] = useState("");
-  const [finalVideoPrompt, setFinalVideoPrompt] = useState("");
-  const [videoResult, setVideoResult] = useState<{ url?: string; provider?: string; taskId?: string; status?: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [jobId] = useState(() => `ugc_${Date.now()}`);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // ── State ──
+  const [phase, setPhase] = useState<ArcadePhase>("idle");
+  const [prompts, setPrompts] = useState<GenerationPrompt[]>([]);
+  const [videoResult, setVideoResult] = useState<{ url?: string; provider?: string; taskId?: string; status?: string } | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [jobId, setJobId] = useState(() => `ugc_${Date.now()}`);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollFailCount = useRef(0);
+
+  // ── Cleanup polling on unmount ──
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // ── Build prompt chain from simple instruction ──
   const buildPromptChain = useCallback(() => {
-    const scriptPromptText = `You are a UGC script writer. Given the following instruction, write a short, authentic UGC-style script for a video ad.
+    const scriptPrompt = `You are a UGC script writer. Given the following instruction, write a short, authentic UGC-style script for a video ad.
 
 Style: ${UGC_DEFAULTS.style}
 Language: ${language}
-${notes ? `Notes: ${notes}` : ""}
+${notes ? `Additional context: ${notes}` : ""}
+${productImageUrl ? "A product image is provided — the script must include natural product handling/demonstration moments." : ""}
 
-Instruction: "${instruction}"
+User instruction: "${instruction}"
 
-Write the script with a hook (0-3s), body (3-10s), and CTA (10-15s). Keep it natural and conversational.`;
+Write the script with:
+- Hook (0-1.5s): Attention-grabbing opening
+- Body (1.5-6.5s): Authentic demonstration/recommendation
+- CTA (6.5-9s): Natural call-to-action
 
-    const shotlistPromptText = `Given the following UGC script, create a detailed shot list for video generation.
+Keep it conversational, imperfect, and believable. No polished ad language.`;
+
+    const shotlistPrompt = `Given the following UGC script, create a detailed shot list for a 9-second vertical video.
 
 Style: ${UGC_DEFAULTS.style}
-Source image context: Product/person shown in the provided image.
+The source image shows the person/creator who will appear in the video.
+${productImageUrl ? "A product image is provided — include close-ups and handling shots of the exact product shown." : ""}
 
 Script:
 {script}
 
-Create 3-5 shots with: shot description, camera angle, duration, and mood.`;
+Create 3-5 shots with: shot description, camera movement (handheld micro-shakes, natural drift), duration, and mood. 
+Ensure visual continuity with the source image.
+NO cinematic movements. NO dramatic zooms. Smartphone-only aesthetics.`;
 
-    const videoPromptText = `Create a UGC-style video based on the following shot list.
+    const videoPrompt = `Create a UGC-style vertical video based on the following shot list.
 
 Style: ${UGC_DEFAULTS.style}
-${productImageUrl ? "Product image is provided as reference." : ""}
+The source image is the visual reference for the person/creator — preserve their identity and appearance.
+${productImageUrl ? "The product image shows the exact product — preserve its appearance, color, texture, and packaging in all product shots." : ""}
 
 Shot list:
 {shotlist}
 
-Generate a realistic, handheld-feel video that looks authentic and not over-produced.`;
+CRITICAL RULES:
+- Handheld camera with micro-shakes and natural drift
+- Natural auto-focus adjustments
+- NO cinematic movements, NO dramatic zooms, NO robotic transitions
+- Must look like it was filmed on a smartphone by a real content creator
+- Product must be clearly visible and accurately represented when shown`;
 
     const allPrompts: GenerationPrompt[] = [
-      buildPrompt(jobId, "ugc_arcade", "instruction_to_script_prompt", { prompt_text: scriptPromptText }, "Gemini"),
-      buildPrompt(jobId, "ugc_arcade", "script_to_shotlist_prompt", { prompt_text: shotlistPromptText }, "Gemini"),
-      buildPrompt(jobId, "ugc_arcade", "shotlist_to_video_prompt", { prompt_text: videoPromptText }, "Sora/Orchestrator"),
+      buildPrompt(jobId, "ugc_arcade", "instruction_to_script_prompt", { prompt_text: scriptPrompt }, "Gemini"),
+      buildPrompt(jobId, "ugc_arcade", "script_to_shotlist_prompt", { prompt_text: shotlistPrompt }, "Gemini"),
+      buildPrompt(jobId, "ugc_arcade", "shotlist_to_video_prompt", { prompt_text: videoPrompt }, "Sora/Orchestrator"),
     ];
 
     setPrompts(allPrompts);
     return allPrompts;
   }, [instruction, language, notes, productImageUrl, jobId]);
 
-  const startGeneration = useCallback(async () => {
+  // ── Polling for queued videos ──
+  const startPolling = useCallback((taskId: string, provider: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollFailCount.current = 0;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("get-video-task", {
+          body: { task_id: taskId, provider },
+        });
+
+        if (error) {
+          pollFailCount.current++;
+          if (pollFailCount.current >= 5) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setErrorMsg("Polling falló después de 5 intentos. Revisa el historial.");
+            setPhase("error");
+          }
+          return;
+        }
+
+        const status = data?.status;
+        const videoUrl = data?.videoUrl || data?.video_url;
+
+        if (status === "completed" && videoUrl) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setVideoResult(prev => ({ ...prev, url: videoUrl, status: "completed" }));
+          setPhase("done");
+          setRefreshTrigger(t => t + 1);
+          toast.success("¡Video listo!");
+          await updateHistoryRecord(jobId, {
+            status: "completed",
+            output_summary_json: { video_url: videoUrl, task_id: taskId, provider },
+          });
+        } else if (status === "failed" || data?.shouldStopPolling) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setErrorMsg(data?.error || "El proveedor reportó un fallo.");
+          setPhase("error");
+          setRefreshTrigger(t => t + 1);
+          await updateHistoryRecord(jobId, { status: "failed", error_summary: data?.error });
+        } else {
+          setVideoResult(prev => ({ ...prev, status: status || "processing" }));
+        }
+      } catch {
+        pollFailCount.current++;
+        if (pollFailCount.current >= 5) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setPhase("error");
+          setErrorMsg("Error de red durante polling.");
+        }
+      }
+    }, 8000);
+  }, [jobId]);
+
+  // ── Main generate action: auto-build prompts + generate video ──
+  const handleGenerate = useCallback(async () => {
     if (!sourceImageUrl.trim() || !instruction.trim()) {
-      toast.error("Imagen y instrucción son requeridos");
+      toast.error("Imagen fuente e instrucción son requeridos");
       return;
     }
 
-    setError(null);
-    const chain = buildPromptChain();
-    setStep("review_prompts");
+    setErrorMsg(null);
+    setVideoResult(null);
+    setPhase("preparing");
 
-    // Write history record
+    // 1. Auto-build prompts
+    const chain = buildPromptChain();
+
+    // 2. Create history record
     if (user) {
       await createHistoryRecord({
         user_id: user.id,
         job_id: jobId,
         module: "ugc_arcade",
         title: `UGC — ${instruction.substring(0, 60)}`,
-        status: "pending",
-        current_step: "review_prompts",
+        status: "running",
+        current_step: "generating_video",
         source_route: "/create/ugc-arcade",
         preview_url: sourceImageUrl,
         input_summary_json: {
@@ -112,21 +211,12 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
       });
     }
 
-    toast.success("Prompts generados. Revisa y edita antes de generar video.");
-  }, [sourceImageUrl, instruction, buildPromptChain, user, jobId, productImageUrl, language, notes]);
-
-  const generateVideo = useCallback(async () => {
-    setStep("generating_video");
-    setError(null);
-
-    await updateHistoryRecord(jobId, {
-      status: "running",
-      current_step: "generating_video",
-    });
+    // 3. Go straight to video generation
+    setPhase("generating");
 
     try {
-      const videoPrompt = prompts.find(p => p.stage === "shotlist_to_video_prompt");
-      const effectivePrompt = videoPrompt?.effectivePrompt || finalVideoPrompt || "UGC style video";
+      const videoPrompt = chain.find(p => p.stage === "shotlist_to_video_prompt");
+      const effectivePrompt = videoPrompt?.effectivePrompt || "UGC style video";
 
       const { data, error: fnErr } = await supabase.functions.invoke("generate-video-orchestrator", {
         body: {
@@ -141,21 +231,22 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
           mode: "ugc",
           preferred_provider: providerPref || null,
           provider_order: providerPref ? [providerPref, "sora", "fal", "kling"] : ["sora", "fal", "kling"],
-          metadata: { instruction, language, notes },
+          metadata: { instruction, language, notes, product_image_url: productImageUrl },
           user_id: user?.id,
         },
       });
 
       if (fnErr) throw new Error(fnErr.message);
 
-      setVideoResult({
+      const result = {
         url: data?.video_url || null,
         provider: data?.provider_used || null,
         taskId: data?.taskId || null,
         status: data?.status || "unknown",
-      });
-      setRefreshTrigger(prev => prev + 1);
-      setStep("done");
+      };
+
+      setVideoResult(result);
+      setRefreshTrigger(t => t + 1);
 
       await updateHistoryRecord(jobId, {
         status: data?.video_url ? "completed" : "queued",
@@ -168,18 +259,22 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
         },
       });
 
-      if (data?.status === "queued") {
-        toast.info(`Video en cola con ${data.provider_used}. Task ID: ${data.taskId}`);
-      } else if (data?.video_url) {
+      if (data?.video_url) {
+        setPhase("done");
         toast.success(`Video generado con ${data.provider_used}`);
+      } else if (data?.taskId) {
+        setPhase("polling");
+        toast.info(`Video en cola con ${data.provider_used}. Esperando resultado...`);
+        startPolling(data.taskId, data.provider_used);
       } else {
-        toast.warning("Generación completada pero sin URL de video");
+        setPhase("done");
+        toast.warning("Generación completada sin URL de video");
       }
     } catch (err: any) {
       console.error("UGC Arcade generation error:", err);
-      setError(err.message || "Error generando video");
-      setRefreshTrigger(prev => prev + 1);
-      setStep("review_prompts");
+      setErrorMsg(err.message || "Error generando video");
+      setPhase("error");
+      setRefreshTrigger(t => t + 1);
       toast.error("Error en la generación");
 
       await updateHistoryRecord(jobId, {
@@ -188,7 +283,90 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
         current_step: "generating_video",
       });
     }
-  }, [prompts, finalVideoPrompt, sourceImageUrl, jobId, providerPref, instruction, language, notes, user]);
+  }, [sourceImageUrl, instruction, buildPromptChain, user, jobId, productImageUrl, language, notes, providerPref, startPolling]);
+
+  // ── Regenerate with edited prompts ──
+  const handleRegenerate = useCallback(async () => {
+    setPhase("generating");
+    setErrorMsg(null);
+    setVideoResult(null);
+
+    const newJobId = `ugc_${Date.now()}`;
+    setJobId(newJobId);
+
+    try {
+      const videoPrompt = prompts.find(p => p.stage === "shotlist_to_video_prompt");
+      const effectivePrompt = videoPrompt?.effectivePrompt || "UGC style video";
+
+      if (user) {
+        await createHistoryRecord({
+          user_id: user.id,
+          job_id: newJobId,
+          module: "ugc_arcade",
+          title: `UGC (retry) — ${instruction.substring(0, 50)}`,
+          status: "running",
+          current_step: "generating_video",
+          source_route: "/create/ugc-arcade",
+          preview_url: sourceImageUrl,
+          input_summary_json: {
+            source_image_url: sourceImageUrl,
+            product_image_url: productImageUrl,
+            instruction,
+            language,
+            notes,
+          },
+        });
+      }
+
+      const { data, error: fnErr } = await supabase.functions.invoke("generate-video-orchestrator", {
+        body: {
+          job_id: newJobId,
+          module: "ugc_arcade",
+          stage: "shotlist_to_video_prompt",
+          effective_prompt: effectivePrompt,
+          image_url: sourceImageUrl.trim(),
+          reference_video_url: null,
+          duration: 9,
+          aspect_ratio: "9:16",
+          mode: "ugc",
+          preferred_provider: providerPref || null,
+          provider_order: providerPref ? [providerPref, "sora", "fal", "kling"] : ["sora", "fal", "kling"],
+          metadata: { instruction, language, notes, product_image_url: productImageUrl },
+          user_id: user?.id,
+        },
+      });
+
+      if (fnErr) throw new Error(fnErr.message);
+
+      setVideoResult({
+        url: data?.video_url || null,
+        provider: data?.provider_used || null,
+        taskId: data?.taskId || null,
+        status: data?.status || "unknown",
+      });
+      setRefreshTrigger(t => t + 1);
+
+      if (data?.video_url) {
+        setPhase("done");
+        toast.success(`Video regenerado con ${data.provider_used}`);
+      } else if (data?.taskId) {
+        setPhase("polling");
+        startPolling(data.taskId, data.provider_used);
+      } else {
+        setPhase("done");
+      }
+
+      await updateHistoryRecord(newJobId, {
+        status: data?.video_url ? "completed" : "queued",
+        provider_used: data?.provider_used,
+        output_summary_json: { video_url: data?.video_url, task_id: data?.taskId, provider: data?.provider_used },
+      });
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error regenerando video");
+      setPhase("error");
+      setRefreshTrigger(t => t + 1);
+    }
+  }, [prompts, sourceImageUrl, instruction, language, notes, productImageUrl, providerPref, user, startPolling]);
 
   const handlePromptChange = useCallback((promptId: string, newText: string) => {
     setPrompts(prev => prev.map(p => {
@@ -207,152 +385,253 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
     }));
   }, []);
 
-  const reset = useCallback(() => {
-    setStep("input");
+  const handleReset = useCallback(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    setPhase("idle");
     setPrompts([]);
     setVideoResult(null);
-    setError(null);
-    setGeneratedScript("");
-    setGeneratedShotlist("");
-    setFinalVideoPrompt("");
+    setErrorMsg(null);
+    setJobId(`ugc_${Date.now()}`);
+    setSourceImageUrl("");
+    setProductImageUrl("");
+    setInstruction("");
+    setNotes("");
   }, []);
 
+  const handleDownload = useCallback(async () => {
+    if (!videoResult?.url) return;
+    try {
+      const res = await fetch(videoResult.url);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `ugc_${jobId}.mp4`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Error descargando video");
+    }
+  }, [videoResult, jobId]);
+
+  const isGenerating = phase === "preparing" || phase === "generating" || phase === "polling";
+  const canGenerate = sourceImageUrl.trim().length > 0 && instruction.trim().length > 0 && !isGenerating;
+  const hasResult = phase === "done" || phase === "error" || phase === "polling";
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">UGC Arcade</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Imagen + instrucción simple → video UGC via orquestador con fallback automático.
+          Sube una imagen, escribe una instrucción simple y genera un video UGC realista.
         </p>
       </div>
 
-      {/* Input Panel */}
-      {(step === "input" || step === "review_prompts" || step === "done") && (
-        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-foreground">Inputs</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <ImageUploadField
-              label="Imagen fuente"
-              value={sourceImageUrl}
-              onChange={setSourceImageUrl}
-              required
-              prefix="ugc_source"
-            />
-            <ImageUploadField
-              label="Imagen de producto"
-              value={productImageUrl}
-              onChange={setProductImageUrl}
-              prefix="ugc_product"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Instrucción *</label>
-            <Textarea
-              value={instruction}
-              onChange={e => setInstruction(e.target.value)}
-              placeholder="Ej: Muestra a una chica aplicando el sérum en su cara frente al espejo, reacción natural de sorpresa al ver los resultados"
-              className="min-h-[80px]"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Idioma</label>
-              <Input value={language} onChange={e => setLanguage(e.target.value)} placeholder="es-MX" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Provider preferido</label>
-              <Input value={providerPref} onChange={e => setProviderPref(e.target.value)} placeholder="sora, fal, kling (vacío = auto)" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Notas</label>
-              <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto adicional..." />
-            </div>
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg p-3">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          )}
-
-          {step === "input" && (
-            <Button onClick={startGeneration} disabled={!sourceImageUrl.trim() || !instruction.trim()}>
-              <Play className="mr-2 h-4 w-4" /> Generar Prompts
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Generating Script spinner */}
-      {step === "generating_script" && (
-        <div className="rounded-xl border border-border bg-card p-8 flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Generando script y shot list...</p>
-        </div>
-      )}
-
-      {/* Review Prompts */}
-      {(step === "review_prompts" || step === "done") && prompts.length > 0 && (
-        <div className="space-y-4">
-          <PromptSection
-            title="Pipeline de Prompts UGC"
-            prompts={prompts}
-            onPromptChange={handlePromptChange}
-            onPromptReset={handlePromptReset}
-            defaultVisible={true}
+      {/* ═══ INPUT SECTION ═══ */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+        {/* Images side-by-side */}
+        <div className="grid grid-cols-2 gap-4">
+          <ImageUploadField
+            label="Imagen fuente"
+            value={sourceImageUrl}
+            onChange={setSourceImageUrl}
+            required
+            prefix="ugc_source"
           />
+          <ImageUploadField
+            label="Imagen de producto"
+            value={productImageUrl}
+            onChange={setProductImageUrl}
+            prefix="ugc_product"
+          />
+        </div>
 
-          {step === "review_prompts" && (
+        {/* Instruction */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">¿Qué quieres en el video? *</label>
+          <Textarea
+            value={instruction}
+            onChange={e => setInstruction(e.target.value)}
+            placeholder="Ej: Una creadora de contenido promociona esta crema facial en un video muy real, estilo UGC, casual y creíble. Muestra cómo la aplica y su reacción natural."
+            className="min-h-[90px] text-sm"
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Escribe una instrucción simple. El sistema interpreta automáticamente el estilo, guion y shots.
+          </p>
+        </div>
+
+        {/* Advanced options — collapsed */}
+        <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <Settings2 className="h-3.5 w-3.5" />
+              Opciones avanzadas
+              {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Idioma</label>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGES.map(l => (
+                      <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Provider</label>
+                <Select value={providerPref || "auto"} onValueChange={v => setProviderPref(v === "auto" ? "" : v)}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (fallback)</SelectItem>
+                    <SelectItem value="sora">Sora</SelectItem>
+                    <SelectItem value="fal">fal.ai</SelectItem>
+                    <SelectItem value="kling">Kling</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Notas</label>
+                <Input
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Contexto extra..."
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* CTA */}
+        <Button
+          onClick={canGenerate ? handleGenerate : undefined}
+          disabled={!canGenerate}
+          className="w-full h-11 gap-2 gradient-primary text-primary-foreground font-semibold"
+          size="lg"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {phase === "preparing" && "Preparando prompts..."}
+              {phase === "generating" && "Generando video..."}
+              {phase === "polling" && "Esperando resultado..."}
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              Generar Video UGC
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* ═══ ERROR ═══ */}
+      {errorMsg && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+          <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-2">
+            <p className="text-sm text-destructive">{errorMsg}</p>
             <div className="flex gap-2">
-              <Button onClick={generateVideo}>
-                <Play className="mr-2 h-4 w-4" /> Generar Video via Orquestador
+              <Button size="sm" variant="outline" onClick={handleRegenerate} className="h-7 text-xs">
+                <RotateCcw className="h-3 w-3 mr-1" /> Reintentar
               </Button>
-              <Button variant="outline" onClick={reset}>
-                <RotateCcw className="mr-2 h-4 w-4" /> Reset
+              <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 text-xs">
+                Nuevo proyecto
               </Button>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Generating Video */}
-      {step === "generating_video" && (
-        <div className="rounded-xl border border-border bg-card p-8 flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Enviando al orquestador de video...</p>
-        </div>
-      )}
-
-      {/* Results */}
-      {step === "done" && videoResult && (
-        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-foreground">Resultado</h3>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{videoResult.provider || "unknown"}</Badge>
-            <Badge variant={videoResult.status === "success" ? "default" : "secondary"}>
-              {videoResult.status}
-            </Badge>
-            {videoResult.taskId && <Badge variant="outline" className="text-[10px]">Task: {videoResult.taskId}</Badge>}
           </div>
-          {videoResult.url && (
-            <video src={videoResult.url} controls className="w-full max-w-md rounded-lg" />
-          )}
-          {!videoResult.url && videoResult.taskId && (
-            <p className="text-sm text-muted-foreground">Video en cola. Revisa el historial para el resultado final.</p>
-          )}
-          <Button variant="outline" onClick={reset}>
-            <RotateCcw className="mr-2 h-4 w-4" /> Nuevo proyecto
-          </Button>
         </div>
       )}
 
-      {/* Execution Timeline */}
-      {(step === "generating_video" || step === "done" || error) && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold text-foreground mb-3">Diagnósticos</h4>
-          <ExecutionTimeline jobId={jobId} refreshTrigger={refreshTrigger} />
+      {/* ═══ INLINE RESULT ═══ */}
+      {hasResult && videoResult && (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Resultado</h3>
+            <div className="flex items-center gap-2">
+              {videoResult.provider && (
+                <Badge variant="outline" className="text-[10px]">{videoResult.provider}</Badge>
+              )}
+              <Badge
+                variant={videoResult.status === "completed" ? "default" : "secondary"}
+                className="text-[10px]"
+              >
+                {videoResult.status === "completed" ? "✓ Listo" :
+                 videoResult.status === "processing" || videoResult.status === "queued" ? "⏳ Procesando" :
+                 videoResult.status}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Video player */}
+          {videoResult.url && (
+            <div className="flex flex-col items-center gap-3">
+              <video
+                src={videoResult.url}
+                controls
+                className="w-full max-w-sm rounded-lg border border-border shadow-sm"
+                style={{ aspectRatio: "9/16", maxHeight: "480px", objectFit: "contain" }}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleDownload} className="gap-1.5">
+                  <Download className="h-3.5 w-3.5" /> Descargar Video
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleRegenerate} className="gap-1.5">
+                  <RotateCcw className="h-3.5 w-3.5" /> Regenerar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Polling state */}
+          {!videoResult.url && phase === "polling" && (
+            <div className="flex flex-col items-center gap-3 py-6">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Esperando video del proveedor...</p>
+              {videoResult.taskId && (
+                <p className="text-[10px] font-mono text-muted-foreground">Task: {videoResult.taskId}</p>
+              )}
+            </div>
+          )}
+
+          {/* New project */}
+          <div className="pt-2 border-t border-border/50">
+            <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs text-muted-foreground">
+              <RotateCcw className="h-3 w-3 mr-1" /> Nuevo proyecto
+            </Button>
+          </div>
         </div>
+      )}
+
+      {/* ═══ AUTO-GENERATED PROMPTS (collapsed) ═══ */}
+      {prompts.length > 0 && (
+        <PromptSection
+          title="Prompts generados automáticamente"
+          prompts={prompts}
+          onPromptChange={handlePromptChange}
+          onPromptReset={handlePromptReset}
+          defaultVisible={false}
+        />
+      )}
+
+      {/* ═══ DIAGNOSTICS (collapsed) ═══ */}
+      {(isGenerating || hasResult || errorMsg) && (
+        <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              {showDiagnostics ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              Diagnósticos
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <ExecutionTimeline jobId={jobId} refreshTrigger={refreshTrigger} />
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );
