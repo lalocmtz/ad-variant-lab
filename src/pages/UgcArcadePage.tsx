@@ -8,9 +8,11 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import PromptSection from "@/components/prompts/PromptSection";
+import ImageUploadField from "@/components/shared/ImageUploadField";
 import ExecutionTimeline from "@/components/debug/ExecutionTimeline";
 import { buildPrompt } from "@/lib/promptRegistry";
 import { saveDraft, clearDraft } from "@/lib/promptDraftStore";
+import { createHistoryRecord, updateHistoryRecord } from "@/lib/historyService";
 import type { GenerationPrompt } from "@/lib/promptTypes";
 
 type ArcadeStep = "input" | "generating_script" | "review_prompts" | "generating_video" | "done";
@@ -22,9 +24,9 @@ const UGC_DEFAULTS = {
 const UgcArcadePage = () => {
   const { user } = useAuth();
   const [step, setStep] = useState<ArcadeStep>("input");
-  const [sourceImage, setSourceImage] = useState("");
+  const [sourceImageUrl, setSourceImageUrl] = useState("");
   const [instruction, setInstruction] = useState("");
-  const [productImage, setProductImage] = useState("");
+  const [productImageUrl, setProductImageUrl] = useState("");
   const [language, setLanguage] = useState("es-MX");
   const [providerPref, setProviderPref] = useState("");
   const [notes, setNotes] = useState("");
@@ -37,7 +39,6 @@ const UgcArcadePage = () => {
   const [jobId] = useState(() => `ugc_${Date.now()}`);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Build the internal prompt chain from instruction
   const buildPromptChain = useCallback(() => {
     const scriptPromptText = `You are a UGC script writer. Given the following instruction, write a short, authentic UGC-style script for a video ad.
 
@@ -62,7 +63,7 @@ Create 3-5 shots with: shot description, camera angle, duration, and mood.`;
     const videoPromptText = `Create a UGC-style video based on the following shot list.
 
 Style: ${UGC_DEFAULTS.style}
-${productImage ? "Product image is provided as reference." : ""}
+${productImageUrl ? "Product image is provided as reference." : ""}
 
 Shot list:
 {shotlist}
@@ -77,10 +78,10 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
 
     setPrompts(allPrompts);
     return allPrompts;
-  }, [instruction, language, notes, productImage, jobId]);
+  }, [instruction, language, notes, productImageUrl, jobId]);
 
   const startGeneration = useCallback(async () => {
-    if (!sourceImage.trim() || !instruction.trim()) {
+    if (!sourceImageUrl.trim() || !instruction.trim()) {
       toast.error("Imagen y instrucción son requeridos");
       return;
     }
@@ -88,15 +89,42 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
     setError(null);
     const chain = buildPromptChain();
     setStep("review_prompts");
+
+    // Write history record
+    if (user) {
+      await createHistoryRecord({
+        user_id: user.id,
+        job_id: jobId,
+        module: "ugc_arcade",
+        title: `UGC — ${instruction.substring(0, 60)}`,
+        status: "pending",
+        current_step: "review_prompts",
+        source_route: "/create/ugc-arcade",
+        preview_url: sourceImageUrl,
+        input_summary_json: {
+          source_image_url: sourceImageUrl,
+          product_image_url: productImageUrl,
+          instruction,
+          language,
+          notes,
+        },
+        resumable: true,
+      });
+    }
+
     toast.success("Prompts generados. Revisa y edita antes de generar video.");
-  }, [sourceImage, instruction, buildPromptChain]);
+  }, [sourceImageUrl, instruction, buildPromptChain, user, jobId, productImageUrl, language, notes]);
 
   const generateVideo = useCallback(async () => {
     setStep("generating_video");
     setError(null);
 
+    await updateHistoryRecord(jobId, {
+      status: "running",
+      current_step: "generating_video",
+    });
+
     try {
-      // Get the effective video prompt (last in chain)
       const videoPrompt = prompts.find(p => p.stage === "shotlist_to_video_prompt");
       const effectivePrompt = videoPrompt?.effectivePrompt || finalVideoPrompt || "UGC style video";
 
@@ -106,7 +134,7 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
           module: "ugc_arcade",
           stage: "shotlist_to_video_prompt",
           effective_prompt: effectivePrompt,
-          image_url: sourceImage.trim(),
+          image_url: sourceImageUrl.trim(),
           reference_video_url: null,
           duration: 9,
           aspect_ratio: "9:16",
@@ -129,6 +157,17 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
       setRefreshTrigger(prev => prev + 1);
       setStep("done");
 
+      await updateHistoryRecord(jobId, {
+        status: data?.video_url ? "completed" : "queued",
+        current_step: "done",
+        provider_used: data?.provider_used,
+        output_summary_json: {
+          video_url: data?.video_url,
+          task_id: data?.taskId,
+          provider: data?.provider_used,
+        },
+      });
+
       if (data?.status === "queued") {
         toast.info(`Video en cola con ${data.provider_used}. Task ID: ${data.taskId}`);
       } else if (data?.video_url) {
@@ -142,8 +181,14 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
       setRefreshTrigger(prev => prev + 1);
       setStep("review_prompts");
       toast.error("Error en la generación");
+
+      await updateHistoryRecord(jobId, {
+        status: "failed",
+        error_summary: err.message,
+        current_step: "generating_video",
+      });
     }
-  }, [prompts, finalVideoPrompt, sourceImage, jobId, providerPref, instruction, language, notes, user]);
+  }, [prompts, finalVideoPrompt, sourceImageUrl, jobId, providerPref, instruction, language, notes, user]);
 
   const handlePromptChange = useCallback((promptId: string, newText: string) => {
     setPrompts(prev => prev.map(p => {
@@ -186,22 +231,19 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <h3 className="text-sm font-semibold text-foreground">Inputs</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Imagen fuente *</label>
-              <Input
-                value={sourceImage}
-                onChange={e => setSourceImage(e.target.value)}
-                placeholder="URL de imagen (producto, persona, escena)"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Imagen de producto (opcional)</label>
-              <Input
-                value={productImage}
-                onChange={e => setProductImage(e.target.value)}
-                placeholder="URL de imagen del producto"
-              />
-            </div>
+            <ImageUploadField
+              label="Imagen fuente"
+              value={sourceImageUrl}
+              onChange={setSourceImageUrl}
+              required
+              prefix="ugc_source"
+            />
+            <ImageUploadField
+              label="Imagen de producto"
+              value={productImageUrl}
+              onChange={setProductImageUrl}
+              prefix="ugc_product"
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Instrucción *</label>
@@ -235,7 +277,7 @@ Generate a realistic, handheld-feel video that looks authentic and not over-prod
           )}
 
           {step === "input" && (
-            <Button onClick={startGeneration} disabled={!sourceImage.trim() || !instruction.trim()}>
+            <Button onClick={startGeneration} disabled={!sourceImageUrl.trim() || !instruction.trim()}>
               <Play className="mr-2 h-4 w-4" /> Generar Prompts
             </Button>
           )}

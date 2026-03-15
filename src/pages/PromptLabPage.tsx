@@ -6,9 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import PromptSection from "@/components/prompts/PromptSection";
+import ImageUploadField from "@/components/shared/ImageUploadField";
 import { buildPrompt } from "@/lib/promptRegistry";
 import { saveDraft, clearDraft } from "@/lib/promptDraftStore";
+import { createHistoryRecord, updateHistoryRecord } from "@/lib/historyService";
 import type { GenerationPrompt } from "@/lib/promptTypes";
 
 interface VideoBreakdown {
@@ -30,9 +33,10 @@ interface VideoBreakdown {
 type LabStep = "input" | "analyzing" | "results";
 
 const PromptLabPage = () => {
+  const { user } = useAuth();
   const [step, setStep] = useState<LabStep>("input");
   const [videoUrl, setVideoUrl] = useState("");
-  const [productImage, setProductImage] = useState("");
+  const [productImageUrl, setProductImageUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [breakdown, setBreakdown] = useState<VideoBreakdown | null>(null);
   const [prompts, setPrompts] = useState<GenerationPrompt[]>([]);
@@ -47,20 +51,34 @@ const PromptLabPage = () => {
     setStep("analyzing");
     setError(null);
 
+    // Write history record
+    if (user) {
+      await createHistoryRecord({
+        user_id: user.id,
+        job_id: jobId,
+        module: "prompt_lab",
+        title: `Prompt Lab — ${videoUrl.substring(0, 60)}`,
+        status: "running",
+        current_step: "analyzing",
+        source_route: "/create/prompt-lab",
+        input_summary_json: { video_url: videoUrl, product_image_url: productImageUrl, notes },
+        resumable: false,
+      });
+    }
+
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("analyze-video", {
         body: {
           video_url: videoUrl.trim(),
           variant_count: 1,
           metadata: { source: "prompt_lab" },
-          product_image_url: productImage || undefined,
+          product_image_url: productImageUrl || undefined,
           language: "es-MX",
         },
       });
 
       if (fnErr) throw new Error(fnErr.message);
 
-      // Extract breakdown from analysis response
       const analysis = data;
       const bd: VideoBreakdown = {
         hook: analysis?.hook_text || analysis?.hook || "",
@@ -83,7 +101,6 @@ const PromptLabPage = () => {
         scene_prompts: [],
       };
 
-      // Build master recreation prompt from breakdown
       const masterParts = [
         bd.hook ? `Hook: "${bd.hook}"` : "",
         bd.subject ? `Subject: ${bd.subject}` : "",
@@ -98,46 +115,48 @@ const PromptLabPage = () => {
       ].filter(Boolean);
       bd.master_prompt = masterParts.join("\n");
 
-      // Build scene prompts
       bd.scene_prompts = (bd.scenes || []).map((s, i) =>
         `Scene ${i + 1}: ${s.description}. Camera: ${s.camera}. Lighting: ${s.lighting}. Duration: ${s.duration}`
       );
 
       setBreakdown(bd);
 
-      // Build prompt objects for Prompt Surface Layer
       const allPrompts: GenerationPrompt[] = [];
-
-      // Master recreation prompt
       allPrompts.push(
-        buildPrompt(jobId, "prompt_lab", "master_recreation_prompt", {
-          prompt_text: bd.master_prompt,
-        }, "Gemini")
+        buildPrompt(jobId, "prompt_lab", "master_recreation_prompt", { prompt_text: bd.master_prompt }, "Gemini")
       );
-
-      // Scene extraction prompt
       allPrompts.push(
-        buildPrompt(jobId, "prompt_lab", "scene_extraction_prompt", {
-          prompt_text: bd.scene_prompts?.join("\n\n") || "",
-        }, "Gemini")
+        buildPrompt(jobId, "prompt_lab", "scene_extraction_prompt", { prompt_text: bd.scene_prompts?.join("\n\n") || "" }, "Gemini")
       );
-
-      // Breakdown prompt (raw analysis)
       allPrompts.push(
-        buildPrompt(jobId, "prompt_lab", "breakdown_prompt", {
-          prompt_text: JSON.stringify(analysis, null, 2).slice(0, 2000),
-        }, "Gemini")
+        buildPrompt(jobId, "prompt_lab", "breakdown_prompt", { prompt_text: JSON.stringify(analysis, null, 2).slice(0, 2000) }, "Gemini")
       );
 
       setPrompts(allPrompts);
       setStep("results");
+
+      // Update history
+      await updateHistoryRecord(jobId, {
+        status: "completed",
+        current_step: "results",
+        output_summary_json: {
+          master_prompt: bd.master_prompt?.substring(0, 500),
+          scene_count: bd.scenes?.length || 0,
+        },
+      });
     } catch (err: any) {
       console.error("Prompt Lab analysis error:", err);
       setError(err.message || "Error al analizar video");
       setStep("input");
       toast.error("Error en el análisis");
+
+      await updateHistoryRecord(jobId, {
+        status: "failed",
+        error_summary: err.message,
+        current_step: "analyzing",
+      });
     }
-  }, [videoUrl, productImage, notes, jobId]);
+  }, [videoUrl, productImageUrl, notes, jobId, user]);
 
   const handlePromptChange = useCallback((promptId: string, newText: string) => {
     setPrompts(prev => prev.map(p => {
@@ -158,7 +177,6 @@ const PromptLabPage = () => {
 
   const sendToGenerator = useCallback(async (prompt: GenerationPrompt) => {
     toast.info(`Prompt "${prompt.stage}" enviado al generador. Usa Video Variants para ejecutar.`);
-    // Copy effective prompt to clipboard for easy paste
     try {
       await navigator.clipboard.writeText(prompt.effectivePrompt);
       toast.success("Prompt copiado al portapapeles");
@@ -188,14 +206,12 @@ const PromptLabPage = () => {
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Imagen de producto (opcional)</label>
-              <Input
-                value={productImage}
-                onChange={e => setProductImage(e.target.value)}
-                placeholder="URL de imagen del producto"
-              />
-            </div>
+            <ImageUploadField
+              label="Imagen de producto"
+              value={productImageUrl}
+              onChange={setProductImageUrl}
+              prefix="prompt_lab_product"
+            />
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Notas (opcional)</label>
               <Input
@@ -229,7 +245,6 @@ const PromptLabPage = () => {
       {/* Results */}
       {step === "results" && breakdown && (
         <div className="space-y-6">
-          {/* Breakdown Summary */}
           <div className="rounded-xl border border-border bg-card p-5 space-y-4">
             <h3 className="text-lg font-semibold text-foreground">Video Breakdown</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -283,7 +298,6 @@ const PromptLabPage = () => {
               )}
             </div>
 
-            {/* Scenes */}
             {breakdown.scenes && breakdown.scenes.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-foreground">Escenas ({breakdown.scenes.length})</h4>
@@ -304,7 +318,6 @@ const PromptLabPage = () => {
             )}
           </div>
 
-          {/* Editable Prompts */}
           <PromptSection
             title="Prompts Generados"
             prompts={prompts}
@@ -313,7 +326,6 @@ const PromptLabPage = () => {
             defaultVisible={true}
           />
 
-          {/* Send to Generator buttons */}
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
             <h4 className="text-sm font-semibold text-foreground">Acciones</h4>
             <div className="flex flex-wrap gap-2">
@@ -332,7 +344,6 @@ const PromptLabPage = () => {
             </div>
           </div>
 
-          {/* Re-analyze */}
           <Button variant="outline" onClick={() => { setStep("input"); setBreakdown(null); setPrompts([]); }}>
             <RotateCcw className="mr-2 h-4 w-4" /> Nuevo análisis
           </Button>
