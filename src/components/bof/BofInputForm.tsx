@@ -83,6 +83,20 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
   const autofillRing = (field: string) =>
     isAutofilled(field) ? "ring-1 ring-primary/40" : "";
 
+  const handleAdditionalImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const remaining = 3 - additionalImages.length;
+    const toAdd = files.slice(0, remaining);
+    setAdditionalImages(prev => [...prev, ...toAdd]);
+    setAdditionalPreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))]);
+  };
+
+  const removeAdditionalImage = (idx: number) => {
+    setAdditionalImages(prev => prev.filter((_, i) => i !== idx));
+    setAdditionalPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!productImage || !productName || !currentPrice || !mainBenefit || selectedFormats.length === 0) return;
@@ -99,6 +113,8 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
       selected_formats: selectedFormats,
       language,
       accent,
+      tiktok_compliance: tiktokCompliance,
+      additional_images: additionalImages,
     });
   };
 
