@@ -214,6 +214,42 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
           </Select>
         </div>
 
+        {/* TikTok Compliance Toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Filtro TikTok Shop Anti-Ban</p>
+              <p className="text-xs text-muted-foreground">Evita claims médicos, garantías absolutas y lenguaje prohibido.</p>
+            </div>
+          </div>
+          <Switch checked={tiktokCompliance} onCheckedChange={setTiktokCompliance} />
+        </div>
+
+        {/* Additional Product Images */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <ImagePlus className="h-4 w-4 text-primary" />
+            Imágenes adicionales del producto (opcional)
+          </Label>
+          <p className="text-xs text-muted-foreground">Hasta 3 fotos extra para contexto de tamaño, textura y apariencia real.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {additionalPreviews.map((preview, idx) => (
+              <div key={idx} className="relative w-20 h-20">
+                <img src={preview} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover rounded-lg border border-border" />
+                <button onClick={() => removeAdditionalImage(idx)} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">×</button>
+              </div>
+            ))}
+            {additionalImages.length < 3 && (
+              <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-card">
+                <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Agregar</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAdditionalImage} />
+              </label>
+            )}
+          </div>
+        </div>
+
         {/* Fixed variant count display */}
         <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/30 px-4 py-3">
           <span className="text-sm text-muted-foreground">Variantes a generar</span>
