@@ -21,10 +21,10 @@ serve(async (req) => {
 
     // Extract video duration from metadata for compression instructions
     const videoDuration = metadata?.duration || 0;
-    const compressionNote = videoDuration > 15
-      ? `\nIMPORTANT: The original video is ${videoDuration} seconds long. You MUST compress the ad into exactly 15 seconds by keeping ONLY the highest-conversion beats. Remove all filler, repeated explanations, and secondary beats. Preserve: hook (0-2.5s), reframe (2.5-6s), strongest demo (6-10.5s), objection handling (10.5-12.5s), CTA (12.5-15s).`
-      : videoDuration > 0 && videoDuration < 15
-      ? `\nNote: The original video is only ${videoDuration} seconds. Adapt pacing to fill a 15-second execution blueprint naturally.`
+    const compressionNote = videoDuration > 9
+      ? `\nIMPORTANT: The original video is ${videoDuration} seconds long. You MUST compress the ad into exactly 9 seconds by keeping ONLY the highest-conversion beats. Remove all filler, repeated explanations, and secondary beats. Preserve: hook (0-1.5s), reframe (1.5-3.5s), strongest demo/benefit (3.5-6.5s), proof/objection (6.5-8.0s), CTA (8.0-9.0s).`
+      : videoDuration > 0 && videoDuration < 9
+      ? `\nNote: The original video is only ${videoDuration} seconds. Adapt pacing to fill a 9-second execution blueprint naturally.`
       : "";
 
     const complianceBlock = tiktok_compliance ? `
@@ -43,7 +43,7 @@ FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO — CUMPLIR AL 100%):
 
     const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine for 15-Second Reconstruction.
 
-Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different actor in EXACTLY 15 SECONDS.
+Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different actor in EXACTLY 9 SECONDS.
 ${compressionNote}
 
 The analysis must capture BOTH:
@@ -65,13 +65,13 @@ CRITICAL RULES
 10. If ${lang} starts with "es", use natural spoken Spanish matching the target market. For es-MX: use Mexican Spanish vocabulary, phrasing, and tone — avoid Spain Spanish and neutral corporate Spanish. Write dialogue as a real Mexican UGC creator would speak.
 11. NEVER translate user-provided Spanish scripts to English.
 
-15-SECOND COMPRESSION RULE (MANDATORY)
-No matter how long the original video is, compress to exactly 15 seconds:
-- 0.0–2.5s: Hook (strongest attention grab)
-- 2.5–6.0s: Reframe / context / value revelation  
-- 6.0–10.5s: Strongest demo + value proof beats only
-- 10.5–12.5s: Objection resolution / price logic
-- 12.5–15.0s: CTA (clear, direct)
+9-SECOND COMPRESSION RULE (MANDATORY)
+No matter how long the original video is, compress to exactly 9 seconds:
+- 0.0–1.5s: Hook (strongest attention grab)
+- 1.5–3.5s: Reframe / context / value revelation  
+- 3.5–6.5s: Strongest demo + value proof beats only
+- 6.5–8.0s: Proof / objection resolution
+- 8.0–9.0s: CTA (clear, direct)
 
 NO TEXT / NO OVERLAYS RULE
 Generated video must NOT include comment bubbles, captions, subtitles, text overlays, animated graphics, stickers, UI elements. If original uses comment-reply hook, preserve as spoken context ONLY.
@@ -88,9 +88,9 @@ For each variant, generate an animation_prompt_json object containing:
 - sujeto_principal (tipo_persona, edad_aproximada, genero, apariencia_general, energia, estilo_comunicacion, contexto_de_mercado, rol_del_creador, perfil_de_confianza)
 - guion_original_completo
 - estructura_del_guion (hook, contexto, demostracion, beneficio, manejo_objecion, cta)
-- guion_variante_para_esta_imagen (hook, body, cta, guion_completo — compressed for 15s)
+- guion_variante_para_esta_imagen (hook, body, cta, guion_completo — compressed for 9s)
 - instrucciones_para_recrear_el_video (objetivo, ritmo_actuacion, estilo_entrega, energia, pace, delivery_style, facial_expression, gesture_style)
-- linea_de_tiempo_15s (5 segments covering 0.0-15.0 seconds with marca_de_tiempo, accion_fisica, gestos, expresion, guion_hablado, objetivo_persuasivo, prompt_de_animacion)
+- linea_de_tiempo_9s (5 segments covering 0.0-9.0 seconds with marca_de_tiempo, accion_fisica, gestos, expresion, guion_hablado, objetivo_persuasivo, prompt_de_animacion)
 - plantilla_replicable_del_anuncio (descripcion_estructura, patron_creativo, por_que_funciona)
 - restricciones_de_generacion (all boolean flags for product lock, mechanics, no text, 15s duration, etc.)
 
@@ -115,9 +115,9 @@ INSTRUCTIONS:
 4. Identify market_context, rol_del_creador, and perfil_de_confianza for the original creator
 5. Extract winner_blueprint with all winning mechanics
 6. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance)
-7. For EACH variant, generate a complete animation_prompt_json with 15-second compressed timeline
+7. For EACH variant, generate a complete animation_prompt_json with 9-second compressed timeline
 8. identity_distance MUST be "high" for ALL variants
-9. ALL timelines MUST be compressed to exactly 15 seconds regardless of original duration
+9. ALL timelines MUST be compressed to exactly 9 seconds regardless of original duration
 10. Do NOT include text overlays, subtitles, comment bubbles, or UI graphics`,
     });
 

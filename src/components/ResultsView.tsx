@@ -13,7 +13,7 @@ interface ResultsViewProps {
   accent?: string;
   onReset: () => void;
   onRegenerateVariant: (variantIndex: number) => void;
-  onUpdateVariantStatus: (variantIndex: number, status: VariantStatus) => void;
+  onUpdateVariantStatus?: (variantIndex: number, status: VariantStatus) => void;
   onUpdateVariantVideoState?: (variantIndex: number, videoState: { video_task_id?: string; video_status?: VideoGenerationStatus; video_url?: string; video_error?: string; video_mode?: string }) => void;
 }
 
@@ -23,7 +23,6 @@ const ResultsView = ({
   accent,
   onReset,
   onRegenerateVariant,
-  onUpdateVariantStatus,
   onUpdateVariantVideoState,
 }: ResultsViewProps) => {
   // Build prompts for each variant
@@ -129,8 +128,6 @@ const ResultsView = ({
             accent={accent}
             effectivePrompt={getEffectiveVideoPrompt(variant.variant_id)}
             onRegenerate={() => onRegenerateVariant(index)}
-            onApprove={() => onUpdateVariantStatus(index, "approved")}
-            onReject={() => onUpdateVariantStatus(index, "rejected")}
             onVideoStateChange={(videoState) => onUpdateVariantVideoState?.(index, videoState)}
           />
         ))}
