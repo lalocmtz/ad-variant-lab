@@ -626,8 +626,6 @@ function AnalysisExpandedCard({
             language={v.script_variant?.language || "es-MX"}
             accent="mexicano"
             onRegenerate={() => {}}
-            onApprove={() => {}}
-            onReject={() => {}}
             onVideoStateChange={(videoState) => onVideoStateChange(entry.id, idx, videoState)}
           />
         ))}
