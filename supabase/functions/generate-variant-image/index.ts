@@ -225,7 +225,7 @@ async function urlToBase64DataUri(url: string): Promise<string> {
 async function callImageGeneration(
   content: Array<{ type: string; text?: string; image_url?: { url: string } }>,
   apiKey: string,
-  model: string = "google/gemini-2.5-flash-image",
+  model: string = "google/gemini-3.1-flash-image-preview",
 ): Promise<string | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 90_000);
@@ -258,36 +258,56 @@ async function callImageGeneration(
 
     const data = await response.json();
 
-    // Check for in-stream rate limit errors
+    // Check for in-stream rate limit errors (HTTP 200 but provider-limited response)
     const choiceError = data.choices?.[0]?.error;
     if (choiceError?.code === 429) {
       console.warn(`[img-gen] ${model} in-stream 429 rate limit`);
       return null;
     }
 
-    // Try multiple response formats
     const msg = data.choices?.[0]?.message;
+
+    // 1) Primary path
     let imageUrl = msg?.images?.[0]?.image_url?.url || null;
 
-    // Fallback: check inline_data / parts pattern
-    if (!imageUrl && msg?.content) {
-      if (typeof msg.content === "string" && msg.content.startsWith("data:image")) {
-        imageUrl = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        for (const part of msg.content) {
-          if (part.type === "image_url" && part.image_url?.url) {
-            imageUrl = part.image_url.url;
-            break;
-          }
-          if (part.type === "image" && part.url) {
-            imageUrl = part.url;
-            break;
-          }
+    // 2) String content with inline base64
+    if (!imageUrl && typeof msg?.content === "string") {
+      const match = msg.content.match(/(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/);
+      if (match) imageUrl = match[1];
+    }
+
+    // 3) Multipart content blocks
+    if (!imageUrl && Array.isArray(msg?.content)) {
+      for (const part of msg.content) {
+        if (part?.type === "image_url" && part?.image_url?.url) {
+          imageUrl = part.image_url.url;
+          break;
+        }
+        if (part?.type === "image" && part?.url) {
+          imageUrl = part.url;
+          break;
+        }
+        if (part?.inline_data?.data) {
+          const mime = part.inline_data.mime_type || "image/png";
+          imageUrl = `data:${mime};base64,${part.inline_data.data}`;
+          break;
+        }
+        if (part?.b64_json) {
+          imageUrl = `data:image/png;base64,${part.b64_json}`;
+          break;
         }
       }
     }
 
-    console.log(`[img-gen] ${model} result: imageUrl=${imageUrl ? `found (${imageUrl.substring(0, 60)}...)` : "null"}, keys=${JSON.stringify(Object.keys(msg || {}))}`);
+    const refusal = msg?.refusal;
+    if (!imageUrl && refusal) {
+      const refusalText = typeof refusal === "string" ? refusal : JSON.stringify(refusal);
+      throw new Error(`El modelo rechazó la generación de imagen: ${refusalText.substring(0, 180)}`);
+    }
+
+    const contentType = Array.isArray(msg?.content) ? "array" : typeof msg?.content;
+    console.log(`[img-gen] ${model} result: imageUrl=${imageUrl ? "found" : "null"}, contentType=${contentType}, keys=${JSON.stringify(Object.keys(msg || {}))}`);
+
     return imageUrl;
   } catch (e: any) {
     clearTimeout(timeoutId);
