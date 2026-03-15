@@ -50,6 +50,9 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
   const [language, setLanguage] = useState("es-MX");
   const [accent, setAccent] = useState("mexicano");
   const [diversityIntensity, setDiversityIntensity] = useState("high");
+  const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
   const productInputRef = useRef<HTMLInputElement>(null);
 
   const handleLanguageChange = (newLang: string) => {
