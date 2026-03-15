@@ -631,6 +631,8 @@ No text overlays, no watermarks. Clean video only.`;
               onRegenerate={handleRegenerate}
               onContinue={runPhase2}
               regeneratingIndex={regeneratingIndex}
+              productLock={savedInputs?.productLock !== false}
+              productImageUrl={savedInputs?.productImageUrl}
             />
           )}
 
