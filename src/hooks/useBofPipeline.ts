@@ -164,6 +164,8 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
           pain_point: formData.pain_point, audience: formData.audience,
           selected_formats: formData.selected_formats,
           language: formData.language, accent: formData.accent,
+          tiktok_compliance: formData.tiktok_compliance,
+          additional_image_urls: additionalImageUrls,
         },
       });
       if (scriptsErr || scriptsData?.error) throw new Error(scriptsData?.error || scriptsErr?.message || "Error generando scripts");
