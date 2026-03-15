@@ -2,9 +2,9 @@ import { useState, useCallback } from "react";
 import { ArrowLeft } from "lucide-react";
 import VariantCard from "@/components/VariantCard";
 import PromptSection from "@/components/prompts/PromptSection";
-import type { AnalysisResult, VariantStatus, VideoGenerationStatus } from "@/pages/Index";
+import type { AnalysisResult, VariantStatus, VideoGenerationStatus } from "@/lib/videoVariantTypes";
 import type { GenerationPrompt } from "@/lib/promptTypes";
-import { buildPrompt, resolveEffective } from "@/lib/promptRegistry";
+import { buildPrompt } from "@/lib/promptRegistry";
 import { saveDraft, clearDraft } from "@/lib/promptDraftStore";
 
 interface ResultsViewProps {
@@ -84,6 +84,16 @@ const ResultsView = ({
     );
   }, []);
 
+  // Look up the effective video prompt for a given variant
+  const getEffectiveVideoPrompt = useCallback((variantId: string): string | undefined => {
+    const match = prompts.find(
+      p => p.jobId === variantId && p.stage === "provider_video_prompt"
+    );
+    // Only return override if user actually modified it
+    if (match?.isUserModified) return match.effectivePrompt;
+    return undefined;
+  }, [prompts]);
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -98,7 +108,7 @@ const ResultsView = ({
           Variantes Generadas ({results.variants.length})
         </h2>
         <p className="text-xs text-muted-foreground">
-          Copia el prompt universal y pégalo directamente en Sora, HeyGen, Kling, Runway o AIgen. Blueprint comprimido a 15 segundos. También puedes generar el video directamente.
+          Edita los prompts abajo antes de generar video. El prompt editado será exactamente el que se envía al generador.
         </p>
       </div>
 
@@ -117,6 +127,7 @@ const ResultsView = ({
             variant={variant}
             language={language}
             accent={accent}
+            effectivePrompt={getEffectiveVideoPrompt(variant.variant_id)}
             onRegenerate={() => onRegenerateVariant(index)}
             onApprove={() => onUpdateVariantStatus(index, "approved")}
             onReject={() => onUpdateVariantStatus(index, "rejected")}
