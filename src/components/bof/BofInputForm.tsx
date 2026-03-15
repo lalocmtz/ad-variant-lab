@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Upload, Package, DollarSign, Target, Zap, Users, Hash, Globe, Mic } from "lucide-react";
+import { Upload, Package, DollarSign, Target, Zap, Users, Hash, Globe, Mic, ShieldCheck, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { BOF_FORMATS } from "@/lib/bof_video_formats";
