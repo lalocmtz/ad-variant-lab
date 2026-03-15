@@ -28,8 +28,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.warn("Session recovery failed, clearing local auth state:", error.message);
+        localStorage.removeItem("sb-uvsmkvynhiqpjjotxthi-auth-token");
+        setSession(null);
+      } else {
+        setSession(session);
+      }
+      setLoading(false);
+    }).catch((err) => {
+      console.warn("Auth fetch failed (network?):", err);
+      localStorage.removeItem("sb-uvsmkvynhiqpjjotxthi-auth-token");
+      setSession(null);
       setLoading(false);
     });
 
@@ -37,7 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      localStorage.removeItem("sb-uvsmkvynhiqpjjotxthi-auth-token");
+      setSession(null);
+    }
   };
 
   return (
