@@ -14,6 +14,7 @@ import type {
   BrollLabAnalysis,
   SceneResult,
   VoiceVariant,
+  ProductValidationResult,
 } from "@/lib/broll_lab_types";
 
 const INITIAL_STATE: BrollLabState = {
