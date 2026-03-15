@@ -388,6 +388,7 @@ serve(async (req) => {
       }
     }
 
+    console.log("[generate-variant-image] Building request", {
       variantIndex: variant_index,
       totalVariants: total_variants,
       videoMode: mode,
