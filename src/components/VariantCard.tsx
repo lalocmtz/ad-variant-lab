@@ -574,6 +574,10 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                     </span>
                   )}
                 </div>
+                {/* Orchestrator diagnostics on success */}
+                {USE_ORCHESTRATOR && orchestratorJobId && (
+                  <ExecutionTimeline jobId={orchestratorJobId} refreshTrigger={timelineRefresh} />
+                )}
                 <div className="flex gap-2">
                   <Button
                     variant="default"
