@@ -12,6 +12,20 @@ export interface BrollLabInputs {
   voiceVariantCount: number;
   tiktok_compliance?: boolean;
   additionalImageUrls?: string[];
+  productLock?: boolean;
+}
+
+export interface ProductValidationResult {
+  silhouette_score: number;
+  color_score: number;
+  branding_score: number;
+  packaging_score: number;
+  proportion_score: number;
+  overall_product_match: number;
+  pass: boolean;
+  failure_reasons: string[];
+  skipped?: boolean;
+  skip_reason?: string;
 }
 
 export interface TikTokDownloadResult {
