@@ -112,10 +112,14 @@ La narración debe sonar espontánea, como un review real de producto. El audio 
       // Upload product image
       const ext = formData.product_image!.name.split(".").pop() || "png";
       const fileName = `bof_product_${Date.now()}.${ext}`;
+      console.log("BOF: uploading product image", { fileName, size: formData.product_image!.size, type: formData.product_image!.type });
       const { error: uploadErr } = await supabase.storage
         .from("videos")
-        .upload(fileName, formData.product_image!, { contentType: formData.product_image!.type });
-      if (uploadErr) throw new Error("Error subiendo imagen del producto");
+        .upload(fileName, formData.product_image!, { contentType: formData.product_image!.type, upsert: true });
+      if (uploadErr) {
+        console.error("BOF storage upload error:", uploadErr);
+        throw new Error(`Error subiendo imagen del producto: ${uploadErr.message}`);
+      }
       const { data: pubUrl } = supabase.storage.from("videos").getPublicUrl(fileName);
       const productImageUrl = pubUrl.publicUrl;
       productImageUrlRef.current = productImageUrl;
