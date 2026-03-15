@@ -381,14 +381,41 @@ export default function BrollLab2Page() {
         product_interactions: state.analysis.product_interactions || "",
       });
 
+      // Validate if product lock is on
+      let validation: ProductValidationResult | undefined;
+      const productLockEnabled = savedInputs.productLock !== false;
+      if (productLockEnabled && savedInputs.productImageUrl) {
+        try {
+          validation = await invokeFn<ProductValidationResult>("validate-product-similarity", {
+            product_reference_url: savedInputs.productImageUrl,
+            generated_image_url: imgResult.image_url,
+            threshold: 0.85,
+          });
+        } catch (e: any) {
+          console.warn("Validation after regen failed:", e.message);
+        }
+      }
+
       setState((prev) => {
         const scenes = [...prev.scenes];
-        scenes[index] = { ...scenes[index], image_url: imgResult.image_url, status: "pending", error: undefined };
+        scenes[index] = {
+          ...scenes[index],
+          image_url: imgResult.image_url,
+          status: "pending",
+          error: undefined,
+          validation,
+          regen_count: (scenes[index].regen_count || 0) + 1,
+        };
         const approved = [...prev.approvedScenes];
         approved[index] = false;
         return { ...prev, scenes, approvedScenes: approved };
       });
-      toast.success(`Escena ${index + 1} regenerada`);
+
+      if (validation && !validation.pass) {
+        toast.warning(`Escena ${index + 1} regenerada pero el producto no coincide`);
+      } else {
+        toast.success(`Escena ${index + 1} regenerada`);
+      }
     } catch (e: any) {
       toast.error(`Error regenerando escena ${index + 1}: ${e.message}`);
     } finally {
