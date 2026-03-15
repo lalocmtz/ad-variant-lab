@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
 import ExecutionTimeline from "@/components/debug/ExecutionTimeline";
+import { useAuth } from "@/hooks/useAuth";
 
 const USE_ORCHESTRATOR = import.meta.env.VITE_USE_VIDEO_ORCHESTRATOR === "true";
 
@@ -60,6 +61,7 @@ function handleDownloadVideo(url: string, variantId: string) {
 }
 
 const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
+  const { user } = useAuth();
   const [copied, setCopied] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
   const [videoTaskId, setVideoTaskId] = useState<string | undefined>(variant.video_task_id);
@@ -248,6 +250,7 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
             language: language || "es-MX",
             accent: accent || "mexicano",
             provider_order: ["sora", "fal", "kling"],
+            user_id: user?.id,
           },
         });
 
