@@ -492,6 +492,7 @@ const Index = () => {
               negative_prompt: variant.negative_prompt,
               identity_replacement_rules: variant.identity_replacement_rules,
               overlay_cleanup_required: overlayCleanup,
+              additional_image_urls: downloadedData.additional_image_urls,
             },
           });
           const timeoutPromise = new Promise<never>((_, reject) =>
