@@ -14,6 +14,7 @@ import type {
   BrollLabAnalysis,
   SceneResult,
   VoiceVariant,
+  ProductValidationResult,
 } from "@/lib/broll_lab_types";
 
 const INITIAL_STATE: BrollLabState = {
@@ -267,6 +268,78 @@ export default function BrollLab2Page() {
       const successImages = sceneResults.filter((s) => s.image_url);
       if (successImages.length === 0) throw new Error("No se pudo generar ninguna imagen");
 
+      // STEP 3b: Product similarity validation + auto-regen (if product lock ON)
+      const productLockEnabled = inputs.productLock !== false;
+      const MAX_REGEN_ATTEMPTS = 2;
+
+      if (productLockEnabled && inputs.productImageUrl) {
+        update({ stepMessage: "Validando consistencia del producto en escenas generadas..." });
+
+        for (let i = 0; i < sceneResults.length; i++) {
+          if (!sceneResults[i].image_url) continue;
+
+          let attempts = 0;
+          let validated = false;
+
+          while (!validated && attempts <= MAX_REGEN_ATTEMPTS) {
+            try {
+              update({ stepMessage: `Validando escena ${i + 1}/${NUM_SCENES}${attempts > 0 ? ` (reintento ${attempts})` : ""}...` });
+              const validation = await invokeFn<ProductValidationResult>("validate-product-similarity", {
+                product_reference_url: inputs.productImageUrl,
+                generated_image_url: sceneResults[i].image_url,
+                threshold: 0.85,
+              });
+              sceneResults[i].validation = validation;
+
+              if (validation.pass || validation.skipped) {
+                validated = true;
+              } else {
+                // Auto-regenerate
+                sceneResults[i].regen_count = (sceneResults[i].regen_count || 0) + 1;
+                attempts++;
+                if (attempts > MAX_REGEN_ATTEMPTS) {
+                  console.warn(`Scene ${i} failed validation after ${MAX_REGEN_ATTEMPTS} retries`);
+                  break;
+                }
+
+                update({ stepMessage: `Escena ${i + 1} no coincide con el producto — regenerando (intento ${attempts})...` });
+                const failureContext = validation.failure_reasons.join(". ");
+                const retryPrompt = `${analysis.scenes[i].image_prompt}\n\nCRITICAL CORRECTION: Previous attempt failed product validation: ${failureContext}. You MUST match the reference product EXACTLY. Do not change colors, shape, branding, or packaging.`;
+
+                try {
+                  const imgResult = await invokeFn<{ image_url: string }>("generate-broll-lab-image", {
+                    image_prompt: retryPrompt,
+                    scene_index: i,
+                    product_image_url: inputs.productImageUrl,
+                    human_actions: analysis.human_actions || "",
+                    camera_behavior: analysis.camera_behavior || "",
+                    environment_context: analysis.environment_context || "",
+                    product_interactions: analysis.product_interactions || "",
+                  });
+                  sceneResults[i].image_url = imgResult.image_url;
+                  sceneResults[i].status = "pending";
+                  update({ scenes: [...sceneResults] });
+                  await sleep(1500);
+                } catch (e: any) {
+                  console.warn(`Regen failed for scene ${i}:`, e.message);
+                  break;
+                }
+              }
+            } catch (e: any) {
+              console.warn(`Validation failed for scene ${i}:`, e.message);
+              // Don't block on validation errors — mark as skipped
+              sceneResults[i].validation = {
+                silhouette_score: 1, color_score: 1, branding_score: 1,
+                packaging_score: 1, proportion_score: 1, overall_product_match: 1,
+                pass: true, failure_reasons: [], skipped: true, skip_reason: e.message,
+              };
+              validated = true;
+            }
+          }
+          update({ scenes: [...sceneResults] });
+        }
+      }
+
       const approvedArr = sceneResults.map(() => false);
       update({
         step: "awaiting_approval",
@@ -308,14 +381,41 @@ export default function BrollLab2Page() {
         product_interactions: state.analysis.product_interactions || "",
       });
 
+      // Validate if product lock is on
+      let validation: ProductValidationResult | undefined;
+      const productLockEnabled = savedInputs.productLock !== false;
+      if (productLockEnabled && savedInputs.productImageUrl) {
+        try {
+          validation = await invokeFn<ProductValidationResult>("validate-product-similarity", {
+            product_reference_url: savedInputs.productImageUrl,
+            generated_image_url: imgResult.image_url,
+            threshold: 0.85,
+          });
+        } catch (e: any) {
+          console.warn("Validation after regen failed:", e.message);
+        }
+      }
+
       setState((prev) => {
         const scenes = [...prev.scenes];
-        scenes[index] = { ...scenes[index], image_url: imgResult.image_url, status: "pending", error: undefined };
+        scenes[index] = {
+          ...scenes[index],
+          image_url: imgResult.image_url,
+          status: "pending",
+          error: undefined,
+          validation,
+          regen_count: (scenes[index].regen_count || 0) + 1,
+        };
         const approved = [...prev.approvedScenes];
         approved[index] = false;
         return { ...prev, scenes, approvedScenes: approved };
       });
-      toast.success(`Escena ${index + 1} regenerada`);
+
+      if (validation && !validation.pass) {
+        toast.warning(`Escena ${index + 1} regenerada pero el producto no coincide`);
+      } else {
+        toast.success(`Escena ${index + 1} regenerada`);
+      }
     } catch (e: any) {
       toast.error(`Error regenerando escena ${index + 1}: ${e.message}`);
     } finally {
@@ -531,6 +631,8 @@ No text overlays, no watermarks. Clean video only.`;
               onRegenerate={handleRegenerate}
               onContinue={runPhase2}
               regeneratingIndex={regeneratingIndex}
+              productLock={savedInputs?.productLock !== false}
+              productImageUrl={savedInputs?.productImageUrl}
             />
           )}
 

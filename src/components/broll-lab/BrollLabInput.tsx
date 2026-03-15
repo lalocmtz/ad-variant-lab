@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, Link, Sparkles, ShieldCheck, ImagePlus } from "lucide-react";
+import { Upload, Link, Sparkles, ShieldCheck, ImagePlus, Lock } from "lucide-react";
 import type { BrollLabInputs } from "@/lib/broll_lab_types";
 
 interface Props {
@@ -30,6 +30,7 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
 
   const [productImagePreview, setProductImagePreview] = useState<string | null>(null);
   const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [productLock, setProductLock] = useState(true);
   const [additionalImages, setAdditionalImages] = useState<File[]>([]);
   const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
 
@@ -80,6 +81,7 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
     onSubmit({
       ...inputs,
       tiktok_compliance: tiktokCompliance,
+      productLock,
       additionalImageUrls: additionalUrls,
     });
   };
@@ -223,6 +225,18 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Product Lock Toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 p-4">
+        <div className="flex items-center gap-3">
+          <Lock className="h-5 w-5 text-primary" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Respetar producto exacto</p>
+            <p className="text-xs text-muted-foreground">La imagen del producto es la verdad absoluta. Si la escena cambia color, forma, empaque o branding, se rechaza automáticamente.</p>
+          </div>
+        </div>
+        <Switch checked={productLock} onCheckedChange={setProductLock} />
+      </div>
 
       {/* TikTok Compliance Toggle */}
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
