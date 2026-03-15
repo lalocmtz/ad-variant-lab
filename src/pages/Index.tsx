@@ -324,6 +324,8 @@ const Index = () => {
     language: string;
     accent: string;
     diversity_intensity: string;
+    tiktok_compliance?: boolean;
+    additional_images?: File[];
   }) => {
     setStep("downloading");
     setError(null);
