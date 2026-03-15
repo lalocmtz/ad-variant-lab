@@ -462,6 +462,8 @@ const Index = () => {
           video_mode: downloadedData.videoMode,
           language: downloadedData.language,
           diversity_intensity: downloadedData.diversity_intensity,
+          tiktok_compliance: downloadedData.tiktok_compliance,
+          additional_image_urls: downloadedData.additional_image_urls,
         },
       });
       if (analysisError || analysisData?.error) {
