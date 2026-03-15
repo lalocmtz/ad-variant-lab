@@ -27,6 +27,20 @@ serve(async (req) => {
       ? `\nNote: The original video is only ${videoDuration} seconds. Adapt pacing to fill a 15-second execution blueprint naturally.`
       : "";
 
+    const complianceBlock = tiktok_compliance ? `
+
+FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO — CUMPLIR AL 100%):
+- NO promesas médicas, curas ni garantías de resultados absolutos
+- NO comparativas de "antes y después" con resultados garantizados
+- NO claims de salud regulados (FDA, COFEPRIS, etc.)
+- NO lenguaje de "garantía", "100% efectivo", "cura", "elimina", "milagroso"
+- SÍ experiencia personal: "a mí me funcionó", "noté cambios"
+- SÍ prueba social: "miles de personas lo usan"
+- SÍ urgencia comercial: escasez, descuentos, tiempo limitado
+- SÍ beneficios demostrables sin claims médicos
+- Usa disclaimers implícitos: "resultados pueden variar"
+- Todos los scripts de variantes DEBEN cumplir estas reglas` : "";
+
     const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine for 15-Second Reconstruction.
 
 Your job is to analyze a provided video and convert it into a complete machine-readable blueprint that allows another generative AI (Sora, Kling, HeyGen, Runway, AIgen, etc.) to recreate the ad using a different actor in EXACTLY 15 SECONDS.
