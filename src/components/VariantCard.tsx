@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
+import ExecutionTimeline from "@/components/debug/ExecutionTimeline";
+
+const USE_ORCHESTRATOR = import.meta.env.VITE_USE_VIDEO_ORCHESTRATOR === "true";
 
 interface VariantCardProps {
   variant: VariantResult;
@@ -67,6 +70,9 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
   const [activeEngine, setActiveEngine] = useState<string | undefined>();
   const [videoSpec, setVideoSpec] = useState<VideoSpec | undefined>();
   const [fallbackUsed, setFallbackUsed] = useState(false);
+  const [fallbackChain, setFallbackChain] = useState<Array<{ provider: string; status: string; message: string | null }>>([]);
+  const [orchestratorJobId, setOrchestratorJobId] = useState<string | undefined>();
+  const [timelineRefresh, setTimelineRefresh] = useState(0);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
@@ -222,54 +228,113 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     setActiveEngine(undefined);
     setVideoSpec(undefined);
     setFallbackUsed(false);
+    setFallbackChain([]);
 
     try {
       const publicImageUrl = await uploadBase64ToStorage(variant.generated_image_url, variant.variant_id);
 
-      const { data, error } = await supabase.functions.invoke("generate-video-sora", {
-        body: {
-          variantId: variant.variant_id,
-          imageUrl: publicImageUrl,
-          promptText,
-          language: language || "es-MX",
-          accent: accent || "mexicano",
-          model: engineKey,
-        },
-      });
+      if (USE_ORCHESTRATOR) {
+        // ── Orchestrator path ──
+        const jobId = `vv_${variant.variant_id}_${Date.now()}`;
+        setOrchestratorJobId(jobId);
 
-      // Handle structured error response
-      if (error || (data && data.ok === false)) {
-        const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
-        setVideoStatus("failed");
-        setVideoError(errMsg);
-        toast.error(errMsg);
-        onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
-        return;
-      }
+        const { data, error } = await supabase.functions.invoke("generate-video-orchestrator", {
+          body: {
+            job_id: jobId,
+            module: "video_variants",
+            stage: "provider_video_prompt",
+            effective_prompt: promptText,
+            image_url: publicImageUrl,
+            language: language || "es-MX",
+            accent: accent || "mexicano",
+            provider_order: ["sora", "fal", "kling"],
+          },
+        });
 
-      if (!data?.taskId) {
-        const errMsg = "El proveedor no devolvió un taskId válido.";
-        setVideoStatus("failed");
-        setVideoError(errMsg);
-        toast.error(errMsg);
-        onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
-        return;
-      }
+        if (error || (data && data.ok === false)) {
+          const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          if (data?.fallback_chain) setFallbackChain(data.fallback_chain);
+          setTimelineRefresh(r => r + 1);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
 
-      const taskId = data.taskId;
-      setVideoTaskId(taskId);
-      setVideoStatus("queued");
-      setActiveEngine(data.modelLabel || data.engine || engineKey);
-      setVideoSpec(data.spec || undefined);
-      setFallbackUsed(data.fallbackUsed || false);
+        if (!data?.taskId) {
+          const errMsg = "El orquestador no devolvió un taskId válido.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          setTimelineRefresh(r => r + 1);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
 
-      if (data.fallbackUsed) {
-        toast.info(`Motor alternativo usado: ${data.modelLabel || data.engine}`);
+        const taskId = data.taskId;
+        setVideoTaskId(taskId);
+        setVideoStatus("queued");
+        setActiveEngine(data.modelLabel || data.provider_used || engineKey);
+        setVideoSpec(data.spec || undefined);
+        setFallbackUsed(data.fallbackUsed || false);
+        if (data.fallback_chain) setFallbackChain(data.fallback_chain);
+        setTimelineRefresh(r => r + 1);
+
+        if (data.fallbackUsed) {
+          toast.info(`Fallback usado → ${data.modelLabel || data.provider_used}`);
+        } else {
+          toast.success(`Generación iniciada con ${data.modelLabel || data.provider_used}`);
+        }
+
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
+
       } else {
-        toast.success(`Generación iniciada con ${data.modelLabel || data.engine}`);
-      }
+        // ── Legacy path (generate-video-sora directly) ──
+        const { data, error } = await supabase.functions.invoke("generate-video-sora", {
+          body: {
+            variantId: variant.variant_id,
+            imageUrl: publicImageUrl,
+            promptText,
+            language: language || "es-MX",
+            accent: accent || "mexicano",
+            model: engineKey,
+          },
+        });
 
-      onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
+        if (error || (data && data.ok === false)) {
+          const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
+
+        if (!data?.taskId) {
+          const errMsg = "El proveedor no devolvió un taskId válido.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
+
+        const taskId = data.taskId;
+        setVideoTaskId(taskId);
+        setVideoStatus("queued");
+        setActiveEngine(data.modelLabel || data.engine || engineKey);
+        setVideoSpec(data.spec || undefined);
+        setFallbackUsed(data.fallbackUsed || false);
+
+        if (data.fallbackUsed) {
+          toast.info(`Motor alternativo usado: ${data.modelLabel || data.engine}`);
+        } else {
+          toast.success(`Generación iniciada con ${data.modelLabel || data.engine}`);
+        }
+
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
+      }
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : "Error desconocido";
       setVideoStatus("failed");
@@ -291,6 +356,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     setActiveEngine(undefined);
     setVideoSpec(undefined);
     setFallbackUsed(false);
+    setFallbackChain([]);
+    setOrchestratorJobId(undefined);
   };
 
   const formatElapsed = (secs: number) => {
@@ -439,6 +506,17 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
               </div>
             )}
 
+            {/* Fallback chain summary */}
+            {fallbackChain.length > 1 && (
+              <div className="flex flex-wrap gap-1">
+                {fallbackChain.map((f, i) => (
+                  <span key={i} className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${f.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-green-500/10 text-green-600"}`}>
+                    {f.provider}: {f.status}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Failed state */}
             {videoStatus === "failed" && (
               <div className="space-y-1.5">
@@ -447,10 +525,14 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                     <p className="text-[10px] text-destructive">{videoError}</p>
                   </div>
                 )}
+                {/* Orchestrator diagnostics */}
+                {USE_ORCHESTRATOR && orchestratorJobId && (
+                  <ExecutionTimeline jobId={orchestratorJobId} refreshTrigger={timelineRefresh} />
+                )}
                 <div className="flex gap-1">
                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
                     <RefreshCw className="h-3 w-3" />
-                    Reintentar con Sora 2
+                    Reintentar
                   </Button>
                 </div>
               </div>
@@ -492,6 +574,10 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                     </span>
                   )}
                 </div>
+                {/* Orchestrator diagnostics on success */}
+                {USE_ORCHESTRATOR && orchestratorJobId && (
+                  <ExecutionTimeline jobId={orchestratorJobId} refreshTrigger={timelineRefresh} />
+                )}
                 <div className="flex gap-2">
                   <Button
                     variant="default"
