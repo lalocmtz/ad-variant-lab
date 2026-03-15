@@ -160,6 +160,8 @@ interface DownloadedData {
   language: string;
   accent: string;
   diversity_intensity: string;
+  tiktok_compliance?: boolean;
+  additional_image_urls?: string[];
 }
 
 function buildAnimationPromptPackage(
