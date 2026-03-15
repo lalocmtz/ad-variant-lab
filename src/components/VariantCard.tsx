@@ -228,54 +228,113 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     setActiveEngine(undefined);
     setVideoSpec(undefined);
     setFallbackUsed(false);
+    setFallbackChain([]);
 
     try {
       const publicImageUrl = await uploadBase64ToStorage(variant.generated_image_url, variant.variant_id);
 
-      const { data, error } = await supabase.functions.invoke("generate-video-sora", {
-        body: {
-          variantId: variant.variant_id,
-          imageUrl: publicImageUrl,
-          promptText,
-          language: language || "es-MX",
-          accent: accent || "mexicano",
-          model: engineKey,
-        },
-      });
+      if (USE_ORCHESTRATOR) {
+        // ── Orchestrator path ──
+        const jobId = `vv_${variant.variant_id}_${Date.now()}`;
+        setOrchestratorJobId(jobId);
 
-      // Handle structured error response
-      if (error || (data && data.ok === false)) {
-        const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
-        setVideoStatus("failed");
-        setVideoError(errMsg);
-        toast.error(errMsg);
-        onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
-        return;
-      }
+        const { data, error } = await supabase.functions.invoke("generate-video-orchestrator", {
+          body: {
+            job_id: jobId,
+            module: "video_variants",
+            stage: "provider_video_prompt",
+            effective_prompt: promptText,
+            image_url: publicImageUrl,
+            language: language || "es-MX",
+            accent: accent || "mexicano",
+            provider_order: ["sora", "fal", "kling"],
+          },
+        });
 
-      if (!data?.taskId) {
-        const errMsg = "El proveedor no devolvió un taskId válido.";
-        setVideoStatus("failed");
-        setVideoError(errMsg);
-        toast.error(errMsg);
-        onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
-        return;
-      }
+        if (error || (data && data.ok === false)) {
+          const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          if (data?.fallback_chain) setFallbackChain(data.fallback_chain);
+          setTimelineRefresh(r => r + 1);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
 
-      const taskId = data.taskId;
-      setVideoTaskId(taskId);
-      setVideoStatus("queued");
-      setActiveEngine(data.modelLabel || data.engine || engineKey);
-      setVideoSpec(data.spec || undefined);
-      setFallbackUsed(data.fallbackUsed || false);
+        if (!data?.taskId) {
+          const errMsg = "El orquestador no devolvió un taskId válido.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          setTimelineRefresh(r => r + 1);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
 
-      if (data.fallbackUsed) {
-        toast.info(`Motor alternativo usado: ${data.modelLabel || data.engine}`);
+        const taskId = data.taskId;
+        setVideoTaskId(taskId);
+        setVideoStatus("queued");
+        setActiveEngine(data.modelLabel || data.provider_used || engineKey);
+        setVideoSpec(data.spec || undefined);
+        setFallbackUsed(data.fallbackUsed || false);
+        if (data.fallback_chain) setFallbackChain(data.fallback_chain);
+        setTimelineRefresh(r => r + 1);
+
+        if (data.fallbackUsed) {
+          toast.info(`Fallback usado → ${data.modelLabel || data.provider_used}`);
+        } else {
+          toast.success(`Generación iniciada con ${data.modelLabel || data.provider_used}`);
+        }
+
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
+
       } else {
-        toast.success(`Generación iniciada con ${data.modelLabel || data.engine}`);
-      }
+        // ── Legacy path (generate-video-sora directly) ──
+        const { data, error } = await supabase.functions.invoke("generate-video-sora", {
+          body: {
+            variantId: variant.variant_id,
+            imageUrl: publicImageUrl,
+            promptText,
+            language: language || "es-MX",
+            accent: accent || "mexicano",
+            model: engineKey,
+          },
+        });
 
-      onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
+        if (error || (data && data.ok === false)) {
+          const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
+
+        if (!data?.taskId) {
+          const errMsg = "El proveedor no devolvió un taskId válido.";
+          setVideoStatus("failed");
+          setVideoError(errMsg);
+          toast.error(errMsg);
+          onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
+          return;
+        }
+
+        const taskId = data.taskId;
+        setVideoTaskId(taskId);
+        setVideoStatus("queued");
+        setActiveEngine(data.modelLabel || data.engine || engineKey);
+        setVideoSpec(data.spec || undefined);
+        setFallbackUsed(data.fallbackUsed || false);
+
+        if (data.fallbackUsed) {
+          toast.info(`Motor alternativo usado: ${data.modelLabel || data.engine}`);
+        } else {
+          toast.success(`Generación iniciada con ${data.modelLabel || data.engine}`);
+        }
+
+        onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
+      }
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : "Error desconocido";
       setVideoStatus("failed");
