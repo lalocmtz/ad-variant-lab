@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.generate-video-orchestrator]
 verify_jwt = false
+
+[functions.analyze-viral-structure]
+verify_jwt = false
