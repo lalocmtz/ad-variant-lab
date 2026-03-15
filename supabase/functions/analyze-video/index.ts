@@ -65,13 +65,13 @@ CRITICAL RULES
 10. If ${lang} starts with "es", use natural spoken Spanish matching the target market. For es-MX: use Mexican Spanish vocabulary, phrasing, and tone — avoid Spain Spanish and neutral corporate Spanish. Write dialogue as a real Mexican UGC creator would speak.
 11. NEVER translate user-provided Spanish scripts to English.
 
-15-SECOND COMPRESSION RULE (MANDATORY)
-No matter how long the original video is, compress to exactly 15 seconds:
-- 0.0–2.5s: Hook (strongest attention grab)
-- 2.5–6.0s: Reframe / context / value revelation  
-- 6.0–10.5s: Strongest demo + value proof beats only
-- 10.5–12.5s: Objection resolution / price logic
-- 12.5–15.0s: CTA (clear, direct)
+9-SECOND COMPRESSION RULE (MANDATORY)
+No matter how long the original video is, compress to exactly 9 seconds:
+- 0.0–1.5s: Hook (strongest attention grab)
+- 1.5–3.5s: Reframe / context / value revelation  
+- 3.5–6.5s: Strongest demo + value proof beats only
+- 6.5–8.0s: Proof / objection resolution
+- 8.0–9.0s: CTA (clear, direct)
 
 NO TEXT / NO OVERLAYS RULE
 Generated video must NOT include comment bubbles, captions, subtitles, text overlays, animated graphics, stickers, UI elements. If original uses comment-reply hook, preserve as spoken context ONLY.
