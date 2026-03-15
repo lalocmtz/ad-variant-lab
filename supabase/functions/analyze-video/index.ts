@@ -95,7 +95,8 @@ For each variant, generate an animation_prompt_json object containing:
 - restricciones_de_generacion (all boolean flags for product lock, mechanics, no text, 15s duration, etc.)
 
 HOOK CLASSIFICATION
-Use: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook`;
+Use: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook
+${complianceBlock}`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
