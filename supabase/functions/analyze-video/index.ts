@@ -21,10 +21,10 @@ serve(async (req) => {
 
     // Extract video duration from metadata for compression instructions
     const videoDuration = metadata?.duration || 0;
-    const compressionNote = videoDuration > 15
-      ? `\nIMPORTANT: The original video is ${videoDuration} seconds long. You MUST compress the ad into exactly 15 seconds by keeping ONLY the highest-conversion beats. Remove all filler, repeated explanations, and secondary beats. Preserve: hook (0-2.5s), reframe (2.5-6s), strongest demo (6-10.5s), objection handling (10.5-12.5s), CTA (12.5-15s).`
-      : videoDuration > 0 && videoDuration < 15
-      ? `\nNote: The original video is only ${videoDuration} seconds. Adapt pacing to fill a 15-second execution blueprint naturally.`
+    const compressionNote = videoDuration > 9
+      ? `\nIMPORTANT: The original video is ${videoDuration} seconds long. You MUST compress the ad into exactly 9 seconds by keeping ONLY the highest-conversion beats. Remove all filler, repeated explanations, and secondary beats. Preserve: hook (0-1.5s), reframe (1.5-3.5s), strongest demo/benefit (3.5-6.5s), proof/objection (6.5-8.0s), CTA (8.0-9.0s).`
+      : videoDuration > 0 && videoDuration < 9
+      ? `\nNote: The original video is only ${videoDuration} seconds. Adapt pacing to fill a 9-second execution blueprint naturally.`
       : "";
 
     const complianceBlock = tiktok_compliance ? `
