@@ -43,6 +43,8 @@ const AppRoutes = () => (
     <Route path="/create/bof" element={<AppLayout><BofVideosPage /></AppLayout>} />
     <Route path="/create/broll-lab" element={<Navigate to="/create/broll-lab-2" replace />} />
     <Route path="/create/broll-lab-2" element={<AppLayout><BrollLab2Page /></AppLayout>} />
+    <Route path="/create/prompt-lab" element={<AppLayout><PromptLabPage /></AppLayout>} />
+    <Route path="/create/ugc-arcade" element={<AppLayout><UgcArcadePage /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
     <Route path="/library/assets" element={<AppLayout><AssetsPage /></AppLayout>} />
     <Route path="/library/history" element={<AppLayout><HistoryPage /></AppLayout>} />

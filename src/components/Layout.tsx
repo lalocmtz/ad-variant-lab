@@ -23,6 +23,8 @@ const createItems = [
   { title: "BOF Videos", url: "/create/bof", icon: ShoppingBag },
   { title: "Static Variants", url: "/create/static", icon: Image },
   { title: "B-Roll Lab 2.0", url: "/create/broll-lab-2", icon: FlaskRound },
+  { title: "Prompt Lab", url: "/create/prompt-lab", icon: Microscope },
+  { title: "UGC Arcade", url: "/create/ugc-arcade", icon: Gamepad2 },
 ];
 
 const libraryItems = [

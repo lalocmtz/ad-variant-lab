@@ -211,8 +211,8 @@ const PromptLabPage = () => {
               {error}
             </div>
           )}
-          <Button onClick={analyzeVideo} disabled={step === "analyzing" || !videoUrl.trim()}>
-            {step === "analyzing" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+          <Button onClick={analyzeVideo} disabled={!videoUrl.trim()}>
+            <Play className="mr-2 h-4 w-4" />
             Analizar Video
           </Button>
         </div>
