@@ -81,6 +81,7 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
     onSubmit({
       ...inputs,
       tiktok_compliance: tiktokCompliance,
+      productLock,
       additionalImageUrls: additionalUrls,
     });
   };
