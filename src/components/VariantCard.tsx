@@ -13,6 +13,7 @@ interface VariantCardProps {
   variant: VariantResult;
   language?: string;
   accent?: string;
+  effectivePrompt?: string;
   onRegenerate: () => void;
   onApprove: () => void;
   onReject: () => void;
