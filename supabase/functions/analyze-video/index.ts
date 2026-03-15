@@ -127,7 +127,12 @@ INSTRUCTIONS:
     if (product_image_url) {
       userContent.push({ type: "image_url", image_url: { url: product_image_url } });
     }
-
+    if (Array.isArray(additional_image_urls)) {
+      for (const imgUrl of additional_image_urls.slice(0, 3)) {
+        userContent.push({ type: "text", text: "Additional product reference image showing real product details, size, and appearance:" });
+        userContent.push({ type: "image_url", image_url: { url: imgUrl } });
+      }
+    }
     const models = ["google/gemini-2.5-pro", "google/gemini-2.5-flash"];
 
     const requestBody = {
