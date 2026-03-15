@@ -12,16 +12,14 @@ import { useAuth } from "@/hooks/useAuth";
 import PromptSection from "@/components/prompts/PromptSection";
 import ImageUploadField from "@/components/shared/ImageUploadField";
 import ExecutionTimeline from "@/components/debug/ExecutionTimeline";
+import UgcIntentControls from "@/components/ugc/UgcIntentControls";
 import { buildPrompt } from "@/lib/promptRegistry";
 import { saveDraft, clearDraft } from "@/lib/promptDraftStore";
 import { createHistoryRecord, updateHistoryRecord } from "@/lib/historyService";
 import type { GenerationPrompt } from "@/lib/promptTypes";
+import { type UgcIntent, DEFAULT_INTENT, LABELS } from "@/lib/ugcIntentTypes";
 
 type ArcadePhase = "idle" | "preparing" | "generating" | "polling" | "done" | "error";
-
-const UGC_DEFAULTS = {
-  style: "handheld, realistic UGC feel, natural speech, micro-imperfections, shot variation, believable product handling, vertical 9:16, smartphone aesthetic, natural lighting, casual tone",
-};
 
 const LANGUAGES = [
   { value: "es-MX", label: "Español (MX)" },
@@ -29,6 +27,115 @@ const LANGUAGES = [
   { value: "es-CO", label: "Español (CO)" },
   { value: "en-US", label: "English (US)" },
 ];
+
+// ── Intent-aware prompt builder ──────────────────────────────
+
+function buildNegativeConstraints(intent: UgcIntent): string {
+  const negatives: string[] = [];
+
+  // Body target constraints
+  const bodyMap: Record<string, string[]> = {
+    axilas: ["Do NOT apply or show the product on the face, hands, or other body areas. ONLY underarm/axilla application."],
+    cara: ["Do NOT apply or show the product on areas other than the face."],
+    manos: ["Do NOT apply product to face or body. Focus on hands only."],
+    cuerpo: ["Do NOT focus on face-only or hands-only application."],
+    cabello: ["Do NOT apply the product to skin. Focus on hair only."],
+  };
+  if (bodyMap[intent.body_target]) negatives.push(...bodyMap[intent.body_target]);
+
+  // Creative type constraints
+  if (intent.creative_type === "recomendacion") {
+    negatives.push("Do NOT turn this into generic beauty b-roll or product photography.");
+    negatives.push("This MUST feel like a personal recommendation from a real person, not a commercial.");
+  }
+  if (intent.creative_type === "testimonio") {
+    negatives.push("Do NOT make this look scripted or commercial. It must feel like a genuine testimonial.");
+  }
+
+  // Voice constraints
+  if (intent.voice_mode === "dialogo_exacto") {
+    negatives.push("Do NOT ignore or paraphrase the spoken dialogue. Follow the provided script EXACTLY.");
+  }
+  if (intent.voice_mode === "sin_voz") {
+    negatives.push("Do NOT include any spoken dialogue or voiceover. Visual-only video.");
+  }
+
+  // Realism constraints
+  if (intent.realism_level === "maximo") {
+    negatives.push("Do NOT make the clip look cinematic, commercial, or overly polished.");
+    negatives.push("Do NOT use studio lighting, professional color grading, or smooth camera movements.");
+  }
+
+  // Product lock
+  if (intent.product_lock) {
+    negatives.push("Do NOT alter, redesign, or approximate the product. Match the reference EXACTLY.");
+  }
+
+  // Character lock
+  if (intent.character_lock) {
+    negatives.push("Do NOT change the person's appearance, hairstyle, skin tone, or clothing from the source image.");
+  }
+
+  return negatives.map(n => `- ${n}`).join("\n");
+}
+
+function buildIntentContext(intent: UgcIntent): string {
+  return `=== UGC INTENT CONTEXT ===
+Creative type: ${LABELS.creative_type[intent.creative_type]}
+Voice mode: ${LABELS.voice_mode[intent.voice_mode]}
+Body/usage target: ${LABELS.body_target[intent.body_target]}
+Narrative structure: ${LABELS.narrative_structure[intent.narrative_structure]}
+Shot pattern: ${LABELS.shot_pattern[intent.shot_pattern]}
+Product visibility: ${LABELS.product_visibility[intent.product_visibility]}
+Realism level: ${LABELS.realism_level[intent.realism_level]}
+CTA: ${LABELS.cta_mode[intent.cta_mode]}
+Product Lock: ${intent.product_lock ? "ON — product must match reference exactly" : "OFF"}
+Character Lock: ${intent.character_lock ? "ON — preserve person identity from source image" : "OFF"}
+Dialogue Lock: ${intent.dialogue_lock ? "ON — follow provided dialogue literally" : "OFF"}`;
+}
+
+function buildStructureInstructions(intent: UgcIntent): string {
+  const structures: Record<string, string> = {
+    hook_solucion_cta: `Structure: Hook (0-1.5s) → Solution/Benefit (1.5-6.5s) → CTA (6.5-9s)
+- Hook: Attention-grabbing opening that states a problem or desire
+- Solution: Show the product solving the problem, demonstrate usage on ${LABELS.body_target[intent.body_target]}
+- CTA: Natural call-to-action, ${intent.cta_mode !== "ninguno" ? `ending with "${LABELS.cta_mode[intent.cta_mode]}"` : "organic closing"}`,
+
+    hook_demo_cta: `Structure: Hook (0-1.5s) → Demo (1.5-7s) → CTA (7-9s)
+- Hook: Quick attention grab
+- Demo: Full product demonstration on ${LABELS.body_target[intent.body_target]}, show texture, application, result
+- CTA: ${intent.cta_mode !== "ninguno" ? LABELS.cta_mode[intent.cta_mode] : "Natural closing"}`,
+
+    story_producto_cta: `Structure: Story (0-3s) → Product reveal (3-7s) → CTA (7-9s)
+- Story: Personal context or mini-narrative
+- Product: Introduce and show product, demonstrate on ${LABELS.body_target[intent.body_target]}
+- CTA: ${intent.cta_mode !== "ninguno" ? LABELS.cta_mode[intent.cta_mode] : "Natural closing"}`,
+
+    demo_first: `Structure: Demo-first (0-6s) → Result + CTA (6-9s)
+- Demo: Jump straight into product usage on ${LABELS.body_target[intent.body_target]}, show application
+- Result + CTA: Show the outcome and close naturally`,
+  };
+  return structures[intent.narrative_structure] || structures.hook_solucion_cta;
+}
+
+function buildShotPatternInstructions(intent: UgcIntent): string {
+  const patterns: Record<string, string> = {
+    one_take: "Shot style: Single continuous take. No cuts. Handheld smartphone feel with natural micro-movements.",
+    "3_cuts_ugc": `Shot style: 3 distinct UGC cuts with natural transitions.
+- Cut 1: Selfie/face talking (hook)
+- Cut 2: Product close-up or demonstration on ${LABELS.body_target[intent.body_target]}
+- Cut 3: Reaction/result + CTA
+Each cut should feel like a different angle or moment, but maintain visual continuity.`,
+    selfie_closeup_cta: `Shot style: 3 shots.
+- Shot 1: Selfie mode, creator talking to camera
+- Shot 2: Close-up of product on ${LABELS.body_target[intent.body_target]}
+- Shot 3: Back to creator for CTA/reaction`,
+    review_style: "Shot style: Review format. Creator holds product, shows it to camera, demonstrates, gives opinion. Handheld throughout.",
+  };
+  return patterns[intent.shot_pattern] || patterns["3_cuts_ugc"];
+}
+
+// ── Main component ────────────────────────────────────────────
 
 const UgcArcadePage = () => {
   const { user } = useAuth();
@@ -40,6 +147,7 @@ const UgcArcadePage = () => {
   const [language, setLanguage] = useState("es-MX");
   const [providerPref, setProviderPref] = useState("");
   const [notes, setNotes] = useState("");
+  const [intent, setIntent] = useState<UgcIntent>(DEFAULT_INTENT);
 
   // ── State ──
   const [phase, setPhase] = useState<ArcadePhase>("idle");
@@ -60,52 +168,101 @@ const UgcArcadePage = () => {
     };
   }, []);
 
-  // ── Build prompt chain from simple instruction ──
+  // ── Build intent-enriched prompt chain ──
   const buildPromptChain = useCallback(() => {
-    const scriptPrompt = `You are a UGC script writer. Given the following instruction, write a short, authentic UGC-style script for a video ad.
+    const intentCtx = buildIntentContext(intent);
+    const structureInstr = buildStructureInstructions(intent);
+    const shotInstr = buildShotPatternInstructions(intent);
+    const negatives = buildNegativeConstraints(intent);
 
-Style: ${UGC_DEFAULTS.style}
+    const voiceModeInstr = intent.voice_mode === "dialogo_exacto"
+      ? `\n\nIMPORTANT: The user has provided EXACT dialogue. Treat the instruction text as spoken lines. Divide them into timed beats. The script MUST follow this dialogue verbatim — do not paraphrase, summarize, or rewrite.`
+      : intent.voice_mode === "dialogo_guiado"
+      ? `\n\nThe user's instruction provides guided dialogue. You may paraphrase slightly for natural flow, but MUST preserve the core message, claims, and CTA intent.`
+      : `\n\nThis is a visual-only video with NO spoken dialogue. Create visual storytelling beats instead.`;
+
+    const scriptPrompt = `You are a UGC script writer specializing in authentic social media video ads.
+
+${intentCtx}
+
+${structureInstr}
+
 Language: ${language}
 ${notes ? `Additional context: ${notes}` : ""}
-${productImageUrl ? "A product image is provided — the script must include natural product handling/demonstration moments." : ""}
+${productImageUrl ? "A product image is provided — the script must include natural product handling/demonstration moments matching the product reference exactly." : ""}
+${voiceModeInstr}
 
 User instruction: "${instruction}"
 
-Write the script with:
-- Hook (0-1.5s): Attention-grabbing opening
-- Body (1.5-6.5s): Authentic demonstration/recommendation
-- CTA (6.5-9s): Natural call-to-action
+Write the script following the exact narrative structure above.
+${intent.creative_type === "recomendacion" ? "This must feel like a genuine personal recommendation. The creator truly likes this product and wants to share it." : ""}
+${intent.creative_type === "problema_solucion" ? "Open with a relatable problem, then present the product as the natural solution." : ""}
+${intent.creative_type === "testimonio" ? "Frame this as a genuine testimonial. First-person experience with real emotions." : ""}
 
-Keep it conversational, imperfect, and believable. No polished ad language.`;
+Keep it conversational, imperfect, and believable. No polished ad language.
 
-    const shotlistPrompt = `Given the following UGC script, create a detailed shot list for a 9-second vertical video.
+=== NEGATIVE CONSTRAINTS ===
+${negatives}`;
 
-Style: ${UGC_DEFAULTS.style}
+    const shotlistPrompt = `Given the following UGC script, create a detailed shot list for a 9-second vertical 9:16 video.
+
+${intentCtx}
+
+${shotInstr}
+
 The source image shows the person/creator who will appear in the video.
-${productImageUrl ? "A product image is provided — include close-ups and handling shots of the exact product shown." : ""}
+${intent.character_lock ? "CHARACTER LOCK: The person must look EXACTLY like the source image — same face, hair, skin tone, clothing." : ""}
+${productImageUrl ? "PRODUCT LOCK: A product image is provided — include close-ups and handling shots of the EXACT product shown. Do not redesign or approximate it." : ""}
+
+Product usage area: ${LABELS.body_target[intent.body_target]}
+Product visibility: ${LABELS.product_visibility[intent.product_visibility]}
 
 Script:
 {script}
 
-Create 3-5 shots with: shot description, camera movement (handheld micro-shakes, natural drift), duration, and mood. 
+Create shots with: shot description, camera movement (handheld micro-shakes, natural drift), duration, and mood.
 Ensure visual continuity with the source image.
-NO cinematic movements. NO dramatic zooms. Smartphone-only aesthetics.`;
+NO cinematic movements. NO dramatic zooms. Smartphone-only aesthetics.
 
-    const videoPrompt = `Create a UGC-style vertical video based on the following shot list.
+=== NEGATIVE CONSTRAINTS ===
+${negatives}`;
 
-Style: ${UGC_DEFAULTS.style}
-The source image is the visual reference for the person/creator — preserve their identity and appearance.
-${productImageUrl ? "The product image shows the exact product — preserve its appearance, color, texture, and packaging in all product shots." : ""}
+    const videoPrompt = `Create a UGC-style vertical 9:16 video based on the following shot list.
+
+${intentCtx}
+
+The source image is the visual reference for the person/creator — preserve their identity and appearance exactly.
+${productImageUrl ? "The product image shows the EXACT product — preserve its appearance, color, texture, packaging, and branding in all product shots." : ""}
+
+${shotInstr}
+
+Product usage area: ${LABELS.body_target[intent.body_target]}
 
 Shot list:
 {shotlist}
 
-CRITICAL RULES:
+${intent.voice_mode === "dialogo_exacto" ? `=== GUION ===
+The following is the exact spoken dialogue for this video. The video MUST match this timing:
+"${instruction}"` : ""}
+
+=== CRITICAL RULES ===
 - Handheld camera with micro-shakes and natural drift
 - Natural auto-focus adjustments
-- NO cinematic movements, NO dramatic zooms, NO robotic transitions
-- Must look like it was filmed on a smartphone by a real content creator
-- Product must be clearly visible and accurately represented when shown`;
+- ${intent.realism_level === "maximo" ? "MAXIMUM REALISM: Must look indistinguishable from a real smartphone recording" : intent.realism_level === "balanceado" ? "Balanced realism with slight polish allowed" : "More polished look acceptable, but still UGC feel"}
+- Product must be clearly visible and accurately represented when shown
+- Product is used on: ${LABELS.body_target[intent.body_target]} — do NOT show it applied to other body areas
+
+=== NEGATIVE CONSTRAINTS ===
+${negatives}
+
+=== PRIORITY ORDER ===
+1. Correct body/usage target (${LABELS.body_target[intent.body_target]})
+2. Product accuracy (exact match to reference)
+3. Character identity preservation
+4. Narrative structure compliance
+5. Dialogue fidelity (${LABELS.voice_mode[intent.voice_mode]})
+6. Shot pattern (${LABELS.shot_pattern[intent.shot_pattern]})
+7. Realism level (${LABELS.realism_level[intent.realism_level]})`;
 
     const allPrompts: GenerationPrompt[] = [
       buildPrompt(jobId, "ugc_arcade", "instruction_to_script_prompt", { prompt_text: scriptPrompt }, "Gemini"),
@@ -115,7 +272,7 @@ CRITICAL RULES:
 
     setPrompts(allPrompts);
     return allPrompts;
-  }, [instruction, language, notes, productImageUrl, jobId]);
+  }, [instruction, language, notes, productImageUrl, jobId, intent]);
 
   // ── Polling for queued videos ──
   const startPolling = useCallback((taskId: string, provider: string) => {
@@ -133,7 +290,7 @@ CRITICAL RULES:
           if (pollFailCount.current >= 5) {
             clearInterval(pollRef.current!);
             pollRef.current = null;
-            setErrorMsg("Polling falló después de 5 intentos. Revisa el historial.");
+            setErrorMsg("Polling falló después de 5 intentos.");
             setPhase("error");
           }
           return;
@@ -175,7 +332,7 @@ CRITICAL RULES:
     }, 8000);
   }, [jobId]);
 
-  // ── Main generate action: auto-build prompts + generate video ──
+  // ── Main generate action ──
   const handleGenerate = useCallback(async () => {
     if (!sourceImageUrl.trim() || !instruction.trim()) {
       toast.error("Imagen fuente e instrucción son requeridos");
@@ -186,10 +343,8 @@ CRITICAL RULES:
     setVideoResult(null);
     setPhase("preparing");
 
-    // 1. Auto-build prompts
     const chain = buildPromptChain();
 
-    // 2. Create history record
     if (user) {
       await createHistoryRecord({
         user_id: user.id,
@@ -206,12 +361,12 @@ CRITICAL RULES:
           instruction,
           language,
           notes,
+          ugc_intent: intent,
         },
         resumable: true,
       });
     }
 
-    // 3. Go straight to video generation
     setPhase("generating");
 
     try {
@@ -231,7 +386,13 @@ CRITICAL RULES:
           mode: "ugc",
           preferred_provider: providerPref || null,
           provider_order: providerPref ? [providerPref, "sora", "fal", "kling"] : ["sora", "fal", "kling"],
-          metadata: { instruction, language, notes, product_image_url: productImageUrl },
+          metadata: {
+            instruction,
+            language,
+            notes,
+            product_image_url: productImageUrl,
+            ugc_intent: intent,
+          },
           user_id: user?.id,
         },
       });
@@ -283,9 +444,9 @@ CRITICAL RULES:
         current_step: "generating_video",
       });
     }
-  }, [sourceImageUrl, instruction, buildPromptChain, user, jobId, productImageUrl, language, notes, providerPref, startPolling]);
+  }, [sourceImageUrl, instruction, buildPromptChain, user, jobId, productImageUrl, language, notes, providerPref, startPolling, intent]);
 
-  // ── Regenerate with edited prompts ──
+  // ── Regenerate ──
   const handleRegenerate = useCallback(async () => {
     setPhase("generating");
     setErrorMsg(null);
@@ -314,6 +475,7 @@ CRITICAL RULES:
             instruction,
             language,
             notes,
+            ugc_intent: intent,
           },
         });
       }
@@ -331,7 +493,7 @@ CRITICAL RULES:
           mode: "ugc",
           preferred_provider: providerPref || null,
           provider_order: providerPref ? [providerPref, "sora", "fal", "kling"] : ["sora", "fal", "kling"],
-          metadata: { instruction, language, notes, product_image_url: productImageUrl },
+          metadata: { instruction, language, notes, product_image_url: productImageUrl, ugc_intent: intent },
           user_id: user?.id,
         },
       });
@@ -366,8 +528,9 @@ CRITICAL RULES:
       setPhase("error");
       setRefreshTrigger(t => t + 1);
     }
-  }, [prompts, sourceImageUrl, instruction, language, notes, productImageUrl, providerPref, user, startPolling]);
+  }, [prompts, sourceImageUrl, instruction, language, notes, productImageUrl, providerPref, user, startPolling, intent]);
 
+  // ── Prompt handlers ──
   const handlePromptChange = useCallback((promptId: string, newText: string) => {
     setPrompts(prev => prev.map(p => {
       if (p.id !== promptId) return p;
@@ -396,6 +559,7 @@ CRITICAL RULES:
     setProductImageUrl("");
     setInstruction("");
     setNotes("");
+    setIntent(DEFAULT_INTENT);
   }, []);
 
   const handleDownload = useCallback(async () => {
@@ -423,7 +587,7 @@ CRITICAL RULES:
       <div>
         <h1 className="text-2xl font-bold text-foreground">UGC Arcade</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Sube una imagen, escribe una instrucción simple y genera un video UGC realista.
+          Sube una imagen, configura la intención y genera un video UGC realista con interpretación precisa.
         </p>
       </div>
 
@@ -446,17 +610,32 @@ CRITICAL RULES:
           />
         </div>
 
+        {/* UGC Intent Controls — presets + semantic chips */}
+        <div className="border-t border-border/50 pt-4">
+          <UgcIntentControls intent={intent} onChange={setIntent} />
+        </div>
+
         {/* Instruction */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">¿Qué quieres en el video? *</label>
+          <label className="text-sm font-medium text-foreground">
+            {intent.voice_mode === "dialogo_exacto"
+              ? "Guion hablado exacto *"
+              : "¿Qué quieres en el video? *"}
+          </label>
           <Textarea
             value={instruction}
             onChange={e => setInstruction(e.target.value)}
-            placeholder="Ej: Una creadora de contenido promociona esta crema facial en un video muy real, estilo UGC, casual y creíble. Muestra cómo la aplica y su reacción natural."
+            placeholder={
+              intent.voice_mode === "dialogo_exacto"
+                ? 'Ej: "¿Ya probaron esta crema para las axilas? Es que yo tenía un problema con las manchas y desde que la uso mis axilas están como nuevas. Se las súper recomiendo, está en mi TikTok Shop."'
+                : "Ej: Una creadora recomienda esta crema para axilas, con demostración de aplicación y CTA de TikTok Shop."
+            }
             className="min-h-[90px] text-sm"
           />
           <p className="text-[10px] text-muted-foreground">
-            Escribe una instrucción simple. El sistema interpreta automáticamente el estilo, guion y shots.
+            {intent.voice_mode === "dialogo_exacto"
+              ? "El sistema tratará este texto como diálogo literal. Se respetará lo más posible."
+              : "Escribe una instrucción o brief. El sistema interpreta automáticamente usando los controles seleccionados."}
           </p>
         </div>
 
@@ -568,7 +747,6 @@ CRITICAL RULES:
             </div>
           </div>
 
-          {/* Video player */}
           {videoResult.url && (
             <div className="flex flex-col items-center gap-3">
               <video
@@ -588,7 +766,6 @@ CRITICAL RULES:
             </div>
           )}
 
-          {/* Polling state */}
           {!videoResult.url && phase === "polling" && (
             <div className="flex flex-col items-center gap-3 py-6">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -599,7 +776,6 @@ CRITICAL RULES:
             </div>
           )}
 
-          {/* New project */}
           <div className="pt-2 border-t border-border/50">
             <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs text-muted-foreground">
               <RotateCcw className="h-3 w-3 mr-1" /> Nuevo proyecto
