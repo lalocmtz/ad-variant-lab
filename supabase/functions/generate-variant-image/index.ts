@@ -392,12 +392,14 @@ serve(async (req) => {
     });
 
     const IMAGE_MODELS = [
-      "google/gemini-2.5-flash-image",
       "google/gemini-3.1-flash-image-preview",
       "google/gemini-3-pro-image-preview",
+      "google/gemini-2.5-flash-image",
     ];
 
     let imageUrl: string | null = null;
+    let lastErrorDetail = "Sin detalle";
+
     for (const model of IMAGE_MODELS) {
       try {
         imageUrl = await callImageGeneration(content, LOVABLE_API_KEY, model);
@@ -405,15 +407,17 @@ serve(async (req) => {
           console.log(`[img-gen] Success with model: ${model}`);
           break;
         }
+        lastErrorDetail = `El modelo ${model} no devolvió imagen.`;
         console.warn(`[img-gen] ${model} returned no image, trying next...`);
       } catch (e: any) {
-        if (e?.status === 402) throw e; // don't retry on credits
+        if (e?.status === 402) throw e;
+        lastErrorDetail = e?.message || `Fallo en ${model}`;
         console.warn(`[img-gen] ${model} failed:`, e?.message || e);
       }
     }
 
     if (!imageUrl) {
-      throw new Error("No se generó imagen después de probar todos los modelos disponibles.");
+      throw new Error(`No se generó imagen después de probar todos los modelos disponibles. Detalle: ${lastErrorDetail}`);
     }
 
     return new Response(JSON.stringify({ image_url: imageUrl }), {
