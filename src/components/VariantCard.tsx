@@ -356,6 +356,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
     setActiveEngine(undefined);
     setVideoSpec(undefined);
     setFallbackUsed(false);
+    setFallbackChain([]);
+    setOrchestratorJobId(undefined);
   };
 
   const formatElapsed = (secs: number) => {
