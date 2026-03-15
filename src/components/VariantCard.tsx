@@ -506,6 +506,17 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
               </div>
             )}
 
+            {/* Fallback chain summary */}
+            {fallbackChain.length > 1 && (
+              <div className="flex flex-wrap gap-1">
+                {fallbackChain.map((f, i) => (
+                  <span key={i} className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${f.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-green-500/10 text-green-600"}`}>
+                    {f.provider}: {f.status}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Failed state */}
             {videoStatus === "failed" && (
               <div className="space-y-1.5">
@@ -514,10 +525,14 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
                     <p className="text-[10px] text-destructive">{videoError}</p>
                   </div>
                 )}
+                {/* Orchestrator diagnostics */}
+                {USE_ORCHESTRATOR && orchestratorJobId && (
+                  <ExecutionTimeline jobId={orchestratorJobId} refreshTrigger={timelineRefresh} />
+                )}
                 <div className="flex gap-1">
                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
                     <RefreshCw className="h-3 w-3" />
-                    Reintentar con Sora 2
+                    Reintentar
                   </Button>
                 </div>
               </div>
