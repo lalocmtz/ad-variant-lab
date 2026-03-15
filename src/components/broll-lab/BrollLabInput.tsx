@@ -30,6 +30,7 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
 
   const [productImagePreview, setProductImagePreview] = useState<string | null>(null);
   const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [productLock, setProductLock] = useState(true);
   const [additionalImages, setAdditionalImages] = useState<File[]>([]);
   const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
 
