@@ -61,7 +61,7 @@ function handleDownloadVideo(url: string, variantId: string) {
   document.body.removeChild(a);
 }
 
-const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
+const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
@@ -82,7 +82,8 @@ const VariantCard = ({ variant, language, accent, onRegenerate, onApprove, onRej
 
   const badge = STATUS_BADGES[variant.status] || STATUS_BADGES.ready;
   const isPending = variant.status === "pending";
-  const promptText = variant.prompt_package?.prompt_text || "";
+  // Single source of truth: use effectivePrompt (from PromptSection edits) if provided, else fall back to variant default
+  const promptText = effectivePrompt || variant.prompt_package?.prompt_text || "";
 
   const isVideoActive = videoStatus === "queued" || videoStatus === "processing";
 
