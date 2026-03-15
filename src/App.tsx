@@ -14,6 +14,8 @@ import BrandSystemPage from "./pages/BrandSystemPage";
 import AssetsPage from "./pages/AssetsPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import PromptLabPage from "./pages/PromptLabPage";
+import UgcArcadePage from "./pages/UgcArcadePage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -41,6 +43,8 @@ const AppRoutes = () => (
     <Route path="/create/bof" element={<AppLayout><BofVideosPage /></AppLayout>} />
     <Route path="/create/broll-lab" element={<Navigate to="/create/broll-lab-2" replace />} />
     <Route path="/create/broll-lab-2" element={<AppLayout><BrollLab2Page /></AppLayout>} />
+    <Route path="/create/prompt-lab" element={<AppLayout><PromptLabPage /></AppLayout>} />
+    <Route path="/create/ugc-arcade" element={<AppLayout><UgcArcadePage /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
     <Route path="/library/assets" element={<AppLayout><AssetsPage /></AppLayout>} />
     <Route path="/library/history" element={<AppLayout><HistoryPage /></AppLayout>} />
