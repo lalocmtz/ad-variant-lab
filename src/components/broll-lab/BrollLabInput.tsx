@@ -29,6 +29,29 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
   });
 
   const [productImagePreview, setProductImagePreview] = useState<string | null>(null);
+  const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
+
+  const handleAdditionalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const remaining = 3 - additionalImages.length;
+    const toAdd = files.slice(0, remaining);
+    const newPreviews: string[] = [];
+    const newFiles: File[] = [];
+    toAdd.forEach(file => {
+      newFiles.push(file);
+      newPreviews.push(URL.createObjectURL(file));
+    });
+    setAdditionalImages(prev => [...prev, ...newFiles]);
+    setAdditionalPreviews(prev => [...prev, ...newPreviews]);
+  };
+
+  const removeAdditionalImage = (idx: number) => {
+    setAdditionalImages(prev => prev.filter((_, i) => i !== idx));
+    setAdditionalPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
