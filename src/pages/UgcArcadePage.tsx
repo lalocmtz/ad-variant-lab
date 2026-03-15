@@ -125,7 +125,7 @@ CRITICAL RULES:
     pollRef.current = setInterval(async () => {
       try {
         const { data, error } = await supabase.functions.invoke("get-video-task", {
-          body: { task_id: taskId, provider },
+          body: { taskId, engine: provider },
         });
 
         if (error) {
