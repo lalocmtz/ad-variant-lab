@@ -377,15 +377,8 @@ serve(async (req) => {
       }
     }
     if (product_image_url) {
-      try {
-        console.log("Converting product image to base64...");
-        const productDataUri = await urlToBase64DataUri(product_image_url);
-        console.log("Product image converted, length:", productDataUri.length);
-        content.push({ type: "image_url", image_url: { url: productDataUri } });
-      } catch (e) {
-        console.warn("Failed to convert product URL to base64, using raw URL:", e);
-        content.push({ type: "image_url", image_url: { url: product_image_url } });
-      }
+      // Keep product reference as URL to avoid multi-megabyte base64 payloads that can break image generation.
+      content.push({ type: "image_url", image_url: { url: product_image_url } });
     }
 
     console.log("Generating variant image:", {
