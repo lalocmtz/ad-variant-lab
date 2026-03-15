@@ -443,6 +443,54 @@ export type Database = {
           },
         ]
       }
+      generation_logs: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          message: string | null
+          module: string
+          prompt_text: string | null
+          provider: string | null
+          raw_error: string | null
+          request_payload_json: Json | null
+          response_payload_json: Json | null
+          stage: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          message?: string | null
+          module: string
+          prompt_text?: string | null
+          provider?: string | null
+          raw_error?: string | null
+          request_payload_json?: Json | null
+          response_payload_json?: Json | null
+          stage: string
+          status: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          message?: string | null
+          module?: string
+          prompt_text?: string | null
+          provider?: string | null
+          raw_error?: string | null
+          request_payload_json?: Json | null
+          response_payload_json?: Json | null
+          stage?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
