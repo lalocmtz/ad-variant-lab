@@ -10,6 +10,8 @@ export interface BrollLabInputs {
   accent: string;
   voiceTone: string;
   voiceVariantCount: number;
+  tiktok_compliance?: boolean;
+  additionalImageUrls?: string[];
 }
 
 export interface TikTokDownloadResult {
