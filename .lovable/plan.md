@@ -1,55 +1,80 @@
 
 
-## Plan: Eliminar timeout + Garantizar audio en videos generados
+## Plan: TikTok Shop Compliance Toggle + Additional Product Reference Images
 
-### Problema 1: Timeout de 10 minutos mata tareas validas
-La tarea de Kling sigue procesandose en el servidor pero el frontend la marca como "fallida" a los 10 minutos y deja de hacer polling.
+### What this solves
+1. **TikTok Shop Compliance Filter** — An optional toggle on all 3 input forms (BOF Videos, B-Roll Lab, Video Variants) that injects strict anti-ban rules into script generation prompts. Off by default for Meta/other platforms; on for TikTok.
+2. **Additional Reference Images** — Optional extra product images on all 3 forms to give the AI more context about product size, texture, details, and real appearance.
 
-**Solucion:** Eliminar el timeout completamente. El polling continua indefinidamente hasta que KIE devuelva `success` o `fail`. La UI muestra solo el tiempo transcurrido sin limite maximo.
+---
 
-**Archivo:** `src/components/KlingAnimationPanel.tsx`
-- Eliminar la constante `TIMEOUT_MS` y toda la logica de timeout en `pollTask` (lineas 82-94)
-- Cambiar la barra de progreso para que sea una animacion pulsante (indeterminada) en vez de basada en tiempo
-- Cambiar el timer de `"2:30 / 10:00"` a solo `"2:30"` (tiempo transcurrido sin limite)
+### 1. TikTok Compliance Toggle (UI)
 
-### Problema 2: Videos entregados sin audio
-Kling Motion Control genera video **sin audio** por diseno — solo anima la imagen con el movimiento del video de referencia. El audio del TikTok original se pierde.
+Add a Switch component to each input form with label "Filtro TikTok Shop Anti-Ban" and a short description. When enabled, a `tiktok_compliance: true` flag is passed through to the edge functions.
 
-**Solucion:** Crear una edge function `merge-audio` que use ffmpeg-wasm para combinar el video de Kling (sin audio) con el audio extraido del video original de TikTok. Cuando el polling detecta que un video esta listo, automaticamente llama a `merge-audio` antes de mostrarlo al usuario.
+**Files to modify:**
+- `src/components/bof/BofInputForm.tsx` — Add Switch + state, pass in `BofFormData`
+- `src/components/broll-lab/BrollLabInput.tsx` — Add Switch + state, pass in `BrollLabInputs`
+- `src/components/InputStep.tsx` — Add Switch + state, pass in submit data
+- `src/lib/bof_types.ts` — Add `tiktok_compliance?: boolean` to `BofFormData` and `BofPayload`
+- `src/lib/broll_lab_types.ts` — Add `tiktok_compliance?: boolean` to `BrollLabInputs`
 
-**Archivos nuevos/modificados:**
+### 2. TikTok Compliance Filter (Backend)
 
-| Archivo | Cambio |
-|---|---|
-| `src/components/KlingAnimationPanel.tsx` | Eliminar timeout, cambiar progreso a indeterminado, agregar paso de merge post-completado |
-| `supabase/functions/merge-audio/index.ts` | **Nuevo** — Descarga video Kling + video original, extrae audio del original, los combina con ffmpeg-wasm, sube resultado a storage |
-| `supabase/config.toml` | Agregar entrada para `merge-audio` |
+Define a shared compliance prompt block that gets injected into system prompts when the flag is true:
 
-### Flujo actualizado post-Kling
 ```text
-Kling completa video (sin audio)
-        │
-        ▼
-Estado UI: "Agregando audio del video original..."
-        │
-        ▼
-Edge function merge-audio:
-  1. Descarga video Kling (solo video)
-  2. Descarga video TikTok original (tiene audio)
-  3. ffmpeg: combina video de Kling + audio de TikTok
-  4. Sube MP4 final a storage
-  5. Devuelve URL publica
-        │
-        ▼
-UI muestra video final CON audio
+FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO):
+- NO promesas médicas, curas ni garantías de resultados absolutos
+- NO comparativas de "antes y después" con resultados garantizados  
+- NO claims de salud regulados (FDA, COFEPRIS, etc.)
+- NO lenguaje de "garantía", "100% efectivo", "cura", "elimina"
+- SÍ experiencia personal: "a mí me funcionó", "noté cambios"
+- SÍ prueba social: "miles de personas lo usan"
+- SÍ urgencia comercial: escasez, descuentos, tiempo limitado
+- SÍ beneficios demostrables sin claims médicos
+- Usa disclaimers implícitos: "resultados pueden variar"
 ```
 
-### Detalle tecnico de merge-audio
-- Usa `@ffmpeg/ffmpeg` (version WASM que corre en Deno edge functions)
-- Comando equivalente: `ffmpeg -i kling.mp4 -i tiktok.mp4 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output.mp4`
-- Solo remuxea (no re-encoda video), por lo que es rapido
-- Si el audio es mas largo que el video, se corta al largo del video (`-shortest`)
+**Files to modify:**
+- `supabase/functions/generate-bof-scripts/index.ts` — Inject compliance block into system prompt when `tiktok_compliance` is true
+- `supabase/functions/generate-broll-scripts/index.ts` — Same injection
+- `supabase/functions/analyze-video/index.ts` — Same injection
 
-### Estado de la UI durante merge
-Se agrega un nuevo `detailState`: `"merging_audio"` con label `"Agregando audio..."` para que el usuario sepa que falta un paso despues de que Kling termine.
+### 3. Additional Reference Images (UI)
+
+Add an optional "Imágenes adicionales del producto" section on each form allowing up to 3 extra images. These get converted to base64 or uploaded and passed alongside the main product image.
+
+**Files to modify:**
+- `src/components/bof/BofInputForm.tsx` — Multi-image upload section, pass `additional_images: File[]`
+- `src/components/broll-lab/BrollLabInput.tsx` — Same
+- `src/components/InputStep.tsx` — Same
+- `src/lib/bof_types.ts` — Add `additional_images?: File[]` to `BofFormData`, `additional_image_urls?: string[]` to `BofPayload`
+- `src/lib/broll_lab_types.ts` — Add `additionalImageUrls?: string[]`
+
+### 4. Additional Reference Images (Backend)
+
+When additional images are provided, append them to the AI request content array with context like "Additional product reference images showing real product details, size, and appearance."
+
+**Files to modify:**
+- `supabase/functions/generate-bof-scripts/index.ts` — Accept `additional_image_urls`, add to prompt context
+- `supabase/functions/generate-broll-scripts/index.ts` — Same
+- `supabase/functions/analyze-video/index.ts` — Same  
+- `supabase/functions/generate-variant-image/index.ts` — Pass additional images for visual fidelity
+
+### 5. Pipeline plumbing
+
+- `src/hooks/useBofPipeline.ts` — Pass new fields through to edge function calls
+- `src/pages/Index.tsx` — Pass `tiktok_compliance` and `additional_images` through the pipeline
+
+---
+
+### Summary of changes
+
+| Area | Files | Change |
+|---|---|---|
+| Types | `bof_types.ts`, `broll_lab_types.ts` | Add `tiktok_compliance`, `additional_images` fields |
+| UI Forms | 3 input forms | Switch toggle + multi-image upload (up to 3) |
+| Edge Functions | 4 functions | Conditional compliance prompt + additional image handling |
+| Pipelines | `useBofPipeline.ts`, `Index.tsx` | Pass new fields through |
 
