@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video, Volume2, VolumeX } from "lucide-react";
+import { Copy, Check, RefreshCw, Loader2, Download, Video, Volume2, VolumeX, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { VariantResult, VideoGenerationStatus } from "@/lib/videoVariantTypes";
@@ -15,8 +16,6 @@ interface VariantCardProps {
   accent?: string;
   effectivePrompt?: string;
   onRegenerate: () => void;
-  onApprove: () => void;
-  onReject: () => void;
   onVideoStateChange?: (videoState: { video_task_id?: string; video_status?: VideoGenerationStatus; video_url?: string; video_error?: string; video_mode?: string }) => void;
 }
 
@@ -28,7 +27,6 @@ const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   pending: { label: "Generando...", cls: "bg-muted text-muted-foreground" },
 };
 
-// Single engine — Sora 2 across the entire platform
 const SORA_ENGINE = { key: "sora2", label: "Sora 2", duration: "9s", description: "Motor estándar · 9s · Sin audio" };
 
 interface VideoSpec {
@@ -39,29 +37,27 @@ interface VideoSpec {
 
 const POLL_INTERVAL_MS = 5000;
 
-function handleDownloadImage(url: string, variantId: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `variant_${variantId}.png`;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+async function handleDownloadVideo(url: string, variantId: string) {
+  try {
+    toast.info("Descargando video...");
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = `video_${variantId}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    toast.success("Video descargado");
+  } catch {
+    toast.error("Error al descargar. Intentando abrir en nueva pestaña...");
+    window.open(url, "_blank");
+  }
 }
 
-function handleDownloadVideo(url: string, variantId: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `video_${variantId}.mp4`;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
-const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate, onApprove, onReject, onVideoStateChange }: VariantCardProps) => {
+const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate, onVideoStateChange }: VariantCardProps) => {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>(variant.video_status || "idle");
@@ -76,14 +72,25 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
   const [fallbackChain, setFallbackChain] = useState<Array<{ provider: string; status: string; message: string | null }>>([]);
   const [orchestratorJobId, setOrchestratorJobId] = useState<string | undefined>();
   const [timelineRefresh, setTimelineRefresh] = useState(0);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const [localPrompt, setLocalPrompt] = useState("");
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
 
   const badge = STATUS_BADGES[variant.status] || STATUS_BADGES.ready;
   const isPending = variant.status === "pending";
-  // Single source of truth: use effectivePrompt (from PromptSection edits) if provided, else fall back to variant default
-  const promptText = effectivePrompt || variant.prompt_package?.prompt_text || "";
+
+  // Single source of truth: local edit > effectivePrompt from PromptSection > variant default
+  const defaultPrompt = effectivePrompt || variant.prompt_package?.prompt_text || "";
+
+  // Initialize local prompt from effective prompt
+  useEffect(() => {
+    setLocalPrompt(defaultPrompt);
+  }, [defaultPrompt]);
+
+  // The prompt actually used for generation
+  const activePrompt = localPrompt || defaultPrompt;
 
   const isVideoActive = videoStatus === "queued" || videoStatus === "processing";
 
@@ -117,14 +124,8 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
       const { data, error } = await supabase.functions.invoke("get-video-task", {
         body: { taskId, engine: activeEngine },
       });
-
       if (!isMountedRef.current) return;
-
-      if (error) {
-        console.error("Poll network error:", error.message);
-        return;
-      }
-
+      if (error) { console.error("Poll network error:", error.message); return; }
       if (data?.ok === false && data?.shouldStopPolling) {
         setVideoStatus("failed");
         setVideoError(data.error);
@@ -133,12 +134,9 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
         stopPolling();
         return;
       }
-
       const newStatus = data?.status as VideoGenerationStatus;
       if (!newStatus) return;
-
       setVideoStatus(newStatus);
-
       if (newStatus === "completed" && data.videoUrl) {
         setVideoUrl(data.videoUrl);
         setVideoError(undefined);
@@ -161,21 +159,18 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
     } catch (e) {
       console.error("Poll exception:", e);
     }
-  }, [variant.variant_id, onVideoStateChange, stopPolling]);
+  }, [variant.variant_id, onVideoStateChange, stopPolling, activeEngine]);
 
   useEffect(() => {
     if (isVideoActive && videoTaskId) {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
-
       setElapsedSeconds(0);
       timerRef.current = setInterval(() => {
         if (isMountedRef.current) setElapsedSeconds(s => s + 1);
       }, 1000);
-
       pollTask(videoTaskId);
       pollingRef.current = setInterval(() => pollTask(videoTaskId), POLL_INTERVAL_MS);
-
       return () => {
         if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -185,8 +180,8 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
   }, [isVideoActive, videoTaskId, pollTask]);
 
   const handleCopyPrompt = () => {
-    if (!promptText) return;
-    navigator.clipboard.writeText(promptText);
+    if (!activePrompt) return;
+    navigator.clipboard.writeText(activePrompt);
     setCopied(true);
     toast.success("Prompt copiado");
     setTimeout(() => setCopied(false), 2000);
@@ -194,18 +189,14 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
 
   const uploadBase64ToStorage = async (base64Url: string, varId: string): Promise<string> => {
     if (!base64Url.startsWith("data:")) return base64Url;
-
     const res = await fetch(base64Url);
     const blob = await res.blob();
     const ext = blob.type.includes("png") ? "png" : "jpg";
     const fileName = `variant_${varId}_${Date.now()}.${ext}`;
-
     const { error } = await supabase.storage
       .from("videos")
       .upload(fileName, blob, { contentType: blob.type, upsert: true });
-
     if (error) throw new Error(`Error subiendo imagen: ${error.message}`);
-
     const { data: publicData } = supabase.storage.from("videos").getPublicUrl(fileName);
     return publicData.publicUrl;
   };
@@ -219,7 +210,7 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
       toast.error("La imagen de la variante es necesaria para generar video.");
       return;
     }
-    if (!promptText) {
+    if (!activePrompt) {
       toast.error("El prompt de animación es necesario.");
       return;
     }
@@ -238,16 +229,14 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
       const publicImageUrl = await uploadBase64ToStorage(variant.generated_image_url, variant.variant_id);
 
       if (USE_ORCHESTRATOR) {
-        // ── Orchestrator path ──
         const jobId = `vv_${variant.variant_id}_${Date.now()}`;
         setOrchestratorJobId(jobId);
-
         const { data, error } = await supabase.functions.invoke("generate-video-orchestrator", {
           body: {
             job_id: jobId,
             module: "video_variants",
             stage: "provider_video_prompt",
-            effective_prompt: promptText,
+            effective_prompt: activePrompt,
             image_url: publicImageUrl,
             language: language || "es-MX",
             accent: accent || "mexicano",
@@ -255,7 +244,6 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
             user_id: user?.id,
           },
         });
-
         if (error || (data && data.ok === false)) {
           const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
           setVideoStatus("failed");
@@ -266,7 +254,6 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
           onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
           return;
         }
-
         if (!data?.taskId) {
           const errMsg = "El orquestador no devolvió un taskId válido.";
           setVideoStatus("failed");
@@ -276,7 +263,6 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
           onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
           return;
         }
-
         const taskId = data.taskId;
         setVideoTaskId(taskId);
         setVideoStatus("queued");
@@ -285,28 +271,23 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
         setFallbackUsed(data.fallbackUsed || false);
         if (data.fallback_chain) setFallbackChain(data.fallback_chain);
         setTimelineRefresh(r => r + 1);
-
         if (data.fallbackUsed) {
           toast.info(`Fallback usado → ${data.modelLabel || data.provider_used}`);
         } else {
           toast.success(`Generación iniciada con ${data.modelLabel || data.provider_used}`);
         }
-
         onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
-
       } else {
-        // ── Legacy path (generate-video-sora directly) ──
         const { data, error } = await supabase.functions.invoke("generate-video-sora", {
           body: {
             variantId: variant.variant_id,
             imageUrl: publicImageUrl,
-            promptText,
+            promptText: activePrompt,
             language: language || "es-MX",
             accent: accent || "mexicano",
             model: engineKey,
           },
         });
-
         if (error || (data && data.ok === false)) {
           const errMsg = data?.error || error?.message || "Error al iniciar generación de video.";
           setVideoStatus("failed");
@@ -315,7 +296,6 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
           onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
           return;
         }
-
         if (!data?.taskId) {
           const errMsg = "El proveedor no devolvió un taskId válido.";
           setVideoStatus("failed");
@@ -324,20 +304,17 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
           onVideoStateChange?.({ video_status: "failed", video_error: errMsg });
           return;
         }
-
         const taskId = data.taskId;
         setVideoTaskId(taskId);
         setVideoStatus("queued");
         setActiveEngine(data.modelLabel || data.engine || engineKey);
         setVideoSpec(data.spec || undefined);
         setFallbackUsed(data.fallbackUsed || false);
-
         if (data.fallbackUsed) {
           toast.info(`Motor alternativo usado: ${data.modelLabel || data.engine}`);
         } else {
           toast.success(`Generación iniciada con ${data.modelLabel || data.engine}`);
         }
-
         onVideoStateChange?.({ video_task_id: taskId, video_status: "queued", video_mode: data.engine });
       }
     } catch (e) {
@@ -398,73 +375,63 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
             {badge.label}
           </span>
         </div>
-        {variant.generated_image_url && !isPending && (
-          <button
-            onClick={() => handleDownloadImage(variant.generated_image_url, variant.variant_id)}
-            className="absolute right-2 top-2 rounded-md bg-background/80 p-1.5 text-foreground backdrop-blur-sm transition-colors hover:bg-background"
-          >
-            <Download className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       {/* Content */}
       <div className="space-y-3 p-4">
-        {/* Universal animation prompt */}
-        {promptText && (
+        {/* Collapsible inline prompt editor */}
+        {activePrompt && (
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Prompt universal para video
-            </p>
-            <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2.5">
-              <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-foreground font-mono">
-                {promptText}
-              </pre>
-            </div>
+            <button
+              onClick={() => setPromptExpanded(!promptExpanded)}
+              className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span>Ver / Editar Prompt</span>
+              {promptExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+            {promptExpanded && (
+              <div className="space-y-1.5">
+                <Textarea
+                  value={localPrompt}
+                  onChange={(e) => setLocalPrompt(e.target.value)}
+                  className="min-h-[120px] text-[10px] font-mono leading-relaxed bg-muted/30 border-border"
+                  placeholder="Prompt de generación de video..."
+                />
+                <div className="flex gap-1.5">
+                  <Button variant="ghost" size="sm" className="h-6 gap-1 text-[9px] px-2" onClick={handleCopyPrompt}>
+                    {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                    {copied ? "Copiado" : "Copiar"}
+                  </Button>
+                  {localPrompt !== defaultPrompt && (
+                    <Button variant="ghost" size="sm" className="h-6 text-[9px] px-2 text-muted-foreground" onClick={() => setLocalPrompt(defaultPrompt)}>
+                      Resetear
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Primary actions */}
-        <div className="flex gap-2">
-          {promptText && (
-            <Button variant="default" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleCopyPrompt}>
-              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {copied ? "Copiado" : "Copiar Prompt"}
-            </Button>
-          )}
-          {variant.generated_image_url && !isPending && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1 text-[10px]"
-              onClick={() => handleDownloadImage(variant.generated_image_url, variant.variant_id)}
-            >
-              <Download className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-
-        {/* Video generation with engine selector */}
-        {variant.generated_image_url && promptText && !isPending && (
+        {/* Video generation */}
+        {variant.generated_image_url && activePrompt && !isPending && (
           <div className="space-y-2">
-            {/* Single Sora 2 button — shown when idle */}
+            {/* Sora 2 button — shown when idle */}
             {videoStatus === "idle" && !videoUrl && (
-              <div className="space-y-1.5">
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="w-full flex flex-col items-start gap-0 h-auto py-2.5 px-3 text-left"
-                  onClick={() => handleGenerateVideo("sora2")}
-                  disabled={isSubmitting}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Video className="h-3 w-3" />
-                    <span className="text-[11px] font-medium">{SORA_ENGINE.label}</span>
-                    <span className="rounded bg-background/20 px-1 py-0.5 text-[8px] font-bold">{SORA_ENGINE.duration}</span>
-                  </div>
-                  <span className="text-[9px] opacity-80">{SORA_ENGINE.description}</span>
-                </Button>
-              </div>
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full flex flex-col items-start gap-0 h-auto py-2.5 px-3 text-left"
+                onClick={() => handleGenerateVideo("sora2")}
+                disabled={isSubmitting}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Video className="h-3 w-3" />
+                  <span className="text-[11px] font-medium">{SORA_ENGINE.label}</span>
+                  <span className="rounded bg-background/20 px-1 py-0.5 text-[8px] font-bold">{SORA_ENGINE.duration}</span>
+                </div>
+                <span className="text-[9px] opacity-80">{SORA_ENGINE.description}</span>
+              </Button>
             )}
 
             {/* Active generation status */}
@@ -481,7 +448,6 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
                     {formatElapsed(elapsedSeconds)}
                   </span>
                 </div>
-                {/* Engine & spec info */}
                 <div className="flex flex-wrap gap-1.5">
                   {activeEngine && (
                     <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">
@@ -490,12 +456,8 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
                   )}
                   {videoSpec && (
                     <>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        {videoSpec.aspect_ratio}
-                      </span>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        {videoSpec.duration_seconds}s
-                      </span>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{videoSpec.aspect_ratio}</span>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{videoSpec.duration_seconds}s</span>
                       <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                         {videoSpec.audio_expected ? <Volume2 className="h-2.5 w-2.5" /> : <VolumeX className="h-2.5 w-2.5" />}
                         {videoSpec.audio_expected ? "Con audio" : "Sin audio"}
@@ -503,9 +465,7 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
                     </>
                   )}
                   {fallbackUsed && (
-                    <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-600">
-                      fallback
-                    </span>
+                    <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-600">fallback</span>
                   )}
                 </div>
               </div>
@@ -530,12 +490,11 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
                     <p className="text-[10px] text-destructive">{videoError}</p>
                   </div>
                 )}
-                {/* Orchestrator diagnostics */}
                 {USE_ORCHESTRATOR && orchestratorJobId && (
                   <ExecutionTimeline jobId={orchestratorJobId} refreshTrigger={timelineRefresh} />
                 )}
                 <div className="flex gap-1">
-                 <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
+                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={handleRetryVideo}>
                     <RefreshCw className="h-3 w-3" />
                     Reintentar
                   </Button>
@@ -543,30 +502,19 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
               </div>
             )}
 
-            {/* Completed — show video with spec badge */}
+            {/* Completed — video + download + regenerate */}
             {videoStatus === "completed" && videoUrl && (
               <div className="space-y-2">
                 <div className="overflow-hidden rounded-md border border-border">
-                  <video
-                    src={videoUrl}
-                    controls
-                    className="w-full"
-                    preload="metadata"
-                    playsInline
-                  />
+                  <video src={videoUrl} controls className="w-full" preload="metadata" playsInline />
                 </div>
-                {/* Spec badges */}
                 <div className="flex flex-wrap gap-1.5">
                   {activeEngine && (
-                    <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[9px] font-medium text-green-600">
-                      ✓ {activeEngine}
-                    </span>
+                    <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[9px] font-medium text-green-600">✓ {activeEngine}</span>
                   )}
                   {videoSpec && (
                     <>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        {videoSpec.aspect_ratio} · {videoSpec.duration_seconds}s
-                      </span>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{videoSpec.aspect_ratio} · {videoSpec.duration_seconds}s</span>
                       <span className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                         {videoSpec.audio_expected ? <Volume2 className="h-2.5 w-2.5" /> : <VolumeX className="h-2.5 w-2.5" />}
                         {videoSpec.audio_expected ? "Con audio" : "Sin audio"}
@@ -574,12 +522,9 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
                     </>
                   )}
                   {fallbackUsed && (
-                    <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-600">
-                      fallback usado
-                    </span>
+                    <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-600">fallback usado</span>
                   )}
                 </div>
-                {/* Orchestrator diagnostics on success */}
                 {USE_ORCHESTRATOR && orchestratorJobId && (
                   <ExecutionTimeline jobId={orchestratorJobId} refreshTrigger={timelineRefresh} />
                 )}
@@ -602,25 +547,13 @@ const VariantCard = ({ variant, language, accent, effectivePrompt, onRegenerate,
           </div>
         )}
 
-        {/* Secondary actions */}
-        <div className="flex gap-2">
-          {variant.status !== "approved" && !isPending && (
-            <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={onApprove}>
-              <ThumbsUp className="h-3 w-3" /> Aprobar
-            </Button>
-          )}
-          {variant.status !== "rejected" && !isPending && (
-            <Button variant="outline" size="sm" className="flex-1 gap-1 text-[10px]" onClick={onReject}>
-              <ThumbsDown className="h-3 w-3" /> Rechazar
-            </Button>
-          )}
-          {!isPending && (
-            <Button variant="outline" size="sm" className="gap-1 text-[10px]" onClick={onRegenerate}>
-              <RefreshCw className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-
+        {/* Regenerate variant (image) */}
+        {!isPending && (
+          <Button variant="outline" size="sm" className="w-full gap-1 text-[10px]" onClick={onRegenerate}>
+            <RefreshCw className="h-3 w-3" />
+            Regenerar variante
+          </Button>
+        )}
       </div>
     </div>
   );

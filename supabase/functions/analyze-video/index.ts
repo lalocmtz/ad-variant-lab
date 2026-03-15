@@ -115,9 +115,9 @@ INSTRUCTIONS:
 4. Identify market_context, rol_del_creador, and perfil_de_confianza for the original creator
 5. Extract winner_blueprint with all winning mechanics
 6. Generate ${numVariants} variants with COMPLETELY DIFFERENT actors (HIGH identity distance)
-7. For EACH variant, generate a complete animation_prompt_json with 15-second compressed timeline
+7. For EACH variant, generate a complete animation_prompt_json with 9-second compressed timeline
 8. identity_distance MUST be "high" for ALL variants
-9. ALL timelines MUST be compressed to exactly 15 seconds regardless of original duration
+9. ALL timelines MUST be compressed to exactly 9 seconds regardless of original duration
 10. Do NOT include text overlays, subtitles, comment bubbles, or UI graphics`,
     });
 

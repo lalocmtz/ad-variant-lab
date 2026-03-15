@@ -128,8 +128,6 @@ const ResultsView = ({
             accent={accent}
             effectivePrompt={getEffectiveVideoPrompt(variant.variant_id)}
             onRegenerate={() => onRegenerateVariant(index)}
-            onApprove={() => onUpdateVariantStatus(index, "approved")}
-            onReject={() => onUpdateVariantStatus(index, "rejected")}
             onVideoStateChange={(videoState) => onUpdateVariantVideoState?.(index, videoState)}
           />
         ))}
