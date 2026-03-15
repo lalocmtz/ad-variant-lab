@@ -9,7 +9,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { video_url, variant_count, metadata, cover_url, product_image_url, language, diversity_intensity } = await req.json();
+    const { video_url, variant_count, metadata, cover_url, product_image_url, language, diversity_intensity, tiktok_compliance, additional_image_urls } = await req.json();
     if (!video_url) throw new Error("video_url is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -26,6 +26,20 @@ serve(async (req) => {
       : videoDuration > 0 && videoDuration < 15
       ? `\nNote: The original video is only ${videoDuration} seconds. Adapt pacing to fill a 15-second execution blueprint naturally.`
       : "";
+
+    const complianceBlock = tiktok_compliance ? `
+
+FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO — CUMPLIR AL 100%):
+- NO promesas médicas, curas ni garantías de resultados absolutos
+- NO comparativas de "antes y después" con resultados garantizados
+- NO claims de salud regulados (FDA, COFEPRIS, etc.)
+- NO lenguaje de "garantía", "100% efectivo", "cura", "elimina", "milagroso"
+- SÍ experiencia personal: "a mí me funcionó", "noté cambios"
+- SÍ prueba social: "miles de personas lo usan"
+- SÍ urgencia comercial: escasez, descuentos, tiempo limitado
+- SÍ beneficios demostrables sin claims médicos
+- Usa disclaimers implícitos: "resultados pueden variar"
+- Todos los scripts de variantes DEBEN cumplir estas reglas` : "";
 
     const systemPrompt = `You are an elite Video Ad Reverse Engineering Engine for 15-Second Reconstruction.
 
@@ -81,7 +95,8 @@ For each variant, generate an animation_prompt_json object containing:
 - restricciones_de_generacion (all boolean flags for product lock, mechanics, no text, 15s duration, etc.)
 
 HOOK CLASSIFICATION
-Use: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook`;
+Use: comment_reply_hook, price_objection_hook, shock_hook, before_after_hook, curiosity_hook, direct_problem_hook, testimonial_hook, founder_hook, demo_hook, social_proof_hook
+${complianceBlock}`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
@@ -112,7 +127,12 @@ INSTRUCTIONS:
     if (product_image_url) {
       userContent.push({ type: "image_url", image_url: { url: product_image_url } });
     }
-
+    if (Array.isArray(additional_image_urls)) {
+      for (const imgUrl of additional_image_urls.slice(0, 3)) {
+        userContent.push({ type: "text", text: "Additional product reference image showing real product details, size, and appearance:" });
+        userContent.push({ type: "image_url", image_url: { url: imgUrl } });
+      }
+    }
     const models = ["google/gemini-2.5-pro", "google/gemini-2.5-flash"];
 
     const requestBody = {

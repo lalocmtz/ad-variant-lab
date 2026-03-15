@@ -15,6 +15,8 @@ export interface BofFormData {
   selected_formats: string[];
   language: string;
   accent: string;
+  tiktok_compliance?: boolean;
+  additional_images?: File[];
 }
 
 export interface BofPayload {
@@ -30,6 +32,8 @@ export interface BofPayload {
   selected_formats: string[];
   language: string;
   accent: string;
+  tiktok_compliance?: boolean;
+  additional_image_urls?: string[];
 }
 
 export interface BofSceneImage {

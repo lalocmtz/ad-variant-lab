@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
-import { Upload, Link, Image, Sparkles, Globe, Users } from "lucide-react";
+import { Upload, Link, Image, Sparkles, Globe, Users, ShieldCheck, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export type VideoMode = "avatar" | "no_avatar";
@@ -16,6 +17,8 @@ interface InputStepProps {
     language: string;
     accent: string;
     diversity_intensity: string;
+    tiktok_compliance?: boolean;
+    additional_images?: File[];
   }) => void;
 }
 
@@ -47,6 +50,9 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
   const [language, setLanguage] = useState("es-MX");
   const [accent, setAccent] = useState("mexicano");
   const [diversityIntensity, setDiversityIntensity] = useState("high");
+  const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
   const productInputRef = useRef<HTMLInputElement>(null);
 
   const handleLanguageChange = (newLang: string) => {
@@ -56,6 +62,20 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
   };
 
   const isValid = url.trim().length > 0 && url.includes("tiktok") && productImage !== null;
+
+  const handleAdditionalImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const remaining = 3 - additionalImages.length;
+    const toAdd = files.slice(0, remaining);
+    setAdditionalImages(prev => [...prev, ...toAdd]);
+    setAdditionalPreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))]);
+  };
+
+  const removeAdditionalImage = (idx: number) => {
+    setAdditionalImages(prev => prev.filter((_, i) => i !== idx));
+    setAdditionalPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -67,6 +87,8 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
       language,
       accent,
       diversity_intensity: diversityIntensity,
+      tiktok_compliance: tiktokCompliance,
+      additional_images: additionalImages,
     });
   };
 
@@ -190,6 +212,42 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* TikTok Compliance Toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Filtro TikTok Shop Anti-Ban</p>
+              <p className="text-xs text-muted-foreground">Evita claims médicos, garantías absolutas y lenguaje prohibido.</p>
+            </div>
+          </div>
+          <Switch checked={tiktokCompliance} onCheckedChange={setTiktokCompliance} />
+        </div>
+
+        {/* Additional Product Images */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <ImagePlus className="h-4 w-4 text-primary" />
+            Imágenes adicionales del producto (opcional)
+          </Label>
+          <p className="text-xs text-muted-foreground">Hasta 3 fotos extra para contexto de tamaño, textura y apariencia real.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {additionalPreviews.map((preview, idx) => (
+              <div key={idx} className="relative w-20 h-20">
+                <img src={preview} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover rounded-lg border border-border" />
+                <button onClick={() => removeAdditionalImage(idx)} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">×</button>
+              </div>
+            ))}
+            {additionalImages.length < 3 && (
+              <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-card">
+                <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Agregar</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAdditionalImage} />
+              </label>
+            )}
+          </div>
         </div>
 
         {/* Fixed variant count display */}

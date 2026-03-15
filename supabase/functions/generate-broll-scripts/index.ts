@@ -9,7 +9,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { video_url, cover_url, metadata, variant_count, language, accent, tone } = await req.json();
+    const { video_url, cover_url, metadata, variant_count, language, accent, tone, tiktok_compliance, additional_image_urls } = await req.json();
     if (!cover_url) throw new Error("cover_url is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -20,6 +20,21 @@ serve(async (req) => {
     const voiceAccent = accent || "mexicano";
     const voiceTone = tone || "natural_ugc";
     const videoDuration = metadata?.duration || 15;
+
+    const complianceBlock = tiktok_compliance ? `
+
+FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO — CUMPLIR AL 100%):
+- NO promesas médicas, curas ni garantías de resultados absolutos
+- NO comparativas de "antes y después" con resultados garantizados
+- NO claims de salud regulados (FDA, COFEPRIS, etc.)
+- NO lenguaje de "garantía", "100% efectivo", "cura", "elimina", "milagroso"
+- NO testimonios que impliquen resultados médicos
+- SÍ experiencia personal: "a mí me funcionó", "noté cambios", "me encantó"
+- SÍ prueba social: "miles de personas lo usan", "se está agotando"
+- SÍ urgencia comercial: escasez, descuentos, tiempo limitado
+- SÍ beneficios demostrables sin claims médicos
+- Usa disclaimers implícitos: "resultados pueden variar"
+- Cada frase del script DEBE pasar revisión de políticas de TikTok Shop sin riesgo de ban` : "";
 
     const systemPrompt = `You are a TikTok Shop voice-over script writer for product B-roll ads.
 
@@ -38,7 +53,7 @@ RULES:
 - NO subtitles or text overlays — these are voice-only scripts.
 - Short, direct, organic phrasing.
 - Each script should be self-contained and complete.
-
+${complianceBlock}
 HOOK ANGLE IDEAS (use different ones per variant):
 - Price/deal angle ("No vas a creer el precio...")
 - Problem/solution ("Si tienes este problema...")
@@ -59,6 +74,12 @@ Metadata: ${JSON.stringify(metadata || {})}`;
       },
       { type: "image_url", image_url: { url: cover_url } },
     ];
+    if (Array.isArray(additional_image_urls)) {
+      for (const imgUrl of additional_image_urls.slice(0, 3)) {
+        userContent.push({ type: "text", text: "Additional product reference image for context:" });
+        userContent.push({ type: "image_url", image_url: { url: imgUrl } });
+      }
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

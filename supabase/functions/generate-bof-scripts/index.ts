@@ -9,13 +9,28 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { product_name, product_image_url, current_price, old_price, main_benefit, offer, pain_point, audience, selected_formats, language, accent } = await req.json();
+    const { product_name, product_image_url, current_price, old_price, main_benefit, offer, pain_point, audience, selected_formats, language, accent, tiktok_compliance, additional_image_urls } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const langLabel = language === "es-MX" ? "español mexicano" : language;
     const accentLabel = accent || "mexicano";
+
+    const complianceBlock = tiktok_compliance ? `
+
+FILTRO ANTI-BAN TIKTOK SHOP (OBLIGATORIO — CUMPLIR AL 100%):
+- NO promesas médicas, curas ni garantías de resultados absolutos
+- NO comparativas de "antes y después" con resultados garantizados
+- NO claims de salud regulados (FDA, COFEPRIS, etc.)
+- NO lenguaje de "garantía", "100% efectivo", "cura", "elimina", "milagroso"
+- NO testimonios que impliquen resultados médicos
+- SÍ experiencia personal: "a mí me funcionó", "noté cambios", "me encantó"
+- SÍ prueba social: "miles de personas lo usan", "se está agotando"
+- SÍ urgencia comercial: escasez, descuentos, tiempo limitado
+- SÍ beneficios demostrables sin claims médicos
+- Usa disclaimers implícitos: "resultados pueden variar"
+- Cada frase del script DEBE pasar revisión de políticas de TikTok Shop sin riesgo de ban` : "";
 
     const systemPrompt = `Eres un experto en scripts para TikTok Shop BOF (bottom-of-funnel) ads.
 Tu trabajo es generar scripts cortos (7-12 segundos hablados) para anuncios verticales de producto.
@@ -29,7 +44,7 @@ REGLAS OBLIGATORIAS:
 - El script es SOLO para voz hablada. NO incluyas indicaciones de subtítulos, overlays, texto en pantalla ni elementos gráficos.
 - Cada script debe ser pronunciable en 7-12 segundos máximo.
 - NO inventes formatos nuevos. Adapta el script al formato proporcionado.
-
+${complianceBlock}
 Responde SIEMPRE en JSON válido.`;
 
     const formatDescriptions = selected_formats.map((fid: string) => {

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Upload, Package, DollarSign, Target, Zap, Users, Hash, Globe, Mic } from "lucide-react";
+import { Upload, Package, DollarSign, Target, Zap, Users, Hash, Globe, Mic, ShieldCheck, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { BOF_FORMATS } from "@/lib/bof_video_formats";
@@ -31,6 +32,9 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
   const [language, setLanguage] = useState("es-MX");
   const [accent, setAccent] = useState("mexicano");
   const [autofillFields, setAutofillFields] = useState<Set<string>>(new Set());
+  const [tiktokCompliance, setTiktokCompliance] = useState(false);
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -79,6 +83,20 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
   const autofillRing = (field: string) =>
     isAutofilled(field) ? "ring-1 ring-primary/40" : "";
 
+  const handleAdditionalImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const remaining = 3 - additionalImages.length;
+    const toAdd = files.slice(0, remaining);
+    setAdditionalImages(prev => [...prev, ...toAdd]);
+    setAdditionalPreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))]);
+  };
+
+  const removeAdditionalImage = (idx: number) => {
+    setAdditionalImages(prev => prev.filter((_, i) => i !== idx));
+    setAdditionalPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!productImage || !productName || !currentPrice || !mainBenefit || selectedFormats.length === 0) return;
@@ -95,6 +113,8 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
       selected_formats: selectedFormats,
       language,
       accent,
+      tiktok_compliance: tiktokCompliance,
+      additional_images: additionalImages,
     });
   };
 
@@ -254,6 +274,40 @@ export default function BofInputForm({ onSubmit, isLoading }: BofInputFormProps)
         </div>
       </div>
 
+      {/* TikTok Compliance Toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Filtro TikTok Shop Anti-Ban</p>
+            <p className="text-xs text-muted-foreground">Evita claims médicos, garantías absolutas y lenguaje prohibido por TikTok Shop.</p>
+          </div>
+        </div>
+        <Switch checked={tiktokCompliance} onCheckedChange={setTiktokCompliance} />
+      </div>
+
+      {/* Additional Product Images */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <ImagePlus className="h-4 w-4" /> Imágenes adicionales del producto (opcional)
+        </Label>
+        <p className="text-xs text-muted-foreground">Sube hasta 3 fotos extra para dar más contexto de tamaño, textura y apariencia real.</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          {additionalPreviews.map((preview, idx) => (
+            <div key={idx} className="relative w-20 h-20">
+              <img src={preview} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover rounded-lg border border-border" />
+              <button type="button" onClick={() => removeAdditionalImage(idx)} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">×</button>
+            </div>
+          ))}
+          {additionalImages.length < 3 && (
+            <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-foreground/40 transition-colors bg-card">
+              <ImagePlus className="h-4 w-4 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">Agregar</span>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleAdditionalImage} />
+            </label>
+          )}
+        </div>
+      </div>
       {/* Submit */}
       <Button type="submit" disabled={!canSubmit} className="w-full gradient-cta text-white border-0 h-12 text-base font-semibold">
         {isLoading ? "Generando…" : `Generar ${variantsCount} BOF Videos`}

@@ -160,6 +160,8 @@ interface DownloadedData {
   language: string;
   accent: string;
   diversity_intensity: string;
+  tiktok_compliance?: boolean;
+  additional_image_urls?: string[];
 }
 
 function buildAnimationPromptPackage(
@@ -322,6 +324,8 @@ const Index = () => {
     language: string;
     accent: string;
     diversity_intensity: string;
+    tiktok_compliance?: boolean;
+    additional_images?: File[];
   }) => {
     setStep("downloading");
     setError(null);
@@ -347,6 +351,22 @@ const Index = () => {
         productImageUrl = pubUrl.publicUrl;
       }
 
+      // Upload additional images
+      const additionalImageUrls: string[] = [];
+      if (formData.additional_images && formData.additional_images.length > 0) {
+        for (const addImg of formData.additional_images.slice(0, 3)) {
+          const addExt = addImg.name.split(".").pop() || "png";
+          const addFileName = `additional_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${addExt}`;
+          const { error: addUploadErr } = await supabase.storage
+            .from("videos")
+            .upload(addFileName, addImg, { contentType: addImg.type });
+          if (!addUploadErr) {
+            const { data: addPubUrl } = supabase.storage.from("videos").getPublicUrl(addFileName);
+            additionalImageUrls.push(addPubUrl.publicUrl);
+          }
+        }
+      }
+
       setDownloadedData({
         video_url: downloadData.video_url,
         cover_url: downloadData.cover_url || "",
@@ -358,6 +378,8 @@ const Index = () => {
         language: formData.language,
         accent: formData.accent,
         diversity_intensity: formData.diversity_intensity,
+        tiktok_compliance: formData.tiktok_compliance,
+        additional_image_urls: additionalImageUrls,
       });
       setStep("preview");
     } catch (e) {
@@ -440,6 +462,8 @@ const Index = () => {
           video_mode: downloadedData.videoMode,
           language: downloadedData.language,
           diversity_intensity: downloadedData.diversity_intensity,
+          tiktok_compliance: downloadedData.tiktok_compliance,
+          additional_image_urls: downloadedData.additional_image_urls,
         },
       });
       if (analysisError || analysisData?.error) {
@@ -468,6 +492,7 @@ const Index = () => {
               negative_prompt: variant.negative_prompt,
               identity_replacement_rules: variant.identity_replacement_rules,
               overlay_cleanup_required: overlayCleanup,
+              additional_image_urls: downloadedData.additional_image_urls,
             },
           });
           const timeoutPromise = new Promise<never>((_, reject) =>
@@ -766,6 +791,7 @@ const Index = () => {
           identity_replacement_rules: variant.identity_replacement_rules,
           overlay_cleanup_required: results.overlay_cleanup_required,
           is_regeneration: true,
+          additional_image_urls: downloadedData.additional_image_urls,
         },
       });
 
