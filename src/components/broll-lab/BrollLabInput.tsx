@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, Link, Sparkles } from "lucide-react";
+import { Upload, Link, Sparkles, ShieldCheck, ImagePlus } from "lucide-react";
 import type { BrollLabInputs } from "@/lib/broll_lab_types";
 
 interface Props {
