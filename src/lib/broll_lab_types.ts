@@ -81,6 +81,8 @@ export interface SceneResult {
   video_url?: string;
   status: "pending" | "generating_image" | "animating" | "polling" | "done" | "error";
   error?: string;
+  validation?: ProductValidationResult;
+  regen_count?: number;
 }
 
 export interface VoiceVariant {
