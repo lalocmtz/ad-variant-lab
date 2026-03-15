@@ -225,11 +225,13 @@ async function urlToBase64DataUri(url: string): Promise<string> {
 async function callImageGeneration(
   content: Array<{ type: string; text?: string; image_url?: { url: string } }>,
   apiKey: string,
+  model: string = "google/gemini-2.5-flash-image",
 ): Promise<string | null> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 90_000); // 90s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 90_000);
 
   try {
+    console.log(`[img-gen] Calling model: ${model}`);
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -237,7 +239,7 @@ async function callImageGeneration(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
+        model,
         messages: [{ role: "user", content }],
         modalities: ["image", "text"],
       }),
@@ -248,18 +250,49 @@ async function callImageGeneration(
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Image generation error:", response.status, errText);
+      console.error(`[img-gen] ${model} HTTP error:`, response.status, errText.substring(0, 500));
       if (response.status === 429) throw { status: 429, message: "Demasiadas solicitudes. Intenta de nuevo." };
       if (response.status === 402) throw { status: 402, message: "Créditos insuficientes." };
-      throw new Error(`Image generation error: ${response.status}`);
+      return null;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+
+    // Check for in-stream rate limit errors
+    const choiceError = data.choices?.[0]?.error;
+    if (choiceError?.code === 429) {
+      console.warn(`[img-gen] ${model} in-stream 429 rate limit`);
+      return null;
+    }
+
+    // Try multiple response formats
+    const msg = data.choices?.[0]?.message;
+    let imageUrl = msg?.images?.[0]?.image_url?.url || null;
+
+    // Fallback: check inline_data / parts pattern
+    if (!imageUrl && msg?.content) {
+      if (typeof msg.content === "string" && msg.content.startsWith("data:image")) {
+        imageUrl = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part.type === "image_url" && part.image_url?.url) {
+            imageUrl = part.image_url.url;
+            break;
+          }
+          if (part.type === "image" && part.url) {
+            imageUrl = part.url;
+            break;
+          }
+        }
+      }
+    }
+
+    console.log(`[img-gen] ${model} result: imageUrl=${imageUrl ? `found (${imageUrl.substring(0, 60)}...)` : "null"}, keys=${JSON.stringify(Object.keys(msg || {}))}`);
+    return imageUrl;
   } catch (e: any) {
     clearTimeout(timeoutId);
     if (e?.name === "AbortError") {
-      console.error("Image generation timed out after 90s");
+      console.error("[img-gen] Timed out after 90s");
       throw new Error("Timeout: la generación de imagen tardó más de 90 segundos.");
     }
     throw e;
@@ -345,15 +378,29 @@ serve(async (req) => {
       isRegeneration: !!is_regeneration,
     });
 
-    let imageUrl = await callImageGeneration(content, LOVABLE_API_KEY);
+    const IMAGE_MODELS = [
+      "google/gemini-2.5-flash-image",
+      "google/gemini-3.1-flash-image-preview",
+      "google/gemini-3-pro-image-preview",
+    ];
 
-    if (!imageUrl) {
-      console.warn("First attempt returned no image, retrying...");
-      imageUrl = await callImageGeneration(content, LOVABLE_API_KEY);
+    let imageUrl: string | null = null;
+    for (const model of IMAGE_MODELS) {
+      try {
+        imageUrl = await callImageGeneration(content, LOVABLE_API_KEY, model);
+        if (imageUrl) {
+          console.log(`[img-gen] Success with model: ${model}`);
+          break;
+        }
+        console.warn(`[img-gen] ${model} returned no image, trying next...`);
+      } catch (e: any) {
+        if (e?.status === 402) throw e; // don't retry on credits
+        console.warn(`[img-gen] ${model} failed:`, e?.message || e);
+      }
     }
 
     if (!imageUrl) {
-      throw new Error("No se generó imagen después de 2 intentos");
+      throw new Error("No se generó imagen después de probar todos los modelos disponibles.");
     }
 
     return new Response(JSON.stringify({ image_url: imageUrl }), {
