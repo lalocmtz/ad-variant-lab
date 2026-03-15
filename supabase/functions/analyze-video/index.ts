@@ -113,67 +113,124 @@ INSTRUCTIONS:
       userContent.push({ type: "image_url", image_url: { url: product_image_url } });
     }
 
-    console.log("Sending to Gemini:", { hasCover: !!cover_url, hasProduct: !!product_image_url, numVariants, lang, diversity, videoDuration });
+    const models = ["google/gemini-2.5-pro", "google/gemini-2.5-flash"];
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "analysis_result",
-              description: "Return the reverse-engineered ad analysis with winner blueprint and identity-swapped variants",
-              parameters: {
-                type: "object",
-                properties: {
-                  input_mode: { type: "string" },
-                  has_voice: { type: "boolean" },
-                  content_type: { type: "string" },
-                  overlay_cleanup_required: { type: "boolean" },
-                  clean_frame_strategy: { type: "string" },
-                  winner_blueprint: {
+    const requestBody = {
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "analysis_result",
+            description: "Return the reverse-engineered ad analysis with winner blueprint and identity-swapped variants",
+            parameters: {
+              type: "object",
+              properties: {
+                input_mode: { type: "string" },
+                has_voice: { type: "boolean" },
+                content_type: { type: "string" },
+                overlay_cleanup_required: { type: "boolean" },
+                clean_frame_strategy: { type: "string" },
+                winner_blueprint: {
+                  type: "object",
+                  properties: {
+                    duration_seconds: { type: "number" },
+                    primary_hook_type: { type: "string" },
+                    primary_hook_label: { type: "string" },
+                    primary_hook_visual: { type: "string" },
+                    primary_hook_verbal: { type: "string" },
+                    core_emotion: { type: "string" },
+                    energy_profile: { type: "string" },
+                    performance_style: { type: "string" },
+                    performance_mechanics: { type: "array", items: { type: "string" } },
+                    cta_style: { type: "string" },
+                    conversion_mechanics: { type: "array", items: { type: "string" } },
+                    scene_type: { type: "string" },
+                    camera_style: { type: "string" },
+                    gesture_profile: { type: "string" },
+                    guion_original_completo: { type: "string" },
+                    estructura_del_guion: { type: "object" },
+                    analisis_estructura_persuasiva: { type: "object" },
+                    triggers_psicologicos_detectados: { type: "array", items: { type: "string" } },
+                    actor_profile_observed: {
+                      type: "object",
+                      properties: {
+                        gender_presentation: { type: "string" },
+                        approx_age_band: { type: "string" },
+                        creator_archetype: { type: "string" },
+                        presence_style: { type: "string" },
+                        market_context: { type: "string" },
+                        rol_del_creador: { type: "string" },
+                        perfil_de_confianza: { type: "string" },
+                      },
+                      required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style", "market_context"],
+                    },
+                    scene_geometry: {
+                      type: "object",
+                      properties: {
+                        camera_distance: { type: "string" },
+                        product_hand: { type: "string" },
+                        product_position: { type: "string" },
+                        camera_angle: { type: "string" },
+                        lighting_direction: { type: "string" },
+                      },
+                      required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
+                    },
+                    beat_timeline: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          start_sec: { type: "number" },
+                          end_sec: { type: "number" },
+                          beat_type: { type: "string" },
+                          description: { type: "string" },
+                        },
+                        required: ["start_sec", "end_sec", "beat_type", "description"],
+                      },
+                    },
+                  },
+                  required: ["duration_seconds", "primary_hook_type", "core_emotion", "energy_profile", "cta_style", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline", "guion_original_completo"],
+                },
+                variants: {
+                  type: "array",
+                  items: {
                     type: "object",
                     properties: {
-                      duration_seconds: { type: "number" },
-                      primary_hook_type: { type: "string" },
-                      primary_hook_label: { type: "string" },
-                      primary_hook_visual: { type: "string" },
-                      primary_hook_verbal: { type: "string" },
-                      core_emotion: { type: "string" },
-                      energy_profile: { type: "string" },
-                      performance_style: { type: "string" },
-                      performance_mechanics: { type: "array", items: { type: "string" } },
-                      cta_style: { type: "string" },
-                      conversion_mechanics: { type: "array", items: { type: "string" } },
-                      scene_type: { type: "string" },
-                      camera_style: { type: "string" },
-                      gesture_profile: { type: "string" },
-                      guion_original_completo: { type: "string" },
-                      estructura_del_guion: { type: "object" },
-                      analisis_estructura_persuasiva: { type: "object" },
-                      triggers_psicologicos_detectados: { type: "array", items: { type: "string" } },
-                      actor_profile_observed: {
+                      variant_id: { type: "string" },
+                      identity_distance: { type: "string" },
+                      variant_summary: { type: "string" },
+                      actor_archetype: { type: "string" },
+                      identity_replacement_rules: { type: "array", items: { type: "string" } },
+                      image_generation_strategy: { type: "array", items: { type: "string" } },
+                      actor_visual_direction: {
                         type: "object",
                         properties: {
                           gender_presentation: { type: "string" },
                           approx_age_band: { type: "string" },
-                          creator_archetype: { type: "string" },
-                          presence_style: { type: "string" },
-                          market_context: { type: "string" },
-                          rol_del_creador: { type: "string" },
-                          perfil_de_confianza: { type: "string" },
+                          face_shape: { type: "string" },
+                          hair_style: { type: "string" },
+                          hair_color: { type: "string" },
+                          skin_tone_range: { type: "string" },
+                          overall_vibe: { type: "string" },
+                          wardrobe: { type: "string" },
                         },
-                        required: ["gender_presentation", "approx_age_band", "creator_archetype", "presence_style", "market_context"],
+                        required: ["gender_presentation", "approx_age_band", "face_shape", "hair_style", "hair_color", "skin_tone_range", "overall_vibe", "wardrobe"],
+                      },
+                      script_variant: {
+                        type: "object",
+                        properties: {
+                          language: { type: "string" },
+                          duration_target_seconds: { type: "number" },
+                          hook: { type: "string" },
+                          body: { type: "string" },
+                          cta: { type: "string" },
+                          full_script: { type: "string" },
+                        },
+                        required: ["language", "duration_target_seconds", "hook", "body", "cta", "full_script"],
                       },
                       scene_geometry: {
                         type: "object",
@@ -186,148 +243,115 @@ INSTRUCTIONS:
                         },
                         required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
                       },
-                      beat_timeline: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            start_sec: { type: "number" },
-                            end_sec: { type: "number" },
-                            beat_type: { type: "string" },
-                            description: { type: "string" },
-                          },
-                          required: ["start_sec", "end_sec", "beat_type", "description"],
+                      base_image_prompt_9x16: { type: "string" },
+                      heygen_ready_brief: {
+                        type: "object",
+                        properties: {
+                          delivery_style: { type: "string" },
+                          pace: { type: "string" },
+                          energy: { type: "string" },
+                          facial_expression: { type: "string" },
+                          gesture_style: { type: "string" },
                         },
+                        required: ["delivery_style", "pace", "energy", "facial_expression", "gesture_style"],
                       },
-                    },
-                    required: ["duration_seconds", "primary_hook_type", "core_emotion", "energy_profile", "cta_style", "scene_type", "camera_style", "actor_profile_observed", "scene_geometry", "beat_timeline", "guion_original_completo"],
-                  },
-                  variants: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        variant_id: { type: "string" },
-                        identity_distance: { type: "string" },
-                        variant_summary: { type: "string" },
-                        actor_archetype: { type: "string" },
-                        identity_replacement_rules: { type: "array", items: { type: "string" } },
-                        image_generation_strategy: { type: "array", items: { type: "string" } },
-                        actor_visual_direction: {
-                          type: "object",
-                          properties: {
-                            gender_presentation: { type: "string" },
-                            approx_age_band: { type: "string" },
-                            face_shape: { type: "string" },
-                            hair_style: { type: "string" },
-                            hair_color: { type: "string" },
-                            skin_tone_range: { type: "string" },
-                            overall_vibe: { type: "string" },
-                            wardrobe: { type: "string" },
-                          },
-                          required: ["gender_presentation", "approx_age_band", "face_shape", "hair_style", "hair_color", "skin_tone_range", "overall_vibe", "wardrobe"],
+                      negative_prompt: { type: "string" },
+                      animation_prompt_json: { type: "object" },
+                      similarity_check_result: {
+                        type: "object",
+                        properties: {
+                          against_original: { type: "string" },
+                          cross_variant_diversity: { type: "string" },
+                          product_lock: { type: "string" },
+                          mechanics_preserved: { type: "string" },
+                          notes: { type: "array", items: { type: "string" } },
                         },
-                        script_variant: {
-                          type: "object",
-                          properties: {
-                            language: { type: "string" },
-                            duration_target_seconds: { type: "number" },
-                            hook: { type: "string" },
-                            body: { type: "string" },
-                            cta: { type: "string" },
-                            full_script: { type: "string" },
-                          },
-                          required: ["language", "duration_target_seconds", "hook", "body", "cta", "full_script"],
-                        },
-                        scene_geometry: {
-                          type: "object",
-                          properties: {
-                            camera_distance: { type: "string" },
-                            product_hand: { type: "string" },
-                            product_position: { type: "string" },
-                            camera_angle: { type: "string" },
-                            lighting_direction: { type: "string" },
-                          },
-                          required: ["camera_distance", "product_hand", "product_position", "camera_angle", "lighting_direction"],
-                        },
-                        base_image_prompt_9x16: { type: "string" },
-                        heygen_ready_brief: {
-                          type: "object",
-                          properties: {
-                            delivery_style: { type: "string" },
-                            pace: { type: "string" },
-                            energy: { type: "string" },
-                            facial_expression: { type: "string" },
-                            gesture_style: { type: "string" },
-                          },
-                          required: ["delivery_style", "pace", "energy", "facial_expression", "gesture_style"],
-                        },
-                        negative_prompt: { type: "string" },
-                        // Simplified: no inner schema, guided by system prompt
-                        animation_prompt_json: { type: "object" },
-                        similarity_check_result: {
-                          type: "object",
-                          properties: {
-                            against_original: { type: "string" },
-                            cross_variant_diversity: { type: "string" },
-                            product_lock: { type: "string" },
-                            mechanics_preserved: { type: "string" },
-                            notes: { type: "array", items: { type: "string" } },
-                          },
-                          required: ["against_original", "cross_variant_diversity", "product_lock", "mechanics_preserved", "notes"],
-                        },
-                        status: { type: "string" },
-                        generation_attempt: { type: "number" },
+                        required: ["against_original", "cross_variant_diversity", "product_lock", "mechanics_preserved", "notes"],
                       },
-                      required: [
-                        "variant_id", "identity_distance", "variant_summary", "actor_archetype",
-                        "actor_visual_direction", "script_variant", "scene_geometry",
-                        "base_image_prompt_9x16", "heygen_ready_brief", "negative_prompt",
-                        "animation_prompt_json", "similarity_check_result", "status", "generation_attempt",
-                      ],
+                      status: { type: "string" },
+                      generation_attempt: { type: "number" },
                     },
+                    required: [
+                      "variant_id", "identity_distance", "variant_summary", "actor_archetype",
+                      "actor_visual_direction", "script_variant", "scene_geometry",
+                      "base_image_prompt_9x16", "heygen_ready_brief", "negative_prompt",
+                      "animation_prompt_json", "similarity_check_result", "status", "generation_attempt",
+                    ],
                   },
                 },
-                required: ["input_mode", "has_voice", "content_type", "overlay_cleanup_required", "winner_blueprint", "variants"],
               },
+              required: ["input_mode", "has_voice", "content_type", "overlay_cleanup_required", "winner_blueprint", "variants"],
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "analysis_result" } },
-      }),
-    });
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "analysis_result" } },
+    };
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en un momento." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    let toolCall: any = null;
+    let lastError = "";
+
+    for (const model of models) {
+      console.log(`[analyze-video] Trying model: ${model}`, { hasCover: !!cover_url, hasProduct: !!product_image_url, numVariants, lang, diversity, videoDuration });
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ...requestBody, model }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[analyze-video] ${model} HTTP error:`, response.status, errText);
+        if (response.status === 429) {
+          lastError = "Demasiadas solicitudes. Intenta de nuevo en un momento.";
+          continue; // try next model
+        }
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "Créditos insuficientes." }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        lastError = `AI gateway error: ${response.status}`;
+        continue;
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+
+      const rawAiText = await response.text();
+      console.log(`[analyze-video] ${model} response length:`, rawAiText.length, "chars");
+
+      let aiData: any;
+      try {
+        aiData = JSON.parse(rawAiText);
+      } catch {
+        console.error(`[analyze-video] ${model} JSON parse failed. Length:`, rawAiText.length);
+        lastError = `Respuesta del modelo incompleta (${rawAiText.length} chars). Intenta reducir variantes a 2.`;
+        continue;
       }
-      throw new Error(`AI gateway error: ${response.status}`);
+
+      // Check for in-stream rate limit errors (HTTP 200 but 429 inside choices)
+      const choiceError = aiData.choices?.[0]?.error;
+      if (choiceError?.code === 429) {
+        console.warn(`[analyze-video] ${model} returned in-stream 429, trying next model...`);
+        lastError = "Rate limit del modelo. Reintentando con modelo alternativo.";
+        continue;
+      }
+
+      toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) {
+        console.error(`[analyze-video] ${model} no tool call. Keys:`, Object.keys(aiData.choices?.[0]?.message || {}));
+        lastError = "El modelo no devolvió datos estructurados.";
+        continue;
+      }
+
+      console.log(`[analyze-video] Success with model: ${model}`);
+      break;
     }
 
-    const rawAiText = await response.text();
-    console.log("[analyze-video] AI response length:", rawAiText.length, "chars, preview:", rawAiText.substring(0, 300));
-
-    let aiData: any;
-    try {
-      aiData = JSON.parse(rawAiText);
-    } catch (parseErr) {
-      console.error("[analyze-video] Failed to parse AI gateway response. Length:", rawAiText.length, "Last 200 chars:", rawAiText.substring(rawAiText.length - 200));
-      throw new Error(`La respuesta del modelo AI fue demasiado grande o llegó incompleta (${rawAiText.length} chars). Intenta reducir el número de variantes a 2.`);
-    }
-
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
-      console.error("No tool call in response:", JSON.stringify(aiData).substring(0, 1000));
-      throw new Error("AI did not return structured data");
+      throw new Error(lastError || "AI did not return structured data after trying all models");
     }
 
     let result: any;
