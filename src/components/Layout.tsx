@@ -22,7 +22,6 @@ const createItems = [
   { title: "Video Variants", url: "/create/video", icon: Video },
   { title: "BOF Videos", url: "/create/bof", icon: ShoppingBag },
   { title: "Static Variants", url: "/create/static", icon: Image },
-  { title: "B-Roll Lab", url: "/create/broll-lab", icon: FlaskConical },
   { title: "B-Roll Lab 2.0", url: "/create/broll-lab-2", icon: FlaskRound },
 ];
 
