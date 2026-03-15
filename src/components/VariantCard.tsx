@@ -3,7 +3,7 @@ import { Copy, Check, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Download, Video,
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { VariantResult, VideoGenerationStatus } from "@/pages/Index";
+import type { VariantResult, VideoGenerationStatus } from "@/lib/videoVariantTypes";
 import ExecutionTimeline from "@/components/debug/ExecutionTimeline";
 import { useAuth } from "@/hooks/useAuth";
 
