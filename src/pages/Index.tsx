@@ -791,6 +791,7 @@ const Index = () => {
           identity_replacement_rules: variant.identity_replacement_rules,
           overlay_cleanup_required: results.overlay_cleanup_required,
           is_regeneration: true,
+          additional_image_urls: downloadedData.additional_image_urls,
         },
       });
 
