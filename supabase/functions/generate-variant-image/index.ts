@@ -336,6 +336,7 @@ serve(async (req) => {
       identity_replacement_rules,
       overlay_cleanup_required,
       is_regeneration,
+      additional_image_urls,
     } = await req.json();
     if (!prompt) throw new Error("prompt is required");
 

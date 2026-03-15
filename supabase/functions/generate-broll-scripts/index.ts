@@ -74,6 +74,12 @@ Metadata: ${JSON.stringify(metadata || {})}`;
       },
       { type: "image_url", image_url: { url: cover_url } },
     ];
+    if (Array.isArray(additional_image_urls)) {
+      for (const imgUrl of additional_image_urls.slice(0, 3)) {
+        userContent.push({ type: "text", text: "Additional product reference image for context:" });
+        userContent.push({ type: "image_url", image_url: { url: imgUrl } });
+      }
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
