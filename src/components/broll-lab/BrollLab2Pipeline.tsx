@@ -4,7 +4,7 @@ import type { PipelineStep } from "@/lib/broll_lab_types";
 const STEPS: { key: PipelineStep; label: string }[] = [
   { key: "downloading", label: "Descargando referencias TikTok" },
   { key: "analyzing", label: "Analizando hooks, escenas y patrones" },
-  { key: "generating_images", label: "Generando 4 escenas ultra-realistas" },
+  { key: "generating_images", label: "Generando y validando escenas (Product Lock)" },
   { key: "awaiting_approval", label: "Aprobación de imágenes" },
   { key: "animating", label: "Animando escenas con Sora 2 (KIE + fal.ai fallback)" },
   { key: "stitching", label: "Preparando video master" },
