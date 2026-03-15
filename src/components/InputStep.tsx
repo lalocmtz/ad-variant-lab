@@ -63,6 +63,20 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
 
   const isValid = url.trim().length > 0 && url.includes("tiktok") && productImage !== null;
 
+  const handleAdditionalImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const remaining = 3 - additionalImages.length;
+    const toAdd = files.slice(0, remaining);
+    setAdditionalImages(prev => [...prev, ...toAdd]);
+    setAdditionalPreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))]);
+  };
+
+  const removeAdditionalImage = (idx: number) => {
+    setAdditionalImages(prev => prev.filter((_, i) => i !== idx));
+    setAdditionalPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = () => {
     if (!isValid) return;
     onSubmit({
@@ -73,6 +87,8 @@ const InputStep = ({ onSubmit }: InputStepProps) => {
       language,
       accent,
       diversity_intensity: diversityIntensity,
+      tiktok_compliance: tiktokCompliance,
+      additional_images: additionalImages,
     });
   };
 

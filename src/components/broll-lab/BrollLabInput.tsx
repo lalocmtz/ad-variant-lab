@@ -224,8 +224,46 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
         </CardContent>
       </Card>
 
+      {/* TikTok Compliance Toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Filtro TikTok Shop Anti-Ban</p>
+            <p className="text-xs text-muted-foreground">Evita claims médicos, garantías absolutas y lenguaje prohibido.</p>
+          </div>
+        </div>
+        <Switch checked={tiktokCompliance} onCheckedChange={setTiktokCompliance} />
+      </div>
+
+      {/* Additional Product Images */}
+      <Card className="border-border/60 bg-card/80">
+        <CardContent className="pt-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <ImagePlus className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">Imágenes adicionales (opcional)</span>
+          </div>
+          <p className="text-xs text-muted-foreground">Hasta 3 fotos extra para contexto de tamaño, textura y apariencia real.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {additionalPreviews.map((preview, idx) => (
+              <div key={idx} className="relative w-20 h-20">
+                <img src={preview} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover rounded-lg border border-border" />
+                <button type="button" onClick={() => removeAdditionalImage(idx)} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">×</button>
+              </div>
+            ))}
+            {additionalImages.length < 3 && (
+              <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-foreground/40 transition-colors bg-card">
+                <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Agregar</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAdditionalImageUpload} />
+              </label>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Button
-        onClick={() => onSubmit(inputs)}
+        onClick={handleSubmit}
         disabled={!canSubmit || loading}
         className="w-full gradient-cta text-white border-0 h-11"
         size="lg"
