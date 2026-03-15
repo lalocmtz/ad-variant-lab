@@ -66,15 +66,23 @@ export default function BrollLabInput({ onSubmit, loading }: Props) {
     reader.readAsDataURL(file);
   };
 
-  const canSubmit = inputs.tiktokUrl1.trim() !== "" && inputs.productImageUrl !== "";
-
-  return (
-    <div className="space-y-6">
-      {/* TikTok URLs */}
-      <Card className="border-border/60 bg-card/80">
-        <CardContent className="pt-5 space-y-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Link className="h-4 w-4 text-primary" />
+  const handleSubmit = async () => {
+    // Convert additional images to base64
+    const additionalUrls: string[] = [];
+    for (const file of additionalImages) {
+      const b64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      additionalUrls.push(b64);
+    }
+    onSubmit({
+      ...inputs,
+      tiktok_compliance: tiktokCompliance,
+      additionalImageUrls: additionalUrls,
+    });
+  };
             <span className="text-sm font-medium text-foreground">Videos de referencia TikTok</span>
           </div>
 
