@@ -15,6 +15,8 @@ export interface BofFormData {
   selected_formats: string[];
   language: string;
   accent: string;
+  tiktok_compliance?: boolean;
+  additional_images?: File[];
 }
 
 export interface BofPayload {
