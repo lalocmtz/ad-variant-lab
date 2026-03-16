@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import ImageUploadField from "@/components/shared/ImageUploadField";
 import { createHistoryRecord, updateHistoryRecord } from "@/lib/historyService";
+import { buildReferenceImagePrompt, resolveVars, REFERENCE_IMAGE_REALISM_MODE, type ReferenceImageVars } from "@/lib/referenceImagePrompt";
 
 /* ── Types ── */
 interface ViralJSON {
