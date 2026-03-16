@@ -26,6 +26,7 @@ const createItems = [
   { title: "Viral JSON", url: "/create/prompt-lab", icon: Microscope },
   { title: "UGC Arcade", url: "/create/ugc-arcade", icon: Gamepad2 },
   { title: "Aigen", url: "/create/aigen", icon: Wand2 },
+  { title: "AudioRoll", url: "/create/audioroll", icon: Music },
 ];
 
 const libraryItems = [
