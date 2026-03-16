@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.compose-external-video]
 verify_jwt = false
+
+[functions.analyze-audioroll]
+verify_jwt = false
+
+[functions.generate-audioroll-voice]
+verify_jwt = false

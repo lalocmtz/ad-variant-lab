@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import PromptLabPage from "./pages/PromptLabPage";
 import UgcArcadePage from "./pages/UgcArcadePage";
 import AigenPage from "./pages/AigenPage";
+import AudioRollPage from "./pages/AudioRollPage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -47,6 +48,7 @@ const AppRoutes = () => (
     <Route path="/create/prompt-lab" element={<AppLayout><PromptLabPage /></AppLayout>} />
     <Route path="/create/ugc-arcade" element={<AppLayout><UgcArcadePage /></AppLayout>} />
     <Route path="/create/aigen" element={<AppLayout><AigenPage /></AppLayout>} />
+    <Route path="/create/audioroll" element={<AppLayout><AudioRollPage /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
     <Route path="/library/assets" element={<AppLayout><AssetsPage /></AppLayout>} />
     <Route path="/library/history" element={<AppLayout><HistoryPage /></AppLayout>} />
