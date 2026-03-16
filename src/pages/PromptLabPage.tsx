@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import ImageUploadField from "@/components/shared/ImageUploadField";
 import { createHistoryRecord, updateHistoryRecord } from "@/lib/historyService";
+import { buildReferenceImagePrompt, resolveVars, REFERENCE_IMAGE_REALISM_MODE, type ReferenceImageVars } from "@/lib/referenceImagePrompt";
 
 /* ── Types ── */
 interface ViralJSON {
@@ -138,23 +139,46 @@ const PromptLabPage = () => {
     toast.success("JSON descargado");
   }, [viralJson, targetPlatform]);
 
-  /* ── Generate Reference Image ── */
+  /* ── Generate Reference Image (uses centralized master prompt) ── */
   const generateReferenceImage = useCallback(async (json: ViralJSON) => {
     setGeneratingImage(true);
     setStep("generating_image");
     try {
+      const hookScene = json.scenes?.[0];
+      const vars: ReferenceImageVars = {
+        source_hook_summary: json.hook_frame_description || hookScene?.action || undefined,
+        creator_action: hookScene?.action || undefined,
+        body_target: hookScene?.body_posture || undefined,
+        environment_hint: json.style?.environment || undefined,
+        product_visibility_mode: hookScene?.product_visible ? "clearly visible" : "context-appropriate",
+        context_variation_level: variationLevel === "minimal" ? "very slight" : variationLevel === "high" ? "significant" : "slight variation only",
+        target_platform: targetPlatform,
+        language_market_hint: language === "es-MX" ? "visual style aligned to Mexican TikTok Shop UGC" : language === "pt-BR" ? "visual style aligned to Brazilian TikTok Shop UGC" : undefined,
+        actor_description: json.actor ? Object.values(json.actor).filter(Boolean).join(", ") : undefined,
+        style_description: json.style ? Object.values(json.style).filter(Boolean).join(", ") : undefined,
+      };
+
+      // Log resolved vars for debugging
+      const resolved = resolveVars(vars);
+      console.log("[PromptLab] Reference image vars:", resolved);
+
       const { data, error: fnErr } = await supabase.functions.invoke("generate-prompt-lab-reference-image", {
         body: {
           job_id: jobIdRef.current,
           source_video_url: videoUrl,
           product_image_url: productImageUrl || undefined,
-          hook_frame_description: json.hook_frame_description || json.scenes?.[0]?.action,
-          actor_description: json.actor ? Object.values(json.actor).filter(Boolean).join(", ") : undefined,
-          style_description: json.style ? Object.values(json.style).filter(Boolean).join(", ") : undefined,
+          hook_frame_description: resolved.source_hook_summary,
+          actor_description: resolved.actor_description || undefined,
+          style_description: resolved.style_description || undefined,
+          body_target: resolved.body_target,
+          environment_hint: resolved.environment_hint,
+          product_visibility_mode: resolved.product_visibility_mode,
+          context_variation_level: resolved.context_variation_level,
+          language_market_hint: resolved.language_market_hint,
           variation_policy: json.variation_policy,
           target_platform: targetPlatform,
           language,
-          realism_level: realismLevel,
+          realism_level: REFERENCE_IMAGE_REALISM_MODE,
         },
       });
       if (fnErr) throw new Error(fnErr.message);
@@ -168,7 +192,7 @@ const PromptLabPage = () => {
       setGeneratingImage(false);
       setStep("results");
     }
-  }, [videoUrl, productImageUrl, targetPlatform, language, realismLevel]);
+  }, [videoUrl, productImageUrl, targetPlatform, language, realismLevel, variationLevel]);
 
   /* ── Analyze Video ── */
   const analyzeVideo = useCallback(async () => {
