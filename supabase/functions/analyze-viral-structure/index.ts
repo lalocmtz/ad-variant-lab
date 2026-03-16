@@ -9,7 +9,19 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { video_url, product_image_url, notes, target_duration, language } = await req.json();
+    const {
+      video_url,
+      product_image_url,
+      notes,
+      target_duration,
+      language,
+      target_platform,
+      product_lock_enabled,
+      language_lock_enabled,
+      realism_level,
+      variation_level,
+    } = await req.json();
+
     if (!video_url) throw new Error("video_url is required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -17,47 +29,76 @@ serve(async (req) => {
 
     const lang = language || "es-MX";
     const maxDuration = target_duration || 12;
+    const platform = target_platform || "generic";
+    const productLock = product_lock_enabled !== false;
+    const langLock = language_lock_enabled !== false;
+    const realismLvl = realism_level || "maximum";
+    const variationLvl = variation_level || "moderate";
 
     const productBlock = product_image_url
-      ? `\nPRODUCT REFERENCE IMAGE PROVIDED:
-The user uploaded a product image. You MUST include a product_reference object in the JSON with:
-- match_exact_packaging: true
-- show_label_clearly: true  
-- do_not_modify_color_or_shape: true
-Describe the product exactly as seen in the reference image.`
+      ? `\nPRODUCT REFERENCE IMAGE PROVIDED (GROUND TRUTH):
+The user uploaded a product image. This is the SINGLE SOURCE OF TRUTH for the product.
+- Match the EXACT packaging, color palette, shape, silhouette, label layout, branding
+- Do NOT reinterpret, simplify, redesign, or approximate the product
+- product_lock must be enabled with all fields true
+- Include a detailed product_description based on what you see`
       : "";
 
     const notesBlock = notes ? `\nOPERATOR NOTES: ${notes}` : "";
 
-    const systemPrompt = `You are an elite Viral Video Reverse Engineering Engine.
+    const langLockBlock = langLock
+      ? `\nLANGUAGE LOCK (CRITICAL — HIGHEST PRIORITY):
+- ALL spoken dialogue MUST be in ${lang} ONLY
+- Do NOT generate English dialogue under any circumstance
+- Do NOT default to English for CTA, narration, or any text
+- Do NOT use neutral corporate Spanish — use authentic ${lang === "es-MX" ? "Mexican" : lang} vocabulary and tone
+- Do NOT translate CTA into English
+- Forbid: English, Portuguese, neutral Spanish, any non-${lang} language
+- This applies to: dialogue, spoken_lines, CTA text, on-screen text, narration
+- Repeat this constraint in the language_lock object AND in each scene's dialogue field`
+      : "";
 
-Your job: Analyze a video URL and extract its COMPLETE viral structure, then output a hyper-detailed JSON blueprint that allows someone to recreate the video's LOGIC and STRUCTURE (not an exact copy) in Sora, Higgsfield, or any AI video generator.
+    const platformHints: Record<string, string> = {
+      sora: "Optimize for Sora: focus on cinematic scene descriptions, camera movements, and clear visual continuity. Include a ready-to-paste sora_prompt.",
+      higgsfield: "Optimize for Higgsfield: focus on actor actions, facial expressions, body language, and spoken dialogue timing. Include a ready-to-paste higgsfield_prompt.",
+      generic: "Generate a platform-agnostic JSON with maximum detail for both scene description and actor performance.",
+    };
+
+    const systemPrompt = `You are an elite Viral Video Reverse Engineering Engine + JSON Blueprint Composer.
+
+Your job: Analyze a video URL and extract its COMPLETE viral structure, then output a hyper-detailed JSON blueprint that allows someone to recreate the video's LOGIC and STRUCTURE (not an exact copy) in AI video generators.
+
+TARGET PLATFORM: ${platform}
+${platformHints[platform] || platformHints.generic}
 
 CRITICAL RULES:
-1. Analyze the video MILIMETRICALLY — every scene, cut, camera move, expression, gesture, dialogue
+1. Analyze the video MILIMETRICALLY — every scene, cut, camera move, expression, gesture, dialogue, micro-action
 2. Extract the WINNING PATTERN — why this video works virally
 3. Compress to ${maxDuration} seconds maximum while preserving ALL viral elements
-4. Vary context slightly (background, clothing, angle, props) to avoid direct cloning
-5. Keep the EXACT narrative structure, pacing logic, and persuasion mechanics
-6. All dialogue/scripts in ${lang}
-7. All visual instructions in English
-8. Be EXTREMELY specific — every 0.5 second matters
+4. Apply STRUCTURAL CLONE + CONTEXT VARIATION: same structure, different context
+5. All dialogue/scripts MUST be in ${lang} — this is NON-NEGOTIABLE
+6. All visual/technical instructions in English
+7. Be EXTREMELY specific — every 0.5 second matters
+8. Include spoken_lines array with exact dialogue text and timestamps
+9. Realism level: ${realismLvl}
 
 COMPRESSION RULES (if original > ${maxDuration}s):
 - Detect repeated/redundant segments → remove
-- Detect filler/transitions → remove  
+- Detect filler/transitions → remove
 - Keep ONLY: hook, core demo/argument, payoff, CTA
 - Redistribute timing to fill exactly ${maxDuration} seconds
-- Preserve the RATIO of time spent on each viral element
+- Document what was removed and kept in compression_report
 
-CONTEXT VARIATION (anti-clone):
-- Change: background details, clothing style, secondary props, exact camera angle
-- Preserve: narrative structure, pacing, shot types, product placement logic, emotional arc
+STRUCTURAL CLONE + CONTEXT VARIATION POLICY:
+Variation level: ${variationLvl}
+MAINTAIN (non-negotiable): narrative structure, pacing logic, shot types, product placement, emotional arc, hook mechanics, CTA logic, scene order, energy level, persuasion sequence
+VARY: background details, actor identity (different person), clothing style, secondary props, exact camera angle, environmental colors
+DO NOT clone the exact video — create a structural replica with fresh context
 ${productBlock}
 ${notesBlock}
+${langLockBlock}
 
-OUTPUT FORMAT:
-Return a SINGLE comprehensive JSON via tool call. The JSON must be copy-pasteable into Sora/Higgsfield.`;
+OUTPUT: Return a SINGLE comprehensive JSON via the tool call. The JSON must be detailed enough to reconstruct the full video.`;
 
     const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
@@ -67,12 +108,17 @@ Return a SINGLE comprehensive JSON via tool call. The JSON must be copy-pasteabl
 Video URL: ${video_url}
 Target duration: ${maxDuration} seconds
 Language: ${lang}
+Target platform: ${platform}
+Realism: ${realismLvl}
+Variation: ${variationLvl}
 
-Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotions, micro-gestures, editing rhythm, hook type, CTA, product integration, and negative constraints.`,
+Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue with exact spoken lines, emotions, micro-gestures, editing rhythm, hook type, CTA, product integration, negative constraints, continuity rules.
+
+IMPORTANT: All dialogue text must be in ${lang}. Do not use English for any spoken content.`,
     });
 
     if (product_image_url) {
-      userContent.push({ type: "text", text: "Product reference image (GROUND TRUTH — match exactly):" });
+      userContent.push({ type: "text", text: "Product reference image (ABSOLUTE GROUND TRUTH — match exactly, do not reinterpret):" });
       userContent.push({ type: "image_url", image_url: { url: product_image_url } });
     }
 
@@ -86,20 +132,75 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
           type: "function",
           function: {
             name: "viral_video_json",
-            description: "Return the complete viral video recreation JSON blueprint",
+            description: "Return the complete viral video recreation JSON blueprint with language_lock, product_lock, variation_policy, spoken_lines, and platform-specific prompts",
             parameters: {
               type: "object",
               properties: {
-                video_type: { type: "string", description: "e.g. UGC product recommendation, tutorial, testimonial" },
+                target_platform: { type: "string" },
+                video_type: { type: "string" },
                 original_duration_seconds: { type: "number" },
                 compressed_duration_seconds: { type: "number" },
                 aspect_ratio: { type: "string" },
+                dialogue_mode: { type: "string", description: "exact_dialogue | guided_dialogue | no_dialogue" },
+                realism_level: { type: "string" },
                 compression_report: {
                   type: "object",
                   properties: {
                     segments_removed: { type: "array", items: { type: "string" } },
                     segments_kept: { type: "array", items: { type: "string" } },
                     compression_ratio: { type: "string" },
+                  },
+                },
+                language_lock: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    language: { type: "string" },
+                    accent: { type: "string" },
+                    forbid_english: { type: "boolean" },
+                    forbid_portuguese: { type: "boolean" },
+                    forbid_neutral_spanish: { type: "boolean" },
+                    dialogue_must_remain_in_language: { type: "boolean" },
+                    cta_must_remain_in_language: { type: "boolean" },
+                    onscreen_text_language: { type: "string" },
+                  },
+                  required: ["enabled", "language"],
+                },
+                product_lock: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    match_packaging_exactly: { type: "boolean" },
+                    match_color_exactly: { type: "boolean" },
+                    match_shape_exactly: { type: "boolean" },
+                    match_branding_exactly: { type: "boolean" },
+                    do_not_reinvent_product: { type: "boolean" },
+                    product_description: { type: "string" },
+                  },
+                  required: ["enabled"],
+                },
+                actor_strategy: {
+                  type: "object",
+                  properties: {
+                    keep_pose_and_framing: { type: "boolean" },
+                    keep_hook_positioning: { type: "boolean" },
+                    same_action_different_person: { type: "boolean" },
+                    allow_face_variation: { type: "boolean" },
+                    maintain_body_language: { type: "boolean" },
+                    original_actor_description: { type: "string" },
+                  },
+                },
+                variation_policy: {
+                  type: "object",
+                  properties: {
+                    same_structure: { type: "boolean" },
+                    same_timing: { type: "boolean" },
+                    same_energy: { type: "boolean" },
+                    change_background_slightly: { type: "boolean" },
+                    change_actor_identity: { type: "boolean" },
+                    change_secondary_props: { type: "boolean" },
+                    do_not_clone_exact_video: { type: "boolean" },
+                    variation_level: { type: "string" },
                   },
                 },
                 viral_structure: {
@@ -127,7 +228,6 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
                     audio_style: { type: "string" },
                     ambient_sound: { type: "string" },
                   },
-                  required: ["camera", "lighting", "environment", "realism_level"],
                 },
                 actor: {
                   type: "object",
@@ -141,7 +241,6 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
                     energy: { type: "string" },
                     communication_style: { type: "string" },
                   },
-                  required: ["gender", "age_range", "appearance", "energy"],
                 },
                 scenes: {
                   type: "array",
@@ -157,17 +256,33 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
                       action: { type: "string" },
                       micro_actions: { type: "array", items: { type: "string" } },
                       dialogue: { type: "string" },
+                      spoken_language: { type: "string" },
                       emotion: { type: "string" },
                       facial_expression: { type: "string" },
                       gaze_direction: { type: "string" },
                       gesture: { type: "string" },
+                      body_posture: { type: "string" },
                       product_visible: { type: "boolean" },
                       product_placement: { type: "string" },
                       lighting_note: { type: "string" },
                       transition_to_next: { type: "string" },
                       persuasion_purpose: { type: "string" },
+                      continuity_note: { type: "string" },
                     },
                     required: ["scene_number", "start", "end", "type", "camera_shot", "action"],
+                  },
+                },
+                spoken_lines: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      start: { type: "number" },
+                      end: { type: "number" },
+                      text: { type: "string" },
+                      emotion: { type: "string" },
+                      language: { type: "string" },
+                    },
                   },
                 },
                 product_integration: {
@@ -196,16 +311,21 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
                     wardrobe_change: { type: "string" },
                     angle_change: { type: "string" },
                     props_change: { type: "string" },
+                    actor_change: { type: "string" },
                   },
                 },
+                continuity_rules: { type: "array", items: { type: "string" } },
                 negative_constraints: { type: "array", items: { type: "string" } },
-                sora_prompt: { type: "string", description: "Ready-to-paste prompt optimized for Sora" },
-                higgsfield_prompt: { type: "string", description: "Ready-to-paste prompt optimized for Higgsfield" },
+                platform_notes: { type: "string" },
+                sora_prompt: { type: "string" },
+                higgsfield_prompt: { type: "string" },
+                hook_frame_description: { type: "string", description: "Detailed description of the ideal first frame / hook frame for reference image generation" },
               },
               required: [
-                "video_type", "original_duration_seconds", "compressed_duration_seconds",
-                "aspect_ratio", "viral_structure", "style", "actor", "scenes",
-                "negative_constraints", "sora_prompt", "higgsfield_prompt",
+                "target_platform", "video_type", "original_duration_seconds", "compressed_duration_seconds",
+                "aspect_ratio", "language_lock", "product_lock", "variation_policy",
+                "viral_structure", "scenes", "negative_constraints",
+                "sora_prompt", "higgsfield_prompt", "hook_frame_description",
               ],
             },
           },
@@ -233,10 +353,7 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
       if (!response.ok) {
         const errText = await response.text();
         console.error(`[analyze-viral-structure] ${model} error:`, response.status, errText);
-        if (response.status === 429) {
-          lastError = "Rate limit. Intenta de nuevo en un momento.";
-          continue;
-        }
+        if (response.status === 429) { lastError = "Rate limit. Intenta de nuevo en un momento."; continue; }
         if (response.status === 402) {
           return new Response(JSON.stringify({ error: "Créditos insuficientes." }), {
             status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -250,38 +367,24 @@ Extract EVERYTHING: timeline, scenes, camera, lighting, actor, dialogue, emotion
       console.log(`[analyze-viral-structure] ${model} response length:`, rawText.length);
 
       let aiData: any;
-      try {
-        aiData = JSON.parse(rawText);
-      } catch {
-        console.error(`[analyze-viral-structure] ${model} JSON parse failed`);
+      try { aiData = JSON.parse(rawText); } catch {
         lastError = `Respuesta incompleta del modelo (${rawText.length} chars).`;
         continue;
       }
 
-      const choiceError = aiData.choices?.[0]?.error;
-      if (choiceError?.code === 429) {
-        lastError = "Rate limit del modelo.";
-        continue;
-      }
+      if (aiData.choices?.[0]?.error?.code === 429) { lastError = "Rate limit del modelo."; continue; }
 
       toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall) {
-        lastError = "El modelo no devolvió datos estructurados.";
-        continue;
-      }
+      if (!toolCall) { lastError = "El modelo no devolvió datos estructurados."; continue; }
 
       console.log(`[analyze-viral-structure] Success with: ${model}`);
       break;
     }
 
-    if (!toolCall) {
-      throw new Error(lastError || "No structured data from AI");
-    }
+    if (!toolCall) throw new Error(lastError || "No structured data from AI");
 
     let result: any;
-    try {
-      result = JSON.parse(toolCall.function.arguments);
-    } catch {
+    try { result = JSON.parse(toolCall.function.arguments); } catch {
       throw new Error(`Respuesta truncada del modelo (${toolCall.function.arguments?.length || 0} chars).`);
     }
 
