@@ -16,6 +16,7 @@ import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 import PromptLabPage from "./pages/PromptLabPage";
 import UgcArcadePage from "./pages/UgcArcadePage";
+import AigenPage from "./pages/AigenPage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
