@@ -68,3 +68,9 @@ verify_jwt = false
 
 [functions.generate-prompt-lab-reference-image]
 verify_jwt = false
+
+[functions.analyze-aigen-videos]
+verify_jwt = false
+
+[functions.generate-aigen-images]
+verify_jwt = false
