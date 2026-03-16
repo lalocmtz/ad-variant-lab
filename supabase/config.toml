@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.assemble-audioroll-video]
 verify_jwt = false
+
+[functions.generate-scriptroll]
+verify_jwt = false

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut, ShoppingBag, FlaskRound, Microscope, Gamepad2, Wand2, Music } from "lucide-react";
+import { Video, Image, Palette, FolderOpen, Clock, Settings, Plus, LogOut, ShoppingBag, FlaskRound, Microscope, Gamepad2, Wand2, Music, ScrollText } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +27,7 @@ const createItems = [
   { title: "UGC Arcade", url: "/create/ugc-arcade", icon: Gamepad2 },
   { title: "Aigen", url: "/create/aigen", icon: Wand2 },
   { title: "AudioRoll", url: "/create/audioroll", icon: Music },
+  { title: "ScriptRoll", url: "/create/scriptroll", icon: ScrollText },
 ];
 
 const libraryItems = [
