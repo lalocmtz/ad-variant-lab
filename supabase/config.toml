@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.analyze-viral-structure]
 verify_jwt = false
+
+[functions.generate-prompt-lab-reference-image]
+verify_jwt = false
