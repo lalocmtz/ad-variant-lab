@@ -443,6 +443,72 @@ export type Database = {
           },
         ]
       }
+      generation_history: {
+        Row: {
+          created_at: string
+          current_step: string | null
+          effective_prompt: string | null
+          error_summary: string | null
+          fallback_chain_json: Json | null
+          id: string
+          input_summary_json: Json | null
+          job_id: string
+          module: string
+          output_summary_json: Json | null
+          preview_url: string | null
+          provider_used: string | null
+          resumable: boolean | null
+          resume_payload_json: Json | null
+          source_route: string | null
+          status: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_step?: string | null
+          effective_prompt?: string | null
+          error_summary?: string | null
+          fallback_chain_json?: Json | null
+          id?: string
+          input_summary_json?: Json | null
+          job_id: string
+          module: string
+          output_summary_json?: Json | null
+          preview_url?: string | null
+          provider_used?: string | null
+          resumable?: boolean | null
+          resume_payload_json?: Json | null
+          source_route?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_step?: string | null
+          effective_prompt?: string | null
+          error_summary?: string | null
+          fallback_chain_json?: Json | null
+          id?: string
+          input_summary_json?: Json | null
+          job_id?: string
+          module?: string
+          output_summary_json?: Json | null
+          preview_url?: string | null
+          provider_used?: string | null
+          resumable?: boolean | null
+          resume_payload_json?: Json | null
+          source_route?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       generation_logs: {
         Row: {
           created_at: string
