@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.generate-aigen-images]
 verify_jwt = false
+
+[functions.compose-external-video]
+verify_jwt = false
