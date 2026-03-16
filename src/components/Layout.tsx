@@ -25,6 +25,7 @@ const createItems = [
   { title: "B-Roll Lab 2.0", url: "/create/broll-lab-2", icon: FlaskRound },
   { title: "Viral JSON", url: "/create/prompt-lab", icon: Microscope },
   { title: "UGC Arcade", url: "/create/ugc-arcade", icon: Gamepad2 },
+  { title: "Aigen", url: "/create/aigen", icon: Wand2 },
 ];
 
 const libraryItems = [
