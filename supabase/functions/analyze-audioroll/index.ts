@@ -113,7 +113,7 @@ Extract what was said, the winning narrative pattern, and create new scripts tha
 
     console.log("AudioRoll analyze:", { urls: video_urls.length, lang, numScripts, duration, tiktok_safe });
 
-    const response = await fetch("https://ai.lovable.dev/chat/v1", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
