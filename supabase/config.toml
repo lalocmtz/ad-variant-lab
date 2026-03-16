@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.generate-scriptroll]
 verify_jwt = false
+
+[functions.generate-scriptroll-voice]
+verify_jwt = false
