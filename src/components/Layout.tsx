@@ -27,6 +27,7 @@ const createItems = [
   { title: "UGC Arcade", url: "/create/ugc-arcade", icon: Gamepad2 },
   { title: "Aigen", url: "/create/aigen", icon: Wand2 },
   { title: "AudioRoll", url: "/create/audioroll", icon: Music },
+  { title: "ScriptRoll", url: "/create/scriptroll", icon: ScrollText },
 ];
 
 const libraryItems = [

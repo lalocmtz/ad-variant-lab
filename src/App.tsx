@@ -50,6 +50,7 @@ const AppRoutes = () => (
     <Route path="/create/ugc-arcade" element={<AppLayout><UgcArcadePage /></AppLayout>} />
     <Route path="/create/aigen" element={<AppLayout><AigenPage /></AppLayout>} />
     <Route path="/create/audioroll" element={<AppLayout><AudioRollPage /></AppLayout>} />
+    <Route path="/create/scriptroll" element={<AppLayout><ScriptRollPage /></AppLayout>} />
     <Route path="/library/brand" element={<AppLayout><BrandSystemPage /></AppLayout>} />
     <Route path="/library/assets" element={<AppLayout><AssetsPage /></AppLayout>} />
     <Route path="/library/history" element={<AppLayout><HistoryPage /></AppLayout>} />
