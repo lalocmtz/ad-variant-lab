@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import {
   Loader2, Copy, Check, RotateCcw, AlertCircle, Download,
   ChevronDown, ChevronUp, Sparkles, Plus, Trash2,
-  Play, Pause, Volume2, FileText, Eye, Upload, Music,
+  Play, Pause, Volume2, FileText, Eye, Upload, Music, Film,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +58,7 @@ interface AnalysisResult {
   scripts: AudioRollScript[];
 }
 
-type AudioRollStep = "input" | "analyzing" | "select_script" | "generating_voice" | "results";
+type AudioRollStep = "input" | "analyzing" | "select_script" | "generating_voice" | "assembling_video" | "results";
 
 /* ── Video Upload Field ── */
 function VideoUploadField({ label, value, onChange, index }: {
@@ -143,6 +143,8 @@ const AudioRollPage = () => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [selectedScriptIdx, setSelectedScriptIdx] = useState<number | null>(null);
   const [voiceAudioUrl, setVoiceAudioUrl] = useState<string | null>(null);
+  const [finalVideoUrl, setFinalVideoUrl] = useState<string | null>(null);
+  const [assemblyStatus, setAssemblyStatus] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -180,6 +182,7 @@ const AudioRollPage = () => {
     setAnalysis(null);
     setSelectedScriptIdx(null);
     setVoiceAudioUrl(null);
+    setFinalVideoUrl(null);
     const jobId = jobIdRef.current;
 
     if (user) {
@@ -248,11 +251,13 @@ const AudioRollPage = () => {
       if (data?.error) throw new Error(data.error);
 
       setVoiceAudioUrl(data.audio_url);
+      toast.success("Narración generada — ahora puedes renderizar el video final");
+
+      // Go to results with voice ready, render button available
       setStep("results");
-      toast.success("Narración generada");
 
       await updateHistoryRecord(jobIdRef.current, {
-        status: "completed", current_step: "results",
+        current_step: "voice_ready",
         output_summary_json: {
           scripts_count: analysis.scripts.length,
           selected_script_index: selectedScriptIdx,
@@ -267,6 +272,63 @@ const AudioRollPage = () => {
       toast.error("Error generando voz");
     }
   }, [selectedScriptIdx, analysis, language, voiceGender, voiceTone, voicePace, brollClips]);
+
+  /* ── Step 3: Assemble final video with Cloudinary ── */
+  const handleAssembleVideo = useCallback(async () => {
+    if (!voiceAudioUrl) { toast.error("Primero genera la narración"); return; }
+    const clips = brollClips.filter(c => c.trim());
+    if (clips.length === 0) { toast.error("No hay clips B-roll"); return; }
+
+    setStep("assembling_video");
+    setAssemblyStatus("Preparando assets...");
+    setError(null);
+
+    try {
+      setAssemblyStatus("Subiendo clips a Cloudinary...");
+      
+      const { data, error: fnErr } = await supabase.functions.invoke("assemble-audioroll-video", {
+        body: {
+          job_id: jobIdRef.current,
+          user_id: user?.id,
+          voice_url: voiceAudioUrl,
+          broll_clips: clips,
+          target_duration: parseInt(targetDuration) || 15,
+        },
+      });
+
+      if (fnErr) throw new Error(fnErr.message);
+      if (data?.error) throw new Error(data.error);
+
+      setFinalVideoUrl(data.final_video_url);
+      setAssemblyStatus(null);
+      setStep("results");
+      toast.success("¡Video final renderizado!");
+
+      await updateHistoryRecord(jobIdRef.current, {
+        status: "completed",
+        current_step: "results",
+        provider_used: "cloudinary",
+        output_summary_json: {
+          scripts_count: analysis?.scripts?.length || 0,
+          selected_script_index: selectedScriptIdx,
+          voice_audio_url: voiceAudioUrl,
+          final_video_url: data.final_video_url,
+          cloudinary_url: data.cloudinary_url,
+          broll_clips_count: clips.length,
+          timeline: data.timeline,
+          provider: "cloudinary",
+        },
+      });
+    } catch (err: any) {
+      console.error("Video assembly error:", err);
+      const errorMsg = err.message || "Error ensamblando video";
+      setError(errorMsg);
+      setAssemblyStatus(null);
+      setStep("results"); // Stay on results so user can retry
+      toast.error(errorMsg.includes("Cloudinary") ? "Faltan credenciales de Cloudinary para ensamblar el video final" : errorMsg);
+      await updateHistoryRecord(jobIdRef.current, { error_summary: errorMsg });
+    }
+  }, [voiceAudioUrl, brollClips, targetDuration, user, analysis, selectedScriptIdx]);
 
   /* ── Audio playback ── */
   const toggleAudio = useCallback(() => {
@@ -285,7 +347,7 @@ const AudioRollPage = () => {
 
   const reset = useCallback(() => {
     setStep("input"); setAnalysis(null); setSelectedScriptIdx(null);
-    setVoiceAudioUrl(null); setError(null);
+    setVoiceAudioUrl(null); setFinalVideoUrl(null); setError(null); setAssemblyStatus(null);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     jobIdRef.current = `audioroll_${Date.now()}`;
   }, []);
@@ -297,7 +359,7 @@ const AudioRollPage = () => {
       <div>
         <h1 className="text-2xl font-bold text-foreground">AudioRoll</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Mina guiones de TikTok ganadores → genera narración ElevenLabs → ensambla con tu B-roll real.
+          Mina guiones de TikTok ganadores → genera narración ElevenLabs → ensambla con tu B-roll real → video MP4 final.
         </p>
       </div>
 
@@ -552,6 +614,18 @@ const AudioRollPage = () => {
         </div>
       )}
 
+      {/* ═══ ASSEMBLING VIDEO ═══ */}
+      {step === "assembling_video" && (
+        <div className="rounded-xl border border-border bg-card p-8 flex flex-col items-center justify-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <div className="text-center">
+            <p className="text-sm font-medium text-foreground">Ensamblando video final...</p>
+            {assemblyStatus && <p className="text-xs text-muted-foreground mt-1">{assemblyStatus}</p>}
+            <p className="text-xs text-muted-foreground mt-2">Cloudinary está renderizando tu video con {brollClips.filter(c => c.trim()).length} clips + narración</p>
+          </div>
+        </div>
+      )}
+
       {/* ═══ RESULTS ═══ */}
       {step === "results" && analysis && selectedScriptIdx !== null && (
         <div className="space-y-6">
@@ -562,8 +636,58 @@ const AudioRollPage = () => {
             </Button>
             <Badge variant="secondary" className="text-xs">
               {analysis.scripts?.length} guiones · {brollClips.filter(c => c.trim()).length} clips · Voz {voiceGender === "female" ? "♀" : "♂"}
+              {finalVideoUrl && " · ✓ Video renderizado"}
             </Badge>
           </div>
+
+          {/* ── Final Video ── */}
+          {finalVideoUrl && (
+            <div className="rounded-xl border-2 border-primary/30 bg-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Film className="h-5 w-5 text-primary" />
+                <h2 className="text-base font-semibold text-foreground">🎬 Video Final</h2>
+                <Badge variant="default" className="text-xs ml-auto">Cloudinary</Badge>
+              </div>
+              <div className="relative rounded-xl overflow-hidden bg-black max-w-sm mx-auto" style={{ aspectRatio: "9/16" }}>
+                <video
+                  src={finalVideoUrl}
+                  controls
+                  className="w-full h-full object-contain"
+                  playsInline
+                />
+              </div>
+              <div className="flex items-center gap-3 justify-center flex-wrap">
+                <a href={finalVideoUrl} download className="inline-flex">
+                  <Button variant="default" size="sm" className="gap-1.5">
+                    <Download className="h-3.5 w-3.5" /> Descargar MP4
+                  </Button>
+                </a>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => copyText(finalVideoUrl, "URL del video")}>
+                  <Copy className="h-3.5 w-3.5" /> Copiar URL
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setFinalVideoUrl(null); handleAssembleVideo(); }}>
+                  <RotateCcw className="h-3.5 w-3.5" /> Regenerar edit
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Render button if no video yet ── */}
+          {!finalVideoUrl && voiceAudioUrl && (
+            <div className="rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 text-center space-y-3">
+              <Film className="h-8 w-8 text-primary mx-auto" />
+              <p className="text-sm font-medium text-foreground">Narración lista — ensambla el video final</p>
+              <p className="text-xs text-muted-foreground">Cloudinary unirá tus {brollClips.filter(c => c.trim()).length} clips de B-roll con la narración en un MP4 vertical.</p>
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg p-3 text-left">
+                  <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+                </div>
+              )}
+              <Button onClick={handleAssembleVideo} className="gradient-cta text-white border-0 gap-1.5" size="lg">
+                <Film className="h-4 w-4" /> Renderizar video final
+              </Button>
+            </div>
+          )}
 
           {/* Selected script */}
           <div className="rounded-xl border border-border bg-card p-5 space-y-3">
@@ -588,7 +712,7 @@ const AudioRollPage = () => {
                 <Volume2 className="h-4 w-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground">Narración generada</h2>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <Button onClick={toggleAudio} variant="outline" size="sm" className="gap-1.5">
                   {isPlayingAudio ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                   {isPlayingAudio ? "Pausar" : "Reproducir"}
@@ -599,7 +723,13 @@ const AudioRollPage = () => {
                   </Button>
                 </a>
                 <Button variant="outline" size="sm" className="gap-1.5"
-                  onClick={() => { setVoiceAudioUrl(null); setStep("select_script"); toast.info("Elige otro guión o regenera la voz"); }}
+                  onClick={() => {
+                    setVoiceAudioUrl(null);
+                    setFinalVideoUrl(null);
+                    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+                    setStep("select_script");
+                    toast.info("Elige otro guión o regenera la voz");
+                  }}
                 >
                   <RotateCcw className="h-3.5 w-3.5" /> Regenerar voz
                 </Button>
@@ -613,27 +743,12 @@ const AudioRollPage = () => {
           {/* B-roll clips summary */}
           <div className="rounded-xl border border-border bg-card p-5 space-y-3">
             <h2 className="text-sm font-semibold text-foreground">📽️ Clips B-roll ({brollClips.filter(c => c.trim()).length})</h2>
-            <p className="text-xs text-muted-foreground">
-              Tus clips están listos. Descarga la narración y ensámblalos en CapCut o tu editor favorito con cortes cada ~3 segundos siguiendo los beats del guión.
-            </p>
             <div className="grid grid-cols-5 gap-2">
               {brollClips.filter(c => c.trim()).map((clip, i) => (
                 <a key={i} href={clip} download className="flex flex-col items-center justify-center h-16 border border-border rounded-lg bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors">
                   <Download className="h-3.5 w-3.5 mb-1" /> Clip {i + 1}
                 </a>
               ))}
-            </div>
-          </div>
-
-          {/* Edit guide */}
-          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">🎬 Guía de edición</h2>
-            <div className="text-xs text-muted-foreground space-y-1.5">
-              <p>1. <strong>Hook (0–3s):</strong> Usa tu clip más fuerte / product hero shot</p>
-              <p>2. <strong>Body:</strong> Cortes cada ~3s alternando entre ángulos de producto</p>
-              <p>3. <strong>CTA (últimos 3–5s):</strong> Close-up limpio del producto o demo final</p>
-              <p>4. <strong>Audio:</strong> Monta la narración MP3 sobre el timeline de clips</p>
-              <p>5. Duración target: ~{targetDuration}s</p>
             </div>
           </div>
 

@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.generate-audioroll-voice]
 verify_jwt = false
+
+[functions.assemble-audioroll-video]
+verify_jwt = false
